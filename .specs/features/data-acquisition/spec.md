@@ -34,7 +34,8 @@ todas as demais e os downloads (GB) rodam em paralelo enquanto o resto do SDD é
 | Assumption / decisão | Default escolhido | Rationale | Confirmado? |
 | --- | --- | --- | --- |
 | Método CTU-UHB | `wfdb.dl_database('ctu-uhb-ctgdb', 'data/ctu-uhb')` | `wfdb` já é dependência de F3; API oficial do PhysioNet | y |
-| Fonte do ICBHI 2017 | Harvard Dataverse, DOI `10.7910/DVN/HT6PKI` → `https://dataverse.harvard.edu/api/access/datafile/7127117` (zip único, ~1.9 GB, HTTP 206/resume) → `data/icbhi/`. **Substitui** a URL `bhichallenge.med.auth.gr` que o usuário passou, pois o site inteiro retorna HTTP 403 (bloqueio server-side) | Mesmo dataset (mesmo `ICBHI_final_database.zip`), de repositório aberto e citável que responde | y |
+| Fonte do ICBHI 2017 | **Primária**: Harvard Dataverse, DOI `10.7910/DVN/HT6PKI` → `https://dataverse.harvard.edu/api/access/datafile/7127117` (zip único, ~1.9 GB, HTTP 206/resume) → `data/icbhi/`. **Alternativa**: a URL original `bhichallenge.med.auth.gr` (variável no topo), que exige `--no-check-certificate` por ter cert SSL autoassinado — do ambiente atual o site retorna HTTP 403, mas a alternativa fica pronta para redes onde ele responde | Dataverse é aberto/citável e funciona daqui; a alternativa cobre quem quiser a fonte original. Mesmo `ICBHI_final_database.zip` nas duas | y |
+| Trade-off de segurança do `--no-check-certificate` | Só aplicado à fonte alternativa do ICBHI; obrigatório verificar o zip baixado (assinatura PK + tamanho, e checksum se disponível) antes de escrever `.complete` | Baixar por TLS não verificado exige confirmar que o conteúdo é o zip esperado, não um interceptador/página de erro — ver DATA-12, DATA-13 | y |
 | Âncora de vídeo/frames | **Endoscapes2023** via `wget --continue` de `https://s3.unistra.fr/camma_public/datasets/endoscapes/endoscapes.zip` (~6 GB) → `data/endoscapes/`, seguido de `unzip`. Substitui o Cholec80-CVS (AD-033) | Cholec80-CVS aberto é só anotações (24 KB xlsx); vídeos exigem CAMMA. Endoscapes é aberto, por URL direta, com frames+bbox COCO reais | y |
 | Subconjunto do Endoscapes para a demo | Usar Endoscapes-BBox201 (1933 frames com bbox COCO) como base do YOLOv8; frames de CVS201 conforme F1 precisar | Bbox201 é o que dá rótulo de detecção real; definição fina fica com F1 | y |
 | Linguagem do script | Shell (`download_datasets.sh`) chamando Python só onde precisa (`wfdb`) | Idempotência, `wget --continue` e `unzip` são naturais em shell; a AD-031 admite `.sh` ou `.py` | y |
@@ -125,6 +126,8 @@ foi baixado quando o dataset publica hashes, para confiar que o `.complete` refl
 - WHEN o zip do ICBHI baixa mas está corrompido (unzip falha) THEN o sistema SHALL reportar erro e não escrever a sentinela, deixando o dataset elegível para nova tentativa.
 - WHEN o zip do Endoscapes baixa parcialmente e o `unzip` falha THEN o sistema SHALL reportar erro e não escrever a sentinela, deixando o dataset elegível para retomada via `wget --continue`.
 - WHEN o script roda sem rede THEN o sistema SHALL falhar cedo com mensagem clara, sem sentinelas.
+- WHEN uma fonte responde com página HTML de erro (ex.: 403) em vez do arquivo — mesmo com HTTP 200 e exit 0 — THEN o sistema SHALL detectar pela assinatura/Content-Type (não é zip PK), NÃO escrever `.complete`, e cair para a fonte alternativa quando houver (caso do ICBHI).
+- WHEN a fonte alternativa do ICBHI é usada (`--no-check-certificate`) THEN o sistema SHALL verificar o zip baixado antes de aceitá-lo, para não confiar cegamente numa conexão TLS não verificada.
 
 ---
 
@@ -143,12 +146,13 @@ foi baixado quando o dataset publica hashes, para confiar que o `.complete` refl
 | DATA-10 | P1: Log por dataset + resumo final (baixado/pulado/falhou) | Design | Pending |
 | DATA-11 | P2: Ferramenta ausente falha com mensagem acionável | Design | Pending |
 | DATA-12 | P3: Verificação de checksum quando disponível | Design | Pending |
+| DATA-13 | P1/P2: Fonte primária + alternativa do ICBHI; validar que o download é zip real (assinatura PK), não página de erro; `--no-check-certificate` só na alternativa | Design | Pending |
 
 **ID format:** `DATA-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 11 requisitos, 0 mapeados para tarefas (aguardando Design/Tasks).
+**Coverage:** 12 requisitos, 0 mapeados para tarefas (aguardando Design/Tasks).
 
 ---
 
