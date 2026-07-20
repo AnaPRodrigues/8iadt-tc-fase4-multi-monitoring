@@ -220,11 +220,18 @@
 
 ## Handoff
 
-- **Feature**: projeto geral (múltiplas features candidatas: F1 video-analysis, F2 audio-analysis, F3 vitals-anomaly, F4 prescription-analysis, F5 fusion-and-alerting)
-- **Phase / Task**: F3 (vitals-anomaly) — Specify e Design CONFIRMADOS; `tasks.md` escrito (18 tarefas em 6 fases) e aguardando aprovação do usuário. Specify das outras 4 features também já confirmado.
-- **Completed**: AD-001 a AD-027 no STATE.md; specs das 5 features confirmadas; `design.md` de F3 aprovado; `tasks.md` de F3 redigido com matriz de cobertura e as 3 checagens pré-aprovação passando
-- **In-progress**: Execute de F3, T1 (esqueleto do projeto) — BLOQUEADO antes de escrever qualquer arquivo
-- **Next step**: usuário precisa instalar o toolchain Python (`sudo apt install -y python3-venv python3-pip`); depois criar `.venv`, instalar pytest/ruff/numpy/scikit-learn/wfdb/matplotlib/pyyaml e retomar T1
-- **Blockers**: **BLOQUEIO DE AMBIENTE** — Python 3.12.3 presente, mas sem nenhum gerenciador de pacotes: `pip` ausente, `python3-venv` não instalado (ensurepip falha), e sem uv/pipx/conda/poetry/virtualenv. Instalação exige sudo. Nenhuma dependência do projeto (pytest, ruff, numpy, sklearn, wfdb, matplotlib) está instalada; só `pyyaml` existe no sistema. Modo de execução escolhido pelo usuário: inline (sem sub-agentes)
-- **Uncommitted files**: `.specs/STATE.md`, specs das 5 features, `design.md` e `tasks.md` de vitals-anomaly
-- **Branch**: main
+- **Feature**: F3 vitals-anomaly (`.specs/features/vitals-anomaly/`)
+- **Phase / Task**: Execute COMPLETO — 18/18 tarefas implementadas, testadas e commitadas na branch `feat/f3-vitals-anomaly`. Verificação independente (Verifier) em andamento.
+- **Completed**: AD-001 a AD-027; specs das 5 features confirmadas; design e tasks de F3 aprovados; T1–T18 commitados individualmente (um commit atômico por tarefa). Suíte: 135 testes passando (129 unitários + 6 de integração), lint limpo.
+- **In-progress**: Verifier independente re-derivando cobertura dos ACs e rodando sensor de mutação; escreverá `.specs/features/vitals-anomaly/validation.md`
+- **Next step**: ler o veredito do Verifier; se FAIL, rotear lacunas como tarefas de correção (loop limitado a 3 iterações). Se PASS, F3 está encerrada e a próxima feature do plano de 7 dias é F4 (prescription-analysis), que precisa de Design + Tasks antes de Execute.
+- **Blockers**: none. Ambiente resolvido — `.venv` na raiz com pytest, ruff, numpy, scikit-learn, wfdb 4.3.1, matplotlib e pyyaml. `make demo` exige o CTU-UHB baixado em `data/ctu-uhb-ctgdb/` (ainda não baixado); sem ele o comando falha com mensagem acionável, e os testes rodam com fixtures WFDB sintéticas.
+- **Uncommitted files**: `.specs/` (design, tasks e STATE atualizados durante o Execute)
+- **Branch**: `feat/f3-vitals-anomaly` (partiu de `main`; `main` tem apenas o commit inicial de planejamento)
+
+### Achados verificados durante o Execute (não presumir de novo)
+
+- `wfdb.rdrecord()` expõe `p_signal`, `sig_name`, `fs`, `comments`, `sig_len`, `record_name` (wfdb 4.3.1).
+- **O wfdb remove o `#` das linhas de comentário**: o campo do `.hea` chega como `'pH           7.26'`. Presumir o `#` faria a regex nunca casar e descartaria 100% dos registros silenciosamente.
+- CTU-UHB: 552 registros, 4 Hz uniforme, sinais `FHR` e `UC`; desfechos `pH`, `BDecf`, `BE`, `pCO2`, `Apgar1`, `Apgar5` no header.
+- `pythonpath` do pytest não vale para `python -m`: o alvo `demo` do Makefile precisa de `PYTHONPATH=src`.

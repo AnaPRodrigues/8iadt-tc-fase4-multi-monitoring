@@ -9,7 +9,21 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/vitals-anomaly/design.md`
-**Status**: Draft
+**Status**: In Progress
+
+## Progresso
+
+| Fase | Tarefas | Status |
+| --- | --- | --- |
+| 1 — Fundação e core | T1–T4 | ✅ Concluída (commits `480da5e`, `9c05ce0`, `68b8f53`, `00b22bd`) |
+| 2 — Carga e preparação do sinal | T5–T8 | ✅ Concluída (commits `e7d07d2`, `90453d0`, `39bf964`, `837a68d`) |
+| 3 — Detecção e avaliação | T9–T13 | ✅ Concluída (commits `56e4933`, `0ba2a8c`, `9e8b2f9`, `1a74c83`, `ce635a6`) |
+| 4 — Evidência e demo | T14–T15 | ✅ Concluída (commits `e292baf`, `032f1fb`) |
+| 5 — Compositor (P2) | T16–T17 | ✅ Concluída (commits `adb91e7`, `20a87e2`) |
+| 6 — MIT-BIH (P3) | T18 | ✅ Concluída (commit `03c6834`) |
+
+Todas as 18 tarefas implementadas e commitadas. Suíte: 135 testes passando, lint limpo.
+Verificação independente pendente — ver `validation.md` quando o Verifier concluir.
 
 ---
 

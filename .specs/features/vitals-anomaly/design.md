@@ -25,7 +25,7 @@ Verificado diretamente na fonte (PhysioNet) antes de desenhar:
 | `p_signal` | matriz de sinais em unidades físicas (colunas = canais) |
 | `sig_name` | nomes dos canais — localizar `FHR` e `UC` por nome, nunca por índice fixo |
 | `fs` | taxa de amostragem (4.0 no CTU-UHB) |
-| `comments` | linhas de comentário do `.hea` — fonte do pH |
+| `comments` | linhas de comentário do `.hea` — fonte do pH. **O `wfdb` remove o `#` inicial**: a linha chega como `'pH           7.26'`. Verificado em REPL — presumir o `#` faria a regex nunca casar e descartaria 100% dos registros silenciosamente |
 | `sig_len`, `n_sig`, `record_name` | validação e identificação |
 
 `wfdb.rdrecord(record_name, sampfrom, sampto, channels, physical, pn_dir)` — a leitura parcial por
