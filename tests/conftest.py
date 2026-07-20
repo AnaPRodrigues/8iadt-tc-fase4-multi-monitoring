@@ -1,6 +1,7 @@
 """Fixtures WFDB sintéticas — permitem testar sem baixar os GB do CTU-UHB.
 
 O formato replica o real verificado: 4 Hz, sinais FHR e UC, pH em comentário.
+Fica na raiz de ``tests/`` para servir tanto os testes unitários quanto os de integração.
 """
 
 import numpy as np
@@ -17,13 +18,14 @@ def escreve_registro(
     ph: float | None = 7.26,
     n_amostras: int = 240,
     sig_name: tuple[str, ...] = ("FHR", "UC"),
+    fhr_base: float = 140.0,
 ) -> str:
     """Escreve um par .hea/.dat válido e devolve o caminho sem extensão."""
     rng = np.random.default_rng(0)
     n_sig = len(sig_name)
-    sinal = np.column_stack(
-        [rng.normal(140.0, 5.0, n_amostras) for _ in range(n_sig)]
-    ).astype(float)
+    colunas = [rng.normal(fhr_base, 5.0, n_amostras)]
+    colunas += [rng.normal(20.0, 2.0, n_amostras) for _ in range(n_sig - 1)]
+    sinal = np.column_stack(colunas).astype(float)
 
     comments = ["-- Outcome measures"]
     if ph is not None:
@@ -41,6 +43,12 @@ def escreve_registro(
         write_dir=str(directory),
     )
     return str(directory / record_name)
+
+
+@pytest.fixture
+def escritor():
+    """Devolve a função de escrita para testes que montam seus próprios lotes."""
+    return escreve_registro
 
 
 @pytest.fixture

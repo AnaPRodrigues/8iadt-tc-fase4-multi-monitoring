@@ -3,8 +3,8 @@
 from pathlib import Path
 
 import pytest
-from conftest import escreve_registro
 
+from conftest import escreve_registro
 from vitals.loader import InvalidRecordError, load_dataset, load_record
 
 

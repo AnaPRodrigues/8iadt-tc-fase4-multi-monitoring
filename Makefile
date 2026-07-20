@@ -18,7 +18,7 @@ fmt:
 	$(PY) -m ruff format src tests
 
 demo:
-	$(PY) -m vitals.cli --config configs/demo.yaml
+	PYTHONPATH=src $(PY) -m vitals.cli --config configs/demo.yaml
 
 clean:
 	rm -rf output/* .pytest_cache
