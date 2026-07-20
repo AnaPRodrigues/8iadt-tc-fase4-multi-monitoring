@@ -21,9 +21,12 @@ sem credenciamento (AD-016, AD-031):
 O script é idempotente: se o dataset já existe, pula. Downloads interrompidos são
 retomados (`--continue`).
 
+## Fontes confirmadas
+
+- ICBHI 2017: `https://bhichallenge.med.auth.gr/sites/default/files/ICBHI_final_database/ICBHI_final_database.zip`
+
 ## Pendências
 
-- URL exata do zip do ICBHI 2017 — **a confirmar** antes de executar F0.
 - Nome/URL do repositório Cholec80-CVS no GitHub — **a confirmar** antes de executar F0.
 
 ## Datasets NÃO usados

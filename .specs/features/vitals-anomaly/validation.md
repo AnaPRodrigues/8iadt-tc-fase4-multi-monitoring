@@ -2,13 +2,96 @@
 
 **Date**: 2026-07-20
 **Spec**: `.specs/features/vitals-anomaly/spec.md`
-**Diff range**: `480da5e..0d0275c` (branch `feat/f3-vitals-anomaly`); rodada extra = `aa63a26`
+**Diff range (passe 6)**: `0d0275c..0dc76aa` — inclui os fixes `ee0ee18` (título por variação), `76f276f` (end_s), `e2500a0` (oráculo lê config real / Fix D) e a migração `0dc76aa` (monorepo front/back, F3 → `backend/`)
 **Verifier**: independent sub-agent (author ≠ verifier) — evidence-or-zero, cobertura re-derivada da spec
-**Iteração**: **rodada extra fora do loop**, autorizada explicitamente pelo usuário após o esgotamento das 3 iterações
+**Iteração**: **passe 6 (pós-migração)** — fecha F3 formalmente na estrutura nova `backend/`
 
-**Veredito**: ❌ **FAIL** — mas um FAIL **substancialmente mais estreito**. 11/12 ACs em escopo com desfecho da spec asserido. Gate limpo (161/161, lint limpo). Sensor: **29 mutações, 25 mortas, 4 sobreviventes** — os 4 no mesmo arquivo (`plot.py`), com **uma única causa raiz**.
+**Veredito (passe 6)**: ✅ **PASS** — F3 pode ser fechada formalmente. 12/12 ACs em escopo com desfecho da spec asserido (VITALS-06 agora inclui o artefato visual). Gate limpo (**165/165**, lint limpo em `backend`). Sensor: **17 mutações, 16 mortas, 1 sobrevivente** — o único sobrevivente é o limiar de gap `> max_amostras` (`preprocess.py:60`), fronteira que a spec **não** inclui na sua regra de comparação estrita (`spec.md:47` lista apenas z-score, `max_invalid_fraction` e τ) → risco residual aceitável, **não** evidência falsa.
 
-**Manchete**: os **5 sobreviventes nomeados morreram**, e as correções são genuínas — não calibradas contra o literal do mutante. As variantes vizinhas que o autor alega ter testado (`score+0.5`, `fhr` invertido, `seed=0` vs `12345`) foram re-executadas de forma independente e **todas morrem**. A alegação do autor **confere**. O padrão de "consertar só o caso nomeado" está **atenuado, não quebrado**: os 4 novos sobreviventes são o *vizinho não nomeado* — o campo `detector` do título do gráfico, **na mesma linha de código** que o autor acabou de consertar para o campo `score`.
+**Manchete (passe 6)**: **W9 morreu.** O bloqueador da rodada anterior — colapsar `{event.detector}` para o literal `"zscore"` no título do PNG passar despercebido — agora é morto pelo teste parametrizado `test_cada_campo_do_titulo_reflete_o_valor_do_evento` (`backend/tests/vitals/test_plot.py:66-88`), que varia CADA campo do título (record_id, detector, ph, score, start_s, end_s) e assere presença **e** ausência (`texto_a in A and texto_b not in A`). Os 5 vizinhos do W9 (os outros campos do título) também morrem. A causa raiz estrutural apontada no passe 5 — fixture única de literais + asserção só de presença — foi **corrigida na raiz**. Fix D (`e2500a0`) aplicado: o oráculo `_recomputa_por_detector` agora lê a config real (`load_config(cfg_path)`, `test_vitals_pipeline.py:98`) e só cria a chave do detector condicionalmente (`:116-119`). A migração `src/ → backend/` **não introduziu regressão**: os nomes de logger continuam batendo com `caplog` (`mm.vitals.loader`, `mm.vitals.evaluate`), nenhum `from src`/`from core` remanescente, nenhum teste virou no-op.
+
+---
+
+## Passe 6 — Pós-migração (estrutura `backend/`)
+
+### Verificação da migração `src/ → backend/` (não introduziu regressão)
+
+| Checagem | Resultado |
+| --- | --- |
+| Baseline autor (165 passed) | ✅ Confirmado exatamente: `-m "not integration"` → **154 passed, 11 deselected**; `-m integration` → **11 passed, 154 deselected**; total **165** |
+| Lint | ✅ `make lint` = `ruff check backend` → `All checks passed!` |
+| Nomes de logger batem com `caplog` | ✅ `loader.py:16` `get_logger("vitals.loader")` → `mm.vitals.loader`, casa com `test_loader.py:75` `logger="mm.vitals.loader"`; idem `evaluate`. Se não batesse, `caplog.text` ficaria vazio e o `assert` falharia — os testes passam **porque** o log é capturado |
+| Imports legados | ✅ Nenhum `from src`/`import src`/`from core` em `backend/`; só menções em docstrings de teste (comentário morto, não código). `pythonpath=["backend"]`, `testpaths=["backend/tests"]` em `pyproject.toml` |
+| Caminhos citados na cobertura | ✅ Todos re-verificados nos caminhos NOVOS (`backend/pipelines/vitals/…`, `backend/tests/…`, `backend/common/…`) |
+| Fix D (`e2500a0`) | ✅ `_recomputa_por_detector` lê `load_config(cfg_path)` (`test_vitals_pipeline.py:98`) e deriva `threshold`/`contamination`/`seed` de `cfg` (`:108-109`), não mais dos literais 3.0/0.1/42; chave condicional `if marcadas:` (`:116-119`) corrige a fragilidade C1 do passe 5 |
+
+### Discrimination Sensor — passe 6
+
+**Profundidade**: P0-full — **17 mutações**. Protocolo: cada patch exige **exatamente uma** ocorrência no arquivo e `git diff --numstat` não vazio **antes** de rodar os testes; reversão via `git checkout --`; árvore confirmada limpa ao final. Nenhuma reportou `PATCH-FAILED`.
+
+Ressalva metodológica: 4 mutações "extra" (evaluate/compositor/evidence) foram inicialmente rodadas com escopo `arquivo + -m integration`, o que **desmarca** os testes do arquivo (exit 5) e produziria um falso "morto". Foram **re-executadas contra a suíte completa** e confirmadas mortas de verdade (6/5/2/4 testes falharam respectivamente).
+
+| # | Arquivo:linha | Mutação | Killed? |
+| --- | --- | --- | --- |
+| W9 | `plot.py:22` | **`{event.detector}` → literal `zscore`** | ✅ **Morto** — `test_plot.py::test_cada_campo_do_titulo_reflete_o_valor_do_evento[detector-…]` (era o bloqueador do passe 5) |
+| T-rec | `plot.py:22` | `{record.record_id}` → `1464` | ✅ Morto — mesmo teste, caso `record_id` |
+| T-ph | `plot.py:22` | `{record.ph:.2f}` → `7.01` | ✅ Morto — caso `ph` |
+| T-score | `plot.py:23` | `{event.score:.2f}` → `3.70` | ✅ Morto — caso `score` |
+| T-start | `plot.py:23` | `{event.start_s:.1f}` → `10.0` | ✅ Morto — caso `start_s` |
+| T-end | `plot.py:23` | `{event.end_s:.1f}` → `12.0` | ✅ Morto — caso `end_s` |
+| V2 | `cli.py:56` | `detector=detector_name` → swap `zscore`↔`isolation_forest` | ✅ Morto — `test_vitals_pipeline.py::test_evidencia_corresponde_as_janelas_que_aquele_detector_marcou` |
+| V7 | `detectors.py:134` | `random_state=self.seed` → `0` | ✅ Morto — 2 testes em `test_detectors_iforest.py` |
+| AD-027a | `aggregate.py:54` | `fracao > tau` → `>= tau` | ✅ Morto — `test_aggregate.py` |
+| AD-027b | `aggregate.py:51` | denominador `len(validas)` → `len(window_flags)` (inclui None) | ✅ Morto — `test_aggregate.py` |
+| VITALS-02 | `loader.py:49` | `ph < PH_THRESHOLD` → `<=` | ✅ Morto — `test_loader_ph.py` |
+| EX-1 | `evaluate.py:60` | `predicted_pathological is None` → `is not None` | ✅ Morto — 6 testes (suíte completa) |
+| EX-2 | `evaluate.py:41` | prevalência `/ len(records)` → `/ (len+1)` | ✅ Morto — 5 testes |
+| EX-3 | `compositor.py:87` | `ph=min(...)` → `ph=max(...)` | ✅ Morto — 2 testes |
+| EX-4 | `common/evidence.py:71` | sidecar `source_record_id` → constante `"FIXED"` | ✅ Morto — 4 testes |
+| EX-5 | `preprocess.py:59` | `na_borda = ... or ...` → `na_borda = False` | ✅ Morto — `test_preprocess.py` (3 testes) |
+| EX-6 | `preprocess.py:60` | **`(fim - inicio) > max_amostras` → `>=`** | ❌ **SOBREVIVEU** — 165 passed |
+
+**Resultado**: **16/17 mortos, 1 sobrevivente (EX-6)**.
+
+**Diagnóstico do sobrevivente EX-6 — risco residual aceitável, não bloqueador**: a fronteira `>` vs `>=` no comprimento do gap só difere quando o gap tem **exatamente** `max_amostras` amostras (5.0 s a 4 Hz = 20 amostras). Nenhum teste de `test_preprocess.py` exercita um gap desse comprimento exato (usa 2 e 10 amostras). Diferentemente de AD-027/VITALS-03/VITALS-09, **a spec não define esta comparação**: `spec.md:47` uniformiza estritamente apenas z-score (VITALS-03), `max_invalid_fraction` (VITALS-09) e τ (AD-027) — o limiar de interpolação de gap não está na lista. Logo o desfecho na fronteira **não é definido pela spec**, não há evidência falsa, e nenhuma consequência clínica está marcada para um gap de exatamente `max_gap_s`. É a mesma classe do que o passe 5 aceitou como residual (W15).
+
+Árvore após o sensor: `git status --short` vazio, `git stash list` vazio.
+
+### Cobertura ancorada na spec — passe 6 (caminhos NOVOS)
+
+Escopo: 12 ACs (13 originais − VITALS-11 AC2, fora de escopo por AD-028 — **confirmado ainda registrado**: `spec.md:126,157`, `.specs/STATE.md` AD-028). Todos os `arquivo:linha` abaixo re-verificados na estrutura `backend/`.
+
+| AC | Desfecho da spec | `arquivo:linha` + asserção | Result |
+| --- | --- | --- | --- |
+| VITALS-01 | séries FHR/UC + pH presentes | `backend/tests/vitals/test_loader.py` — `r.ph`, `r.fhr.shape`, `r.fs` | ✅ |
+| VITALS-02 | pH < 7.05, estrita | `backend/tests/vitals/test_loader_ph.py` — `is_pathological(7.05) is False`; mutante `<`→`<=` morto | ✅ |
+| VITALS-03 | z-score, limiar estrito | `backend/tests/vitals/test_detectors_zscore.py` — fronteira `no_limiar…flag[-1] is False` | ✅ |
+| VITALS-04 | IsolationForest: score + binário sensíveis aos parâmetros | `backend/tests/vitals/test_detectors_iforest.py` — `contamination`, **`seed` `assert a != b`** (V7 morto) | ✅ |
+| VITALS-05 | fração `> τ` (AD-027), indeterminado fora do denominador | `backend/tests/vitals/test_aggregate.py` (AD-027a/b mortos); `test_evaluate.py` | ✅ |
+| VITALS-06 | evidência: gráfico + metadados (record_id, timestamp, pH, score, **detector**) | Sidecar: `backend/tests/integration/test_vitals_pipeline.py:123-156` amarra score+janela+detector ao detector que os produziu (V2 morto). **Título: `backend/tests/vitals/test_plot.py:66-88` cobre TODOS os campos por variação (W9 e 5 vizinhos mortos)** | ✅ **PASS** — era GAP parcial no passe 5 |
+| VITALS-07 | proveniência nos dois canais, resample documentado | `backend/tests/vitals/test_compositor.py` (ambos os canais + `fs`); `test_vitals_timeline.py` | ✅ |
+| VITALS-08 | registro corrompido descartado com aviso | `backend/tests/vitals/test_loader.py`; `test_vitals_pipeline.py` | ✅ |
+| VITALS-09 | janela insuficiente → "dados insuficientes" | `backend/tests/vitals/test_detectors_iforest.py` | ✅ |
+| VITALS-10 | alerta quando nenhum patológico | `backend/tests/vitals/test_evaluate.py`; `test_metrics.py` | ✅ |
+| VITALS-11 (AC1/AC3) | leitura ECG + skip gracioso | `backend/tests/vitals/test_mitbih.py` | ✅ |
+| ~~VITALS-11 AC2~~ | — | Fora de escopo por AD-028 — re-confirmado registrado | ⊘ Descopado |
+
+**Status: 12/12 ✅** (era 11/12 com GAP parcial em VITALS-06). O único vetor que faltava — o campo `detector` do título — agora é morto.
+
+### Rastreabilidade — passe 6
+
+| Requirement | `spec.md` diz | Passe 6 (re-derivado) | Ação |
+| --- | --- | --- | --- |
+| VITALS-04 | Fix aplicado (V7) — aguarda reverif. | ✅ **Verified** — V7 morto | → `Verified` |
+| VITALS-06 | Fix aplicado (V1,V2,N7) — aguarda reverif. | ✅ **Verified** — sidecar + título completos, W9 e vizinhos mortos | → `Verified` |
+| VITALS-07 | Fix aplicado (V6) — aguarda reverif. | ✅ **Verified** — ambos os canais amarrados | → `Verified` |
+| demais | Verified | ✅ Verified | — |
+
+(Atualização das strings de status em `spec.md` fica para o orquestrador — Verifier só escreve `validation.md`.)
+
+### Veredito de fechamento
+
+✅ **F3 pode ser fechada formalmente na estrutura nova.** O único sobrevivente do sensor (EX-6, limiar de gap `>` vs `>=`) é fronteira de um limiar que a spec não define como estrito — risco residual documentado, não bug, não evidência falsa. Nenhum bloqueador real remanescente.
 
 ---
 
@@ -17,7 +100,10 @@
 **Iteração 1** — FAIL. 15 mutações, 9 mortas, 6 sobreviventes. Teste vacuoso; `load_mitbih_dataset` sem teste.
 **Iteração 2** — FAIL. 15 mutações, 11 mortas, 4 sobreviventes. Correções calibradas **contra o literal do mutante**.
 **Iteração 3** — FAIL. 18 mutações, 13 mortas, 5 sobreviventes (V1, V2, V6, V7, N7). Correções dirigidas à **função nomeada no relatório**, deixando o vizinho descoberto.
-**Rodada extra (esta)** — FAIL estreito. 29 mutações, 25 mortas, 4 sobreviventes, todos em `plot.py`.
+**Rodada extra** — FAIL estreito. 29 mutações, 25 mortas, 4 sobreviventes, todos em `plot.py`.
+**Passe 6 (pós-migração, este)** — ✅ **PASS**. 17 mutações, 16 mortas, 1 sobrevivente (limiar de gap não coberto pela spec). W9 e os 5 campos do título morrem. Migração `src/ → backend/` sem regressão. Gate 165/165.
+
+> As seções abaixo (verificação das correções, circularidade, sensor de 29, AC table, etc.) referem-se ao **passe 5 (rodada extra)** com o código em `src/`. Preservadas como histórico. O veredito corrente é o do **Passe 6** acima.
 
 ---
 

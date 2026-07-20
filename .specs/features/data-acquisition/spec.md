@@ -34,7 +34,7 @@ todas as demais e os downloads (GB) rodam em paralelo enquanto o resto do SDD é
 | Assumption / decisão | Default escolhido | Rationale | Confirmado? |
 | --- | --- | --- | --- |
 | Método CTU-UHB | `wfdb.dl_database('ctu-uhb-ctgdb', 'data/ctu-uhb')` | `wfdb` já é dependência de F3; API oficial do PhysioNet | y |
-| URL do zip do ICBHI 2017 | **desconhecida — a confirmar com o usuário antes de executar** | O brief pede explicitamente para não assumir a URL | n |
+| URL do zip do ICBHI 2017 | `https://bhichallenge.med.auth.gr/sites/default/files/ICBHI_final_database/ICBHI_final_database.zip` → `data/icbhi/` | Confirmada pelo usuário | y |
 | Repositório Cholec80-CVS no GitHub | **nome/URL a confirmar com o usuário antes de executar** | O brief pede para confirmar o nome do repo | n |
 | Vídeos específicos do Cholec80 para a demo | A definir junto com F1 (quais cenas entram no roteiro) | Seleção de LFS depende de quais vídeos a demo usa | n |
 | Linguagem do script | Shell (`download_datasets.sh`) chamando Python só onde precisa (`wfdb`) | Idempotência, `wget --continue`, `git clone` e `unzip` são naturais em shell; a AD-031 admite `.sh` ou `.py` | y |
