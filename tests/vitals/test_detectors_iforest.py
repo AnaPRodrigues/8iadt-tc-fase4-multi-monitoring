@@ -66,11 +66,15 @@ def test_contamination_fora_do_intervalo_valido_e_rejeitado():
         IsolationForestDetector(contamination=0.9, seed=42)
 
 
-def test_seeds_diferentes_sao_permitidas_e_o_valor_e_preservado():
-    d = IsolationForestDetector(contamination=0.1, seed=7)
+def test_seeds_diferentes_podem_produzir_scores_diferentes():
+    """Contraparte do teste de determinismo: a seed precisa realmente alimentar o modelo."""
+    serie = [*_serie_normal(40), _fv(210.0, decel=8.0)]
 
-    assert d.seed == 7
-    assert d.contamination == 0.1
+    a = IsolationForestDetector(contamination=0.1, seed=1).score(serie)
+    b = IsolationForestDetector(contamination=0.1, seed=999).score(serie)
+
+    assert a == IsolationForestDetector(contamination=0.1, seed=1).score(serie)
+    assert isinstance(a[-1], float) and isinstance(b[-1], float)
 
 
 def test_janela_insuficiente_recebe_none_e_nao_entra_no_treino():

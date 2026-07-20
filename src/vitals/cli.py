@@ -50,6 +50,27 @@ def _proveniencia(record: VitalRecord, start_s: float) -> str:
     return record.record_id
 
 
+def build_event(record: VitalRecord, detector_name: str, janela, score: float) -> AnomalyEvent:
+    """Monta o evento de anomalia preservando fielmente detector, score e janela."""
+    return AnomalyEvent(
+        record_id=record.record_id,
+        detector=detector_name,
+        start_s=janela.start_s,
+        end_s=janela.end_s,
+        score=float(score),
+        source_record_id=_proveniencia(record, janela.start_s),
+    )
+
+
+def evidence_id_de(evento: AnomalyEvent) -> str:
+    """Identificador da evidência, derivado do próprio evento.
+
+    Derivar do evento (em vez de montar em paralelo) garante que o nome do arquivo e
+    os metadados nunca divirjam sobre qual detector produziu a anomalia.
+    """
+    return f"{evento.record_id}-{evento.detector}-{evento.start_s:.0f}s"
+
+
 def run(config_path: Path, run_id: str | None = None) -> int:
     """Executa o pipeline. Devolve 0 em sucesso, 1 quando não há o que processar."""
     cfg: Config = load_config(Path(config_path))
@@ -94,15 +115,8 @@ def run(config_path: Path, run_id: str | None = None) -> int:
             for janela, flag, score in zip(janelas, flags, scores, strict=True):
                 if not flag:
                     continue
-                evento = AnomalyEvent(
-                    record_id=record.record_id,
-                    detector=detector.name,
-                    start_s=janela.start_s,
-                    end_s=janela.end_s,
-                    score=float(score),
-                    source_record_id=_proveniencia(limpo, janela.start_s),
-                )
-                evidence_id = f"{record.record_id}-{detector.name}-{janela.start_s:.0f}s"
+                evento = build_event(limpo, detector.name, janela, score)
+                evidence_id = evidence_id_de(evento)
                 destino.mkdir(parents=True, exist_ok=True)
                 artefato = plot_anomaly_window(limpo, evento, destino / f"{evidence_id}.png")
                 save_evidence(

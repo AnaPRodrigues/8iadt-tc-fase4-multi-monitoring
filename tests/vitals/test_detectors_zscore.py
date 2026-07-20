@@ -70,14 +70,20 @@ def test_limiar_e_configuravel_e_muda_o_resultado():
 
 
 def test_score_exatamente_no_limiar_nao_e_marcado():
-    """Comparação estrita `> threshold`, coerente com a fronteira de AD-027."""
-    d = RollingZScoreDetector(threshold=math.sqrt(2), baseline_size=5)
+    """Comparação estrita `> threshold`: valor idêntico ao limiar não dispara.
 
-    # desvio de 2 bpm / sqrt(2) = sqrt(2), exatamente o limiar
+    O limiar é o próprio score computado, bit a bit — usar uma constante "equivalente"
+    como math.sqrt(2) erra a fronteira por 1 ULP e o teste passaria tanto sob `>`
+    quanto sob `>=`, sem exercitar nada.
+    """
     serie = _serie([*BASELINE, 142.0])
+    score_exato = RollingZScoreDetector(threshold=1e-9, baseline_size=5).score(serie)[-1]
 
-    assert d.score(serie)[-1] == pytest.approx(math.sqrt(2))
-    assert d.flag(serie)[-1] is False
+    no_limiar = RollingZScoreDetector(threshold=score_exato, baseline_size=5)
+    logo_abaixo = RollingZScoreDetector(threshold=math.nextafter(score_exato, 0.0), baseline_size=5)
+
+    assert no_limiar.flag(serie)[-1] is False
+    assert logo_abaixo.flag(serie)[-1] is True
 
 
 def test_baseline_constante_nao_divide_por_zero():

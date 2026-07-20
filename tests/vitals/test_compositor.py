@@ -28,6 +28,36 @@ def test_concatena_dois_registros_na_ordem_declarada(tmp_path):
     assert len(t.uc) == 160
 
 
+def test_conteudo_de_cada_trecho_corresponde_ao_registro_que_a_proveniencia_aponta(tmp_path):
+    """Sem amarrar sinal à proveniência, inverter o concatenate passa despercebido
+    e toda evidência da timeline apontaria para o registro errado em silêncio."""
+    d = _dataset(
+        tmp_path,
+        r0001={"ph": 7.30, "n_amostras": 100, "fhr_base": 140.0},
+        r0002={"ph": 7.01, "n_amostras": 60, "fhr_base": 90.0},
+    )
+    esperado = {"r0001": 140.0, "r0002": 90.0}
+
+    t = compose(TimelineSpec(dataset_dir=d, record_ids=["r0001", "r0002"]))
+
+    for seg in t.provenance:
+        trecho = t.fhr[seg.start_idx : seg.end_idx]
+        assert abs(float(np.mean(trecho)) - esperado[seg.source_record_id]) < 2.0
+
+
+def test_primeira_amostra_vem_do_primeiro_registro_declarado(tmp_path):
+    d = _dataset(
+        tmp_path,
+        r0001={"ph": 7.30, "n_amostras": 40, "fhr_base": 140.0},
+        r0002={"ph": 7.01, "n_amostras": 40, "fhr_base": 90.0},
+    )
+
+    t = compose(TimelineSpec(dataset_dir=d, record_ids=["r0001", "r0002"]))
+
+    assert abs(float(t.fhr[0]) - 140.0) < 20.0
+    assert abs(float(t.fhr[-1]) - 90.0) < 20.0
+
+
 def test_proveniencia_mapeia_cada_trecho_ao_registro_de_origem(tmp_path):
     d = _dataset(
         tmp_path,
