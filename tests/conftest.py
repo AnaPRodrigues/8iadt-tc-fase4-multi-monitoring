@@ -19,6 +19,7 @@ def escreve_registro(
     n_amostras: int = 240,
     sig_name: tuple[str, ...] = ("FHR", "UC"),
     fhr_base: float = 140.0,
+    fs: int = FS,
 ) -> str:
     """Escreve um par .hea/.dat válido e devolve o caminho sem extensão."""
     rng = np.random.default_rng(0)
@@ -34,7 +35,7 @@ def escreve_registro(
 
     wfdb.wrsamp(
         record_name,
-        fs=FS,
+        fs=fs,
         units=["bpm", "nd"][:n_sig],
         sig_name=list(sig_name),
         p_signal=sinal,
