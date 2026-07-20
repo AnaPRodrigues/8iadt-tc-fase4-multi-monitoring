@@ -141,25 +141,26 @@ a história central de detecção já está provada pelo P1/P2 com CTU-UHB.
 
 ## Requirement Traceability
 
-| Requirement ID | Story | Phase | Status |
+| Requirement ID | Story | Tarefa | Status |
 | --- | --- | --- | --- |
-| VITALS-01 | P1: Carga do registro CTU-UHB (série + pH) | Design | Pending |
-| VITALS-02 | P1: Rotulagem de ground truth via limiar de pH | Design | Pending |
-| VITALS-03 | P1: Detector rolling z-score | Design | Pending |
-| VITALS-04 | P1: Detector IsolationForest | Design | Pending |
-| VITALS-05 | P1: Agregação de classificações por registro | Design | Pending |
-| VITALS-06 | P1: Métricas precision/recall/F1 + evidência reproduzível | Design | Pending |
-| VITALS-07 | P2: Compositor de timeline (concatenação determinística + resample) | Design | Pending |
-| VITALS-08 | Edge case: descarte de registro corrompido/incompleto | Design | Pending |
-| VITALS-09 | Edge case: fallback para janela com dados insuficientes | Design | Pending |
-| VITALS-10 | Edge case: alerta quando nenhum registro é patológico no subconjunto | Design | Pending |
-| VITALS-11 | P3: Caso opcional MIT-BIH (skip gracioso se ausente) | Design | Pending |
+| VITALS-01 | P1: Carga do registro CTU-UHB (série + pH) | T6 | Verified |
+| VITALS-02 | P1: Rotulagem de ground truth via limiar de pH | T5 | Verified |
+| VITALS-03 | P1: Detector rolling z-score | T10 | Verified |
+| VITALS-04 | P1: Detector IsolationForest | T11 | Verified |
+| VITALS-05 | P1: Agregação de classificações por registro | T12 | Verified |
+| VITALS-06 | P1: Métricas precision/recall/F1 + evidência reproduzível | T2, T3, T13, T14, T15 | Verified |
+| VITALS-07 | P2: Compositor de timeline (concatenação determinística + resample) | T16, T17 | Verified |
+| VITALS-08 | Edge case: descarte de registro corrompido/incompleto | T6, T15 | Verified |
+| VITALS-09 | Edge case: fallback para janela com dados insuficientes | T8, T11 | Verified |
+| VITALS-10 | Edge case: alerta quando nenhum registro é patológico no subconjunto | T13 | Verified |
+| VITALS-11 | P3: MIT-BIH — AC1 e AC3 (leitura + skip gracioso) | T18 | Verified |
+| ~~VITALS-11 AC2~~ | ~~P3: MIT-BIH gera evidências no formato do CTU-UHB~~ | — | **Fora de escopo (AD-028)** |
 
 **ID format:** `VITALS-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 11 total, 0 mapped to tasks, 11 unmapped ⚠️ (aguardando fase Design/Tasks)
+**Coverage:** 11 requisitos, 11 mapeados para tarefas, 0 não mapeados. VITALS-11 AC2 formalmente fora de escopo por AD-028.
 
 ---
 

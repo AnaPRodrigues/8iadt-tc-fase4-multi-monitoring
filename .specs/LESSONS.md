@@ -44,6 +44,30 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: VITALS-11 AC2 (process)
 - last seen: 2026-07-20T17:27:05Z
 
+### L-006 — Antes de rodar teste de mutacao, commitar o trabalho: 'git checkout -- <arq>' reverte ao ultimo commit e destroi alteracoes nao commitadas.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `process` · harmful: 0
+- features: vitals-anomaly
+- evidence: sensor iteracao 3 (process)
+- last seen: 2026-07-20T17:51:47Z
+
+### L-007 — Script de mutacao precisa validar que o padrao casou antes de rodar os testes; sed que nao casa produz falso 'mutante morto' quando os testes falham por outro motivo (ex: ImportError).
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `process` · harmful: 0
+- features: vitals-anomaly
+- evidence: M17 falso positivo (process)
+- last seen: 2026-07-20T17:51:47Z
+
+### L-008 — Nao asserir a negacao do literal do mutante (score != 0.0): asserir o valor correto. Validar cada conserto com o mutante nomeado E uma variante trivial.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: vitals-anomaly
+- evidence: M16,M17 (tests)
+- last seen: 2026-07-20T17:51:47Z
+
+### L-009 — Teste de fronteira de float deve usar o valor computado bit a bit como limiar; constante 'equivalente' (math.sqrt(2)) erra por 1 ULP e passa sob > e sob >=.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: vitals-anomaly
+- evidence: M12 (tests)
+- last seen: 2026-07-20T17:51:47Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 6,
+  "next_id": 10,
   "lessons": [
     {
       "id": "L-001",
@@ -94,6 +94,78 @@
       ],
       "created": "2026-07-20T17:27:05Z",
       "last_seen": "2026-07-20T17:27:05Z"
+    },
+    {
+      "id": "L-006",
+      "key": "gate_fail::antes de rodar teste de mutacao commitar o trabalho git checkout arq reverte ao ultimo commit e destroi alteracoes nao commitadas",
+      "text": "Antes de rodar teste de mutacao, commitar o trabalho: 'git checkout -- <arq>' reverte ao ultimo commit e destroi alteracoes nao commitadas.",
+      "signal": "gate_fail",
+      "scope": "process",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "sensor iteracao 3 (process)"
+      ],
+      "created": "2026-07-20T17:51:47Z",
+      "last_seen": "2026-07-20T17:51:47Z"
+    },
+    {
+      "id": "L-007",
+      "key": "gate_fail::script de mutacao precisa validar que o padrao casou antes de rodar os testes sed que nao casa produz falso mutante morto quando os testes falham por outro motivo ex importerror",
+      "text": "Script de mutacao precisa validar que o padrao casou antes de rodar os testes; sed que nao casa produz falso 'mutante morto' quando os testes falham por outro motivo (ex: ImportError).",
+      "signal": "gate_fail",
+      "scope": "process",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "M17 falso positivo (process)"
+      ],
+      "created": "2026-07-20T17:51:47Z",
+      "last_seen": "2026-07-20T17:51:47Z"
+    },
+    {
+      "id": "L-008",
+      "key": "surviving_mutant::nao asserir a negacao do literal do mutante score 0 0 asserir o valor correto validar cada conserto com o mutante nomeado e uma variante trivial",
+      "text": "Nao asserir a negacao do literal do mutante (score != 0.0): asserir o valor correto. Validar cada conserto com o mutante nomeado E uma variante trivial.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "M16,M17 (tests)"
+      ],
+      "created": "2026-07-20T17:51:47Z",
+      "last_seen": "2026-07-20T17:51:47Z"
+    },
+    {
+      "id": "L-009",
+      "key": "surviving_mutant::teste de fronteira de float deve usar o valor computado bit a bit como limiar constante equivalente math sqrt 2 erra por 1 ulp e passa sob e sob",
+      "text": "Teste de fronteira de float deve usar o valor computado bit a bit como limiar; constante 'equivalente' (math.sqrt(2)) erra por 1 ULP e passa sob > e sob >=.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "M12 (tests)"
+      ],
+      "created": "2026-07-20T17:51:47Z",
+      "last_seen": "2026-07-20T17:51:47Z"
     }
   ]
 }
