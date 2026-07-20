@@ -68,6 +68,36 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: M12 (tests)
 - last seen: 2026-07-20T17:51:47Z
 
+### L-010 — Corrigir apenas o que o relatorio nomeia deixa o caso vizinho descoberto: ao consertar uma lacuna, sondar tambem o call site, o outro canal/campo e o parametro irmao.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: vitals-anomaly
+- evidence: V1,V2,N7,V6,V7 (tests)
+- last seen: 2026-07-20T18:12:46Z
+
+### L-011 — Teste unitario de uma funcao nao cobre o call site dela: se o valor pode ser corrompido entre produtor e consumidor, e preciso assercao ponta a ponta tambem.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: vitals-anomaly
+- evidence: V1 (tests)
+- last seen: 2026-07-20T18:12:46Z
+
+### L-012 — Assercao entre dois valores derivados da mesma fonte e tautologica (nome do arquivo vs metadados do mesmo evento): comparar com fonte independente.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: vitals-anomaly
+- evidence: V2 (tests)
+- last seen: 2026-07-20T18:12:46Z
+
+### L-013 — Teste chamado 'X difere de Y' precisa asserir a != b; sem isso e teste vazio com nome enganoso.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: vitals-anomaly
+- evidence: V7 (tests)
+- last seen: 2026-07-20T18:12:46Z
+
+### L-014 — Ao remover assercao fraca, substituir por assercao forte no MESMO nivel; remover sem repor reduz a cobertura em vez de melhora-la.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `process` · harmful: 0
+- features: vitals-anomaly
+- evidence: iteracao 3 (process)
+- last seen: 2026-07-20T18:12:46Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

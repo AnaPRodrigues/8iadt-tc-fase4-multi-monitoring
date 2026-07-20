@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 10,
+  "next_id": 15,
   "lessons": [
     {
       "id": "L-001",
@@ -166,6 +166,96 @@
       ],
       "created": "2026-07-20T17:51:47Z",
       "last_seen": "2026-07-20T17:51:47Z"
+    },
+    {
+      "id": "L-010",
+      "key": "surviving_mutant::corrigir apenas o que o relatorio nomeia deixa o caso vizinho descoberto ao consertar uma lacuna sondar tambem o call site o outro canal campo e o parametro irmao",
+      "text": "Corrigir apenas o que o relatorio nomeia deixa o caso vizinho descoberto: ao consertar uma lacuna, sondar tambem o call site, o outro canal/campo e o parametro irmao.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "V1,V2,N7,V6,V7 (tests)"
+      ],
+      "created": "2026-07-20T18:12:46Z",
+      "last_seen": "2026-07-20T18:12:46Z"
+    },
+    {
+      "id": "L-011",
+      "key": "surviving_mutant::teste unitario de uma funcao nao cobre o call site dela se o valor pode ser corrompido entre produtor e consumidor e preciso assercao ponta a ponta tambem",
+      "text": "Teste unitario de uma funcao nao cobre o call site dela: se o valor pode ser corrompido entre produtor e consumidor, e preciso assercao ponta a ponta tambem.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "V1 (tests)"
+      ],
+      "created": "2026-07-20T18:12:46Z",
+      "last_seen": "2026-07-20T18:12:46Z"
+    },
+    {
+      "id": "L-012",
+      "key": "surviving_mutant::assercao entre dois valores derivados da mesma fonte e tautologica nome do arquivo vs metadados do mesmo evento comparar com fonte independente",
+      "text": "Assercao entre dois valores derivados da mesma fonte e tautologica (nome do arquivo vs metadados do mesmo evento): comparar com fonte independente.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "V2 (tests)"
+      ],
+      "created": "2026-07-20T18:12:46Z",
+      "last_seen": "2026-07-20T18:12:46Z"
+    },
+    {
+      "id": "L-013",
+      "key": "surviving_mutant::teste chamado x difere de y precisa asserir a b sem isso e teste vazio com nome enganoso",
+      "text": "Teste chamado 'X difere de Y' precisa asserir a != b; sem isso e teste vazio com nome enganoso.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "V7 (tests)"
+      ],
+      "created": "2026-07-20T18:12:46Z",
+      "last_seen": "2026-07-20T18:12:46Z"
+    },
+    {
+      "id": "L-014",
+      "key": "gate_fail::ao remover assercao fraca substituir por assercao forte no mesmo nivel remover sem repor reduz a cobertura em vez de melhora la",
+      "text": "Ao remover assercao fraca, substituir por assercao forte no MESMO nivel; remover sem repor reduz a cobertura em vez de melhora-la.",
+      "signal": "gate_fail",
+      "scope": "process",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "iteracao 3 (process)"
+      ],
+      "created": "2026-07-20T18:12:46Z",
+      "last_seen": "2026-07-20T18:12:46Z"
     }
   ]
 }
