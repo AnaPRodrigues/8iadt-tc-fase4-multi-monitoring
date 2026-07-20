@@ -21,6 +21,9 @@ DEFAULTS: dict[str, Any] = {
     "tau": 0.15,  # AD-027
     "seed": 42,
     "output_root": "output",
+    # Lista de record_ids a concatenar como timeline de demo (VITALS-07). Quando
+    # ausente, o pipeline processa todos os registros do dataset individualmente.
+    "timeline": None,
 }
 
 _NUMERIC = (
@@ -42,6 +45,7 @@ class Config:
     tau: float
     seed: int
     output_root: Path
+    timeline: list[str] | None
 
 
 def load_config(path: Path) -> Config:
@@ -71,6 +75,13 @@ def load_config(path: Path) -> Config:
     if isinstance(merged["seed"], bool) or not isinstance(merged["seed"], int):
         raise ValueError(f"campo seed precisa ser inteiro, recebido: {merged['seed']!r}")
 
+    timeline = merged["timeline"]
+    if timeline is not None:
+        if not isinstance(timeline, list) or not all(isinstance(v, str) for v in timeline):
+            raise ValueError(f"campo timeline precisa ser lista de ids, recebido: {timeline!r}")
+        if len(timeline) < 2:
+            raise ValueError("campo timeline precisa declarar ao menos dois registros")
+
     return Config(
         dataset_dir=Path(merged["dataset_dir"]),
         window_size_s=float(merged["window_size_s"]),
@@ -80,4 +91,5 @@ def load_config(path: Path) -> Config:
         tau=float(merged["tau"]),
         seed=int(merged["seed"]),
         output_root=Path(merged["output_root"]),
+        timeline=list(timeline) if timeline is not None else None,
     )

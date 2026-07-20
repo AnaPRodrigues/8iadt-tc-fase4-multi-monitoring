@@ -14,6 +14,7 @@ from core.config import Config, load_config
 from core.evidence import evidence_dir, save_evidence
 from core.logging import get_logger
 from vitals.aggregate import RecordVerdict, aggregate
+from vitals.compositor import TimelineSpec, compose
 from vitals.detectors import AnomalyEvent, IsolationForestDetector, RollingZScoreDetector
 from vitals.evaluate import evaluate, save_evaluation
 from vitals.features import extract
@@ -55,7 +56,15 @@ def run(config_path: Path, run_id: str | None = None) -> int:
     run_id = run_id or _novo_run_id()
     destino = evidence_dir("vitals", run_id, cfg.output_root)
 
-    registros, falhas = load_dataset(cfg.dataset_dir)
+    if cfg.timeline:
+        registros = [
+            compose(TimelineSpec(dataset_dir=cfg.dataset_dir, record_ids=cfg.timeline))
+        ]
+        falhas = []
+        log.info("timeline composta a partir de: %s", ", ".join(cfg.timeline))
+    else:
+        registros, falhas = load_dataset(cfg.dataset_dir)
+
     if not registros:
         log.error(
             "nenhum registro utilizável em %s (%d descartado(s))", cfg.dataset_dir, len(falhas)
