@@ -98,6 +98,36 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: iteracao 3 (process)
 - last seen: 2026-07-20T18:12:46Z
 
+### L-015 — Ao consertar um campo de uma string/payload composta, sondar TODOS os outros campos da mesma expressao: o vizinho literal costuma ter a mesma fragilidade.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: vitals-anomaly
+- evidence: W9 (tests)
+- last seen: 2026-07-20T22:49:18Z
+
+### L-016 — Fixture unica com literais fixos + assercao de substring permite trocar qualquer campo por constante. Verificar por VARIACAO: parametrizar e asserir 'X in A and X not in B'.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: vitals-anomaly
+- evidence: W9,W13,W14 (tests)
+- last seen: 2026-07-20T22:49:19Z
+
+### L-017 — Oraculo de teste deve ler a mesma config do codigo sob teste; repetir valores que coincidem com os defaults cria concordancia acidental.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: vitals-anomaly
+- evidence: Fix D (tests)
+- last seen: 2026-07-20T22:49:19Z
+
+### L-018 — Dicionario de esperados com chave criada incondicionalmente faz conjunto vazio parecer concordancia: so registrar a chave quando ha conteudo.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: vitals-anomaly
+- evidence: Fix D (tests)
+- last seen: 2026-07-20T22:49:19Z
+
+### L-019 — Corrigir apenas os vizinhos NOMEADOS no relatorio ainda deixa lacuna: apos cada conserto, enumerar exaustivamente os campos/canais/parametros irmaos e sondar todos.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `process` · harmful: 0
+- features: vitals-anomaly
+- evidence: iteracoes 1-4 (process)
+- last seen: 2026-07-20T22:49:19Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

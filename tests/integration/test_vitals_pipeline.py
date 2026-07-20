@@ -79,39 +79,44 @@ def test_toda_evidencia_tem_artefato_e_sidecar(tmp_path, escritor):
     assert detectores_vistos == {"zscore", "isolation_forest"}
 
 
-def _recomputa_por_detector(dados, cfg_valores):
+def _recomputa_por_detector(dados, cfg_path):
     """Refaz o pipeline fora do CLI para servir de fonte de verdade independente.
 
     Comparar o nome do arquivo de evidência com seus próprios metadados é tautológico:
     ambos derivam do mesmo evento. Só recomputando é possível afirmar que a evidência
     atribuída a um detector corresponde às janelas que AQUELE detector marcou.
     """
+    from core.config import load_config
     from vitals.cli import _limpa
     from vitals.detectors import IsolationForestDetector, RollingZScoreDetector
     from vitals.features import extract
     from vitals.loader import load_dataset
     from vitals.windowing import make_windows
 
+    # Ler a mesma config que o CLI leu, em vez de repetir valores que só
+    # coincidiriam com ela por serem os defaults.
+    cfg = load_config(cfg_path)
+
     registros, _ = load_dataset(dados)
     record = registros[0]
     limpo, mask = _limpa(record)
-    janelas = make_windows(
-        limpo, cfg_valores["window_size_s"], cfg_valores["window_stride_s"], mask
-    )
+    janelas = make_windows(limpo, cfg.window_size_s, cfg.window_stride_s, mask)
     features = [extract(j, fs=limpo.fs) for j in janelas]
 
-    esperado = {}
+    esperado: dict[str, dict[float, float]] = {}
     for det in (
-        RollingZScoreDetector(threshold=3.0),
-        IsolationForestDetector(contamination=0.1, seed=42),
+        RollingZScoreDetector(threshold=cfg.zscore_threshold),
+        IsolationForestDetector(contamination=cfg.iforest_contamination, seed=cfg.seed),
     ):
-        flags = det.flag(features)
-        scores = det.score(features)
-        esperado[det.name] = {
+        marcadas = {
             j.start_s: s
-            for j, f, s in zip(janelas, flags, scores, strict=True)
+            for j, f, s in zip(janelas, det.flag(features), det.score(features), strict=True)
             if f
         }
+        # Só registrar o detector se ele de fato marcou algo: criar a chave
+        # incondicionalmente faria um conjunto vazio parecer concordância.
+        if marcadas:
+            esperado[det.name] = marcadas
     return esperado
 
 
@@ -120,8 +125,7 @@ def test_evidencia_corresponde_as_janelas_que_aquele_detector_marcou(tmp_path, e
     dados = tmp_path / "dados"
     dados.mkdir()
     escritor(dados, "0001", ph=7.01, n_amostras=N_AMOSTRAS)
-    valores = {"window_size_s": 20.0, "window_stride_s": 10.0}
-    cfg = _config(tmp_path, dados, **valores)
+    cfg = _config(tmp_path, dados)
 
     run(cfg, run_id="teste")
 
@@ -133,7 +137,7 @@ def test_evidencia_corresponde_as_janelas_que_aquele_detector_marcou(tmp_path, e
     ]
     assert sidecars
 
-    esperado = _recomputa_por_detector(dados, valores)
+    esperado = _recomputa_por_detector(dados, cfg)
 
     obtido: dict[str, dict[float, float]] = {}
     for s in sidecars:

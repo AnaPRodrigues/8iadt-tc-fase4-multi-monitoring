@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 15,
+  "next_id": 20,
   "lessons": [
     {
       "id": "L-001",
@@ -256,6 +256,96 @@
       ],
       "created": "2026-07-20T18:12:46Z",
       "last_seen": "2026-07-20T18:12:46Z"
+    },
+    {
+      "id": "L-015",
+      "key": "surviving_mutant::ao consertar um campo de uma string payload composta sondar todos os outros campos da mesma expressao o vizinho literal costuma ter a mesma fragilidade",
+      "text": "Ao consertar um campo de uma string/payload composta, sondar TODOS os outros campos da mesma expressao: o vizinho literal costuma ter a mesma fragilidade.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "W9 (tests)"
+      ],
+      "created": "2026-07-20T22:49:18Z",
+      "last_seen": "2026-07-20T22:49:18Z"
+    },
+    {
+      "id": "L-016",
+      "key": "surviving_mutant::fixture unica com literais fixos assercao de substring permite trocar qualquer campo por constante verificar por variacao parametrizar e asserir x in a and x not in b",
+      "text": "Fixture unica com literais fixos + assercao de substring permite trocar qualquer campo por constante. Verificar por VARIACAO: parametrizar e asserir 'X in A and X not in B'.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "W9,W13,W14 (tests)"
+      ],
+      "created": "2026-07-20T22:49:19Z",
+      "last_seen": "2026-07-20T22:49:19Z"
+    },
+    {
+      "id": "L-017",
+      "key": "gate_fail::oraculo de teste deve ler a mesma config do codigo sob teste repetir valores que coincidem com os defaults cria concordancia acidental",
+      "text": "Oraculo de teste deve ler a mesma config do codigo sob teste; repetir valores que coincidem com os defaults cria concordancia acidental.",
+      "signal": "gate_fail",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "Fix D (tests)"
+      ],
+      "created": "2026-07-20T22:49:19Z",
+      "last_seen": "2026-07-20T22:49:19Z"
+    },
+    {
+      "id": "L-018",
+      "key": "gate_fail::dicionario de esperados com chave criada incondicionalmente faz conjunto vazio parecer concordancia so registrar a chave quando ha conteudo",
+      "text": "Dicionario de esperados com chave criada incondicionalmente faz conjunto vazio parecer concordancia: so registrar a chave quando ha conteudo.",
+      "signal": "gate_fail",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "Fix D (tests)"
+      ],
+      "created": "2026-07-20T22:49:19Z",
+      "last_seen": "2026-07-20T22:49:19Z"
+    },
+    {
+      "id": "L-019",
+      "key": "gate_fail::corrigir apenas os vizinhos nomeados no relatorio ainda deixa lacuna apos cada conserto enumerar exaustivamente os campos canais parametros irmaos e sondar todos",
+      "text": "Corrigir apenas os vizinhos NOMEADOS no relatorio ainda deixa lacuna: apos cada conserto, enumerar exaustivamente os campos/canais/parametros irmaos e sondar todos.",
+      "signal": "gate_fail",
+      "scope": "process",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "iteracoes 1-4 (process)"
+      ],
+      "created": "2026-07-20T22:49:19Z",
+      "last_seen": "2026-07-20T22:49:19Z"
     }
   ]
 }
