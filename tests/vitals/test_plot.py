@@ -71,6 +71,7 @@ def _titulo(**over) -> str:
         ("ph", 7.01, 7.31, "7.01", "7.31"),
         ("score", 3.70, 8.25, "3.70", "8.25"),
         ("start_s", 10.0, 44.0, "10.0", "44.0"),
+        ("end_s", 12.0, 57.0, "12.0", "57.0"),
     ],
 )
 def test_cada_campo_do_titulo_reflete_o_valor_do_evento(campo, a, b, texto_a, texto_b):
