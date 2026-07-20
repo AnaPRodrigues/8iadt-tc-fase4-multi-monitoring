@@ -30,19 +30,42 @@ def test_concatena_dois_registros_na_ordem_declarada(tmp_path):
 
 def test_conteudo_de_cada_trecho_corresponde_ao_registro_que_a_proveniencia_aponta(tmp_path):
     """Sem amarrar sinal à proveniência, inverter o concatenate passa despercebido
-    e toda evidência da timeline apontaria para o registro errado em silêncio."""
+    e toda evidência da timeline apontaria para o registro errado em silêncio.
+
+    Verifica AMBOS os canais: uma inversão que atingisse só o `uc` seria invisível
+    se apenas o `fhr` fosse conferido.
+    """
     d = _dataset(
         tmp_path,
-        r0001={"ph": 7.30, "n_amostras": 100, "fhr_base": 140.0},
-        r0002={"ph": 7.01, "n_amostras": 60, "fhr_base": 90.0},
+        r0001={"ph": 7.30, "n_amostras": 100, "fhr_base": 140.0, "uc_base": 20.0},
+        r0002={"ph": 7.01, "n_amostras": 60, "fhr_base": 90.0, "uc_base": 70.0},
     )
-    esperado = {"r0001": 140.0, "r0002": 90.0}
+    esperado_fhr = {"r0001": 140.0, "r0002": 90.0}
+    esperado_uc = {"r0001": 20.0, "r0002": 70.0}
 
     t = compose(TimelineSpec(dataset_dir=d, record_ids=["r0001", "r0002"]))
 
     for seg in t.provenance:
-        trecho = t.fhr[seg.start_idx : seg.end_idx]
-        assert abs(float(np.mean(trecho)) - esperado[seg.source_record_id]) < 2.0
+        fatia = slice(seg.start_idx, seg.end_idx)
+        assert abs(float(np.mean(t.fhr[fatia])) - esperado_fhr[seg.source_record_id]) < 2.0
+        assert abs(float(np.mean(t.uc[fatia])) - esperado_uc[seg.source_record_id]) < 2.0
+
+
+def test_canais_permanecem_alinhados_entre_si(tmp_path):
+    """FHR e UC de um mesmo instante precisam vir do mesmo registro."""
+    d = _dataset(
+        tmp_path,
+        r0001={"ph": 7.30, "n_amostras": 80, "fhr_base": 140.0, "uc_base": 20.0},
+        r0002={"ph": 7.01, "n_amostras": 80, "fhr_base": 90.0, "uc_base": 70.0},
+    )
+
+    t = compose(TimelineSpec(dataset_dir=d, record_ids=["r0001", "r0002"]))
+
+    # No início, FHR alto e UC baixo (r0001); no fim, o inverso (r0002).
+    assert float(np.mean(t.fhr[:40])) > 120.0
+    assert float(np.mean(t.uc[:40])) < 40.0
+    assert float(np.mean(t.fhr[-40:])) < 120.0
+    assert float(np.mean(t.uc[-40:])) > 40.0
 
 
 def test_primeira_amostra_vem_do_primeiro_registro_declarado(tmp_path):

@@ -19,13 +19,14 @@ def escreve_registro(
     n_amostras: int = 240,
     sig_name: tuple[str, ...] = ("FHR", "UC"),
     fhr_base: float = 140.0,
+    uc_base: float = 20.0,
     fs: int = FS,
 ) -> str:
     """Escreve um par .hea/.dat válido e devolve o caminho sem extensão."""
     rng = np.random.default_rng(0)
     n_sig = len(sig_name)
     colunas = [rng.normal(fhr_base, 5.0, n_amostras)]
-    colunas += [rng.normal(20.0, 2.0, n_amostras) for _ in range(n_sig - 1)]
+    colunas += [rng.normal(uc_base, 2.0, n_amostras) for _ in range(n_sig - 1)]
     sinal = np.column_stack(colunas).astype(float)
 
     comments = ["-- Outcome measures"]

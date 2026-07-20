@@ -49,6 +49,32 @@ def test_titulo_identifica_registro_ph_e_detector():
     assert "zscore" in t
 
 
+def test_titulo_mostra_o_score_e_a_janela_do_evento():
+    """Um gráfico que anuncia score ou janela errados é evidência enganosa."""
+    t = titulo_evidencia(_registro(), _evento(10.0, 12.0))
+
+    assert "3.70" in t
+    assert "10.0" in t
+    assert "12.0" in t
+
+
+def test_titulo_reflete_score_diferente():
+    """Vizinho do caso acima: o título precisa variar com o score, não ser fixo."""
+    evento = AnomalyEvent(
+        record_id="1464",
+        detector="zscore",
+        start_s=10.0,
+        end_s=12.0,
+        score=8.25,
+        source_record_id="1464",
+    )
+
+    t = titulo_evidencia(_registro(), evento)
+
+    assert "8.25" in t
+    assert "3.70" not in t
+
+
 def test_titulo_mostra_proveniencia_quando_difere_do_registro():
     """Na timeline composta, a evidência precisa dizer de qual registro real veio."""
     evento = AnomalyEvent(

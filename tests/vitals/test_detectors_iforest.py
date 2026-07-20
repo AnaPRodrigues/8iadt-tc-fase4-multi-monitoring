@@ -66,15 +66,28 @@ def test_contamination_fora_do_intervalo_valido_e_rejeitado():
         IsolationForestDetector(contamination=0.9, seed=42)
 
 
-def test_seeds_diferentes_podem_produzir_scores_diferentes():
-    """Contraparte do teste de determinismo: a seed precisa realmente alimentar o modelo."""
+def test_seeds_diferentes_produzem_scores_diferentes():
+    """Contraparte do determinismo: a seed precisa REALMENTE alimentar o modelo.
+
+    Sem asserir `a != b`, fixar `random_state=0` e ignorar a seed configurada
+    passaria despercebido — foi exatamente o que aconteceu na iteração anterior.
+    """
     serie = [*_serie_normal(40), _fv(210.0, decel=8.0)]
 
     a = IsolationForestDetector(contamination=0.1, seed=1).score(serie)
     b = IsolationForestDetector(contamination=0.1, seed=999).score(serie)
 
-    assert a == IsolationForestDetector(contamination=0.1, seed=1).score(serie)
-    assert isinstance(a[-1], float) and isinstance(b[-1], float)
+    assert a != b
+
+
+def test_a_seed_configurada_e_a_que_alimenta_o_modelo():
+    """Vizinho do caso acima: uma seed distinta de 0 não pode coincidir com seed=0."""
+    serie = [*_serie_normal(40), _fv(210.0, decel=8.0)]
+
+    zero = IsolationForestDetector(contamination=0.1, seed=0).score(serie)
+    outra = IsolationForestDetector(contamination=0.1, seed=12345).score(serie)
+
+    assert zero != outra
 
 
 def test_janela_insuficiente_recebe_none_e_nao_entra_no_treino():
