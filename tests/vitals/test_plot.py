@@ -1,6 +1,7 @@
 """Testes do gráfico de evidência da janela anômala (VITALS-06, AD-026)."""
 
 import numpy as np
+import pytest
 
 from vitals.detectors import AnomalyEvent
 from vitals.loader import Segment, VitalRecord
@@ -41,38 +42,56 @@ def test_gera_o_arquivo_de_grafico(tmp_path):
     assert destino.stat().st_size > 0
 
 
-def test_titulo_identifica_registro_ph_e_detector():
-    t = titulo_evidencia(_registro(ph=7.01), _evento(10.0, 12.0))
+def _titulo(**over) -> str:
+    """Monta o título variando um campo por vez."""
+    registro = VitalRecord(
+        record_id=over.get("record_id", "1464"),
+        fhr=np.full(200, 140.0),
+        uc=np.full(200, 20.0),
+        fs=FS,
+        ph=over.get("ph", 7.01),
+        provenance=[Segment(over.get("record_id", "1464"), 0, 200)],
+    )
+    evento = AnomalyEvent(
+        record_id=over.get("record_id", "1464"),
+        detector=over.get("detector", "zscore"),
+        start_s=over.get("start_s", 10.0),
+        end_s=over.get("end_s", 12.0),
+        score=over.get("score", 3.70),
+        source_record_id=over.get("record_id", "1464"),
+    )
+    return titulo_evidencia(registro, evento)
 
-    assert "1464" in t
-    assert "7.01" in t
-    assert "zscore" in t
+
+@pytest.mark.parametrize(
+    ("campo", "a", "b", "texto_a", "texto_b"),
+    [
+        ("record_id", "1464", "2001", "1464", "2001"),
+        ("detector", "zscore", "isolation_forest", "zscore", "isolation_forest"),
+        ("ph", 7.01, 7.31, "7.01", "7.31"),
+        ("score", 3.70, 8.25, "3.70", "8.25"),
+        ("start_s", 10.0, 44.0, "10.0", "44.0"),
+    ],
+)
+def test_cada_campo_do_titulo_reflete_o_valor_do_evento(campo, a, b, texto_a, texto_b):
+    """Cada campo precisa VARIAR com o evento, não ser constante.
+
+    Asserir só presença de substring contra uma fixture de literais fixos deixa
+    qualquer campo ser substituído por uma constante sem que nada quebre — foi
+    assim que o `detector` do título passou despercebido por quatro rodadas.
+    """
+    titulo_a = _titulo(**{campo: a})
+    titulo_b = _titulo(**{campo: b})
+
+    assert texto_a in titulo_a and texto_b not in titulo_a
+    assert texto_b in titulo_b and texto_a not in titulo_b
 
 
-def test_titulo_mostra_o_score_e_a_janela_do_evento():
-    """Um gráfico que anuncia score ou janela errados é evidência enganosa."""
-    t = titulo_evidencia(_registro(), _evento(10.0, 12.0))
+def test_titulo_mostra_a_janela_completa_do_evento():
+    t = _titulo(start_s=10.0, end_s=12.0)
 
-    assert "3.70" in t
     assert "10.0" in t
     assert "12.0" in t
-
-
-def test_titulo_reflete_score_diferente():
-    """Vizinho do caso acima: o título precisa variar com o score, não ser fixo."""
-    evento = AnomalyEvent(
-        record_id="1464",
-        detector="zscore",
-        start_s=10.0,
-        end_s=12.0,
-        score=8.25,
-        source_record_id="1464",
-    )
-
-    t = titulo_evidencia(_registro(), evento)
-
-    assert "8.25" in t
-    assert "3.70" not in t
 
 
 def test_titulo_mostra_proveniencia_quando_difere_do_registro():
