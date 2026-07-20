@@ -146,10 +146,10 @@ a história central de detecção já está provada pelo P1/P2 com CTU-UHB.
 | VITALS-01 | P1: Carga do registro CTU-UHB (série + pH) | T6 | Verified |
 | VITALS-02 | P1: Rotulagem de ground truth via limiar de pH | T5 | Verified |
 | VITALS-03 | P1: Detector rolling z-score | T10 | Verified |
-| VITALS-04 | P1: Detector IsolationForest | T11 | **Partial** — `random_state` não coberto (mutante V7 sobreviveu) |
+| VITALS-04 | P1: Detector IsolationForest | T11 | Fix aplicado (V7) — aguarda reverificação |
 | VITALS-05 | P1: Agregação de classificações por registro | T12 | Verified |
-| VITALS-06 | P1: Métricas precision/recall/F1 + evidência reproduzível | T2, T3, T13, T14, T15 | **Needs Fix** — fidelidade de `score` e `detector` na evidência não verificada (mutantes V1, V2, N7) |
-| VITALS-07 | P2: Compositor de timeline (concatenação determinística + resample) | T16, T17 | **Partial** — ordem do canal `uc` não coberta (mutante V6) |
+| VITALS-06 | P1: Métricas precision/recall/F1 + evidência reproduzível | T2, T3, T13, T14, T15 | Fix aplicado (V1, V2, N7) — aguarda reverificação |
+| VITALS-07 | P2: Compositor de timeline (concatenação determinística + resample) | T16, T17 | Fix aplicado (V6) — aguarda reverificação |
 | VITALS-08 | Edge case: descarte de registro corrompido/incompleto | T6, T15 | Verified |
 | VITALS-09 | Edge case: fallback para janela com dados insuficientes | T8, T11 | Verified |
 | VITALS-10 | Edge case: alerta quando nenhum registro é patológico no subconjunto | T13 | Verified |
@@ -160,7 +160,7 @@ a história central de detecção já está provada pelo P1/P2 com CTU-UHB.
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 11 requisitos, 11 mapeados para tarefas. Após 3 iterações de verificação independente: 8 Verified, 1 Needs Fix (VITALS-06), 2 Partial (VITALS-04, VITALS-07). VITALS-11 AC2 fora de escopo por AD-028. As lacunas restantes são de **teste** — a implementação em `src/` está correta; o que falta é cobertura que as detecte.
+**Coverage:** 11 requisitos, 11 mapeados para tarefas. Após 3 iterações de verificação independente mais uma rodada extra autorizada, as 5 lacunas remanescentes receberam correção (V1, V2, V6, V7, N7), cada uma validada com o mutante nomeado E uma variante vizinha. Status final pendente de reverificação. VITALS-11 AC2 fora de escopo por AD-028.
 
 ---
 

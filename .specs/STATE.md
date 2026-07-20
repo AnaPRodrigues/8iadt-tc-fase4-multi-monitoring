@@ -230,8 +230,8 @@
 
 - **Feature**: F3 vitals-anomaly (`.specs/features/vitals-anomaly/`)
 - **Phase / Task**: Execute COMPLETO — 18/18 tarefas implementadas, testadas e commitadas na branch `feat/f3-vitals-anomaly`. Verificação independente (Verifier) em andamento.
-- **Completed**: AD-001 a AD-027; specs das 5 features confirmadas; design e tasks de F3 aprovados; T1–T18 commitados individualmente (um commit atômico por tarefa). Suíte: 156 testes passando (146 unitários + 10 de integração), lint limpo.
-- **In-progress**: NENHUM. As 3 iterações de verificação independente se esgotaram, todas FAIL. Restam 5 mutantes sobreviventes, todos lacunas de TESTE (`src/` está correto). Aguarda decisão do usuário: aceitar risco residual ou autorizar rodada extra fora do loop.
+- **Completed**: AD-001 a AD-027; specs das 5 features confirmadas; design e tasks de F3 aprovados; T1–T18 commitados individualmente (um commit atômico por tarefa). Suíte: 161 testes passando (150 unitários + 11 de integração), lint limpo.
+- **In-progress**: reverificação após a rodada extra (autorizada pelo usuário fora do loop de 3). As 5 lacunas (V1, V2, V6, V7, N7) foram corrigidas no commit `aa63a26` e validadas localmente com o mutante nomeado mais uma variante vizinha — todos mortos, árvore limpa.
 - **Next step**: ler o veredito do Verifier; se FAIL, rotear lacunas como tarefas de correção (loop limitado a 3 iterações). Se PASS, F3 está encerrada e a próxima feature do plano de 7 dias é F4 (prescription-analysis), que precisa de Design + Tasks antes de Execute.
 - **Blockers**: none. Ambiente resolvido — `.venv` na raiz com pytest, ruff, numpy, scikit-learn, wfdb 4.3.1, matplotlib e pyyaml. `make demo` exige o CTU-UHB baixado em `data/ctu-uhb-ctgdb/` (ainda não baixado); sem ele o comando falha com mensagem acionável, e os testes rodam com fixtures WFDB sintéticas.
 - **Uncommitted files**: `.specs/` (design, tasks e STATE atualizados durante o Execute)
