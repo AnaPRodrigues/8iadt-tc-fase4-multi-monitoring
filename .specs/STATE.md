@@ -152,7 +152,7 @@
 - **Trade-off**: Abre mão do caso "queda/assimetria" via pose sobre dado real; se incluído, vem de um clipe encenado à parte.
 - **Scope**: F1 (video-analysis).
 - **Date**: 2026-07-20
-- **Status**: active
+- **Status**: superseded by AD-033
 
 ### AD-020
 - **Decision**: F2 usa ICBHI 2017 (sons respiratórios reais, anotados) como entrada primária para classificação de crackle/wheeze com rótulo real. Disartria real (datasets TORGO/UA-Speech) fica fora do caminho crítico; "fadiga/qualidade vocal" é coberta via features acústicas (jitter, shimmer, HNR) sobre áudio de consulta gravado pelo grupo (atuação, não paciente). Transcrição + termos críticos via faster-whisper sobre esse mesmo áudio.
@@ -184,7 +184,7 @@
 - **Trade-off**: Abre mão do ângulo "fisioterapia/queda" via pose estimation mencionado no enunciado original; coberto apenas pela análise cirúrgica (instrumentos/fases).
 - **Scope**: F1 (video-analysis).
 - **Date**: 2026-07-20
-- **Status**: active
+- **Status**: superseded by AD-033
 
 ### AD-024
 - **Decision**: A fusão (F5) usa um "paciente-demo" sintético que agrupa manualmente um registro real de cada modalidade (1 vídeo Cholec80-CVS de F1, 1 áudio ICBHI/gravado de F2, 1 registro CTU-UHB de F3, 1 histórico de prescrição de F4). A associação é curada, documentada no relatório técnico como composição didática — não representa um paciente real cruzando domínios.
@@ -258,14 +258,22 @@
 - **Date**: 2026-07-20
 - **Status**: active
 
+### AD-033
+- **Decision**: A âncora de vídeo/frames da F1 passa a ser o **Endoscapes2023** (CAMMA), não o Cholec80-CVS. Motivo factual verificado: o Cholec80-CVS aberto (figshare 22183885) é só um `.xlsx` de 24 KB de anotações CVS — os vídeos brutos do Cholec80 exigem formulário CAMMA (barreira que AD-016/AD-017 evitam). O Endoscapes2023 é baixável por URL direta sem formulário (`https://s3.unistra.fr/camma_public/datasets/endoscapes/endoscapes.zip`, ~6 GB, licença aberta) e contém frames cirúrgicos reais anotados: **Endoscapes-BBox201** (1933 frames, bounding boxes COCO de 5 estruturas anatômicas + 1 classe de instrumento) e **Endoscapes-CVS201** (11090 frames com rótulo de CVS). A F1 é **reescopada**: de "detecção de desvio na sequência de fases de vídeo" para **detecção de objetos/instrumentos/anatomia (YOLOv8) sobre os frames anotados com bbox COCO do Endoscapes-BBox201 + avaliação de CVS**. Rekognition sobre keyframes na nuvem permanece. O repo `github.com/ManuelRios18/CHOLEC80-CVS-PUBLIC` (COLENET) é código baseline, não fonte de dado — pode ser citado no relatório.
+- **Reason**: YOLOv8 precisa de frames/vídeo reais; o único caminho aberto sem credenciamento com rótulo real de detecção é o Endoscapes-BBox201 (bounding boxes COCO encaixam direto no YOLOv8 e dão precision/recall honesto). Mantém o caso cirúrgico e o tema de segurança (CVS).
+- **Trade-off**: Endoscapes são frames amostrados em intervalos, não vídeo contínuo — perde-se o ângulo "sequência temporal de fases". Download de ~6 GB exige a checagem de espaço já prevista em F0 (DATA-08).
+- **Scope**: F1 (video-analysis) e F0/DATA-03. **Supersede a parte Cholec80-CVS das AD-016, AD-019 e AD-023** (AD-016 permanece válida para CTU-UHB, ICBHI e MIT-BIH).
+- **Date**: 2026-07-20
+- **Status**: active
+
 ## Handoff
 
 - **Feature**: reestruturação do projeto para monorepo front/back (AD-029..AD-032) + F0 (data-acquisition). F3 já implementada, a migrar.
 - **Phase / Task**: Reestruturação para monorepo front/back CONCLUÍDA e F3 MIGRADA para `backend/`. STATE + spec de F0 aprovados pelo usuário; migração + reverificação escolhidas como próximo passo. Migração feita e verde (165 testes); reverificação independente de F3 na nova estrutura ainda pendente.
 - **Completed**: AD-001 a AD-032 (AD-025 superseded por AD-029). Esqueleto `backend/`+`frontend/`+`data/`+`infra/` criado. **F3 migrada** via `git mv`: `src/core/`→`backend/common/`, `src/vitals/`→`backend/pipelines/vitals/`, testes→`backend/tests/`, demo config→`backend/pipelines/vitals/configs/`. Imports reescritos (`core.`→`common.`, `vitals.`→`pipelines.vitals.`); `pyproject`/`ruff`/`Makefile` reapontados para `backend/`. 165 testes verdes, lint limpo. Spec de F0 aprovada.
 - **In-progress**: nada em execução. **F3 FECHADA** — Verifier passe 6 (pós-migração) retornou PASS: 165 testes, 16/17 mutantes mortos, 1 sobrevivente residual aceitável (fronteira de interpolação de gap, fora da regra estrita da spec). VITALS-04/06/07 marcados Verified.
-- **Next step**: Design + Tasks + Execute de F0 (data-acquisition). **Bloqueio novo descoberto em F0/F1** — ver Blockers.
-- **Blockers**: **A fonte de vídeo do Cholec80 precisa de decisão.** O repo confirmado `github.com/ManuelRios18/CHOLEC80-CVS-PUBLIC` tem só 18 KB — é código (COLENET: baseline + pré-processamento), NÃO os vídeos. Pelo README dele: as anotações CVS (`surgeons_annotations.xlsx`) ficam num dataset aberto no figshare (springernature.figshare.com, id 22183885), e os **vídeos** vêm do CHOLEC80 original, que exige formulário CAMMA (a barreira que AD-016/AD-017 queriam evitar). Logo `git clone` do repo NÃO entrega vídeo para F1. Decisão pendente: (a) F1 usa frames/anotações abertos do figshare sem os vídeos brutos; (b) alguém do grupo pede o CHOLEC80 via CAMMA; (c) trocar a âncora de vídeo de F1. Isso afeta DATA-03 (F0) e toda a F1. ICBHI: URL confirmada.
+- **Next step**: Design + Tasks + Execute de F0 (data-acquisition). As três fontes estão confirmadas e sem barreira: CTU-UHB (wfdb), ICBHI (URL), Endoscapes2023 (URL). Nenhum bloqueio pendente para F0.
+- **Blockers**: none. A fonte de vídeo de F1 foi resolvida (AD-033: Endoscapes2023 no lugar do Cholec80-CVS, cujos vídeos exigiam CAMMA). `backend/common/` aceito (AD-030).
 - **Uncommitted files**: nenhum após o commit da reestruturação.
 - **Branch**: `feat/f3-vitals-anomaly` (contém a F3 e agora a reestruturação; `main` tem só o commit inicial de planejamento — estratégia de merge/rename a decidir).
 
