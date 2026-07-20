@@ -79,6 +79,17 @@ def test_janela_com_invalidos_abaixo_do_limite_permanece_valida():
     assert janelas[0].insufficient_data is False
 
 
+def test_fracao_invalida_exatamente_no_limite_permanece_valida():
+    """Comparação estrita `> max_invalid_fraction`, coerente com a fronteira de AD-027."""
+    r = _registro(8)
+    mask = np.zeros(8, dtype=bool)
+    mask[:4] = True  # exatamente 50%
+
+    janelas = make_windows(r, size_s=2.0, stride_s=2.0, mask=mask, max_invalid_fraction=0.5)
+
+    assert janelas[0].insufficient_data is False
+
+
 def test_janela_totalmente_invalida_e_insuficiente():
     r = _registro(8)
     mask = np.ones(8, dtype=bool)

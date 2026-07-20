@@ -69,6 +69,17 @@ def test_limiar_e_configuravel_e_muda_o_resultado():
     assert RollingZScoreDetector(threshold=2.0, baseline_size=5).flag(serie)[-1] is True
 
 
+def test_score_exatamente_no_limiar_nao_e_marcado():
+    """Comparação estrita `> threshold`, coerente com a fronteira de AD-027."""
+    d = RollingZScoreDetector(threshold=math.sqrt(2), baseline_size=5)
+
+    # desvio de 2 bpm / sqrt(2) = sqrt(2), exatamente o limiar
+    serie = _serie([*BASELINE, 142.0])
+
+    assert d.score(serie)[-1] == pytest.approx(math.sqrt(2))
+    assert d.flag(serie)[-1] is False
+
+
 def test_baseline_constante_nao_divide_por_zero():
     d = RollingZScoreDetector(threshold=3.0, baseline_size=5)
 

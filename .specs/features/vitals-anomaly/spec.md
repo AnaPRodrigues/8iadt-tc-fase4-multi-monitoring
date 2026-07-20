@@ -44,6 +44,7 @@ demonstrada no vídeo.
 | MIT-BIH é opcional, não bloqueante | Se o download/parsing falhar ou não houver tempo, o caso é pulado sem afetar P1/P2 | Plano de 7 dias prioriza CTU-UHB (AD-016); MIT-BIH é "segundo caso" explicitamente opcional no brief | y |
 | Licenciamento dos datasets | CTU-UHB (Open Data Commons) e MIT-BIH (PhysioNet open) usados conforme os termos de atribuição de cada base; citados no relatório técnico | Ambos são abertos sem credenciamento (AD-016), mas exigem atribuição — não é livre de qualquer termo | y |
 | Persistência dos artefatos de evidência (gráficos/JSON) | Gravados em diretório de saída local (ex: `output/vitals/`), sem TTL/expiração | Escopo é demo acadêmica de curta duração; não há requisito de retenção de longo prazo | y |
+| Sentido das comparações de limiar | **Todas estritas** (`>`): o valor exatamente igual ao limiar NÃO dispara. Vale para o z-score (VITALS-03), para `max_invalid_fraction` (VITALS-09) e para τ (AD-027) | Lacuna apontada pela verificação independente: a spec não dizia se a comparação era estrita ou inclusiva, e a fronteira nunca era exercitada em teste. Uniformizar evita que cada limiar siga uma convenção diferente | y |
 
 **Open questions:** none — todas resolvidas ou registradas acima.
 
@@ -122,7 +123,7 @@ a história central de detecção já está provada pelo P1/P2 com CTU-UHB.
 **Acceptance Criteria**:
 
 1. WHEN um registro MIT-BIH é carregado no formato WFDB THEN o sistema SHALL extrair a série de ECG e as anotações de arritmia como rótulo real.
-2. WHEN a série MIT-BIH é processada pelos detectores (z-score e IsolationForest) THEN o sistema SHALL gerar anomalias e evidências no mesmo formato usado para o CTU-UHB.
+2. ~~WHEN a série MIT-BIH é processada pelos detectores (z-score e IsolationForest) THEN o sistema SHALL gerar anomalias e evidências no mesmo formato usado para o CTU-UHB.~~ — **REBAIXADO por AD-028.** A verificação independente constatou que este AC não foi entregue: o módulo é um leitor de dados desconectado do pipeline. Integrá-lo exigiria janelamento e features próprios para ECG a 360 Hz, um domínio distinto de CTG a 4 Hz. Fora do escopo de F3.
 3. WHEN o dataset MIT-BIH não está disponível localmente (não baixado ou sem tempo de integrar) THEN o sistema SHALL pular esse caso de estudo sem interromper a execução do pipeline CTU-UHB (P1/P2).
 
 **Independent Test**: Com o dataset MIT-BIH ausente, confirmar que o pipeline CTU-UHB completo (P1/P2) roda normalmente; com o dataset presente, confirmar que gera evidências no mesmo formato do CTU-UHB.

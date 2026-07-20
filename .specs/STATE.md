@@ -218,6 +218,14 @@
 - **Date**: 2026-07-20
 - **Status**: active
 
+### AD-028
+- **Decision**: VITALS-11 AC2 ("o MIT-BIH produz anomalias e evidências no mesmo formato do CTU-UHB") sai do escopo de F3. O módulo `src/vitals/mitbih.py` permanece como **leitor de dados**: carrega ECG e anotações de arritmia e expõe o rótulo real, mas não é integrado ao pipeline de detecção nem gera evidência no formato AD-026.
+- **Reason**: A verificação independente constatou que o AC não foi entregue — o módulo estava desconectado do pipeline. Integrá-lo de verdade exigiria repensar janelamento e features para ECG a 360 Hz com anotação por batimento, um domínio bem diferente de CTG a 4 Hz; é trabalho real, não ajuste, e o brief marca P3 como explicitamente opcional com prazo em 27/07/2026.
+- **Trade-off**: F3 entrega um único caso de série vital integrado (CTU-UHB). O MIT-BIH fica disponível como leitor para uso no relatório ou trabalho futuro, sem sustentar a alegação de "segundo caso detectado e evidenciado".
+- **Scope**: F3 (vitals-anomaly), user story P3. Rebaixa VITALS-11 AC2; AC1 e AC3 permanecem válidos.
+- **Date**: 2026-07-20
+- **Status**: active
+
 ## Handoff
 
 - **Feature**: F3 vitals-anomaly (`.specs/features/vitals-anomaly/`)

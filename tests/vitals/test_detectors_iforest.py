@@ -1,5 +1,7 @@
 """Testes do detector IsolationForest multivariado (VITALS-04, VITALS-09)."""
 
+import pytest
+
 from vitals.detectors import Detector, IsolationForestDetector
 from vitals.features import FeatureVector
 
@@ -47,6 +49,28 @@ def test_outlier_multivariado_e_marcado():
     flags = IsolationForestDetector(contamination=0.1, seed=42).flag(serie)
 
     assert flags[-1] is True
+
+
+def test_contamination_e_configuravel_e_muda_quantas_janelas_sao_marcadas():
+    """Dois valores distintos precisam produzir resultados distintos, senão está hardcoded."""
+    serie = [*_serie_normal(40), _fv(210.0, decel=8.0), _fv(205.0, decel=7.0)]
+
+    poucas = IsolationForestDetector(contamination=0.05, seed=42).flag(serie)
+    muitas = IsolationForestDetector(contamination=0.4, seed=42).flag(serie)
+
+    assert sum(1 for f in muitas if f) > sum(1 for f in poucas if f)
+
+
+def test_contamination_fora_do_intervalo_valido_e_rejeitado():
+    with pytest.raises(ValueError, match="contamination"):
+        IsolationForestDetector(contamination=0.9, seed=42)
+
+
+def test_seeds_diferentes_sao_permitidas_e_o_valor_e_preservado():
+    d = IsolationForestDetector(contamination=0.1, seed=7)
+
+    assert d.seed == 7
+    assert d.contamination == 0.1
 
 
 def test_janela_insuficiente_recebe_none_e_nao_entra_no_treino():

@@ -4,7 +4,12 @@ import numpy as np
 import pytest
 import wfdb
 
-from vitals.mitbih import MITBIH_ANNOTATOR, load_mitbih_record, mitbih_disponivel
+from vitals.mitbih import (
+    MITBIH_ANNOTATOR,
+    load_mitbih_dataset,
+    load_mitbih_record,
+    mitbih_disponivel,
+)
 
 
 def _escreve_ecg(directory, nome="100", n=400, com_anotacao=True, simbolos=None):
@@ -70,6 +75,30 @@ def test_dataset_presente_e_reportado_como_disponivel(tmp_path):
     _escreve_ecg(tmp_path)
 
     assert mitbih_disponivel(tmp_path) is True
+
+
+def test_dataset_ausente_devolve_lista_vazia_sem_excecao(tmp_path):
+    """VITALS-11 AC3: ausência do dataset opcional não pode interromper o pipeline."""
+    assert load_mitbih_dataset(tmp_path / "nao-existe") == []
+
+
+def test_dataset_carrega_todos_os_registros_disponiveis(tmp_path):
+    _escreve_ecg(tmp_path, nome="100", simbolos=["N", "V", "N"])
+    _escreve_ecg(tmp_path, nome="101", simbolos=["N", "N", "N"])
+
+    registros = load_mitbih_dataset(tmp_path)
+
+    assert sorted(r.record_id for r in registros) == ["100", "101"]
+    assert sum(r.anomalous_beats for r in registros) == 1
+
+
+def test_registro_ilegivel_e_ignorado_sem_derrubar_o_lote(tmp_path):
+    _escreve_ecg(tmp_path, nome="100", simbolos=["N", "V"])
+    (tmp_path / "999.atr").write_bytes(b"lixo")
+
+    registros = load_mitbih_dataset(tmp_path)
+
+    assert [r.record_id for r in registros] == ["100"]
 
 
 def test_registro_sem_anotacao_e_rejeitado(tmp_path):

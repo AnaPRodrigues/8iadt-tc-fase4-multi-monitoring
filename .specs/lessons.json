@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "promote_threshold": 2,
+  "window_days": 45,
+  "quarantine_threshold": 2,
+  "next_id": 6,
+  "lessons": [
+    {
+      "id": "L-001",
+      "key": "surviving_mutant::asserir presenca de chave em payload assert campo in meta nao prova nada o campo pode conter qualquer valor asserir sempre o valor esperado",
+      "text": "Asserir presenca de chave em payload (assert 'campo' in meta) nao prova nada: o campo pode conter qualquer valor. Asserir sempre o valor esperado.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "M9,M14,M15 (tests)"
+      ],
+      "created": "2026-07-20T17:27:04Z",
+      "last_seen": "2026-07-20T17:27:04Z"
+    },
+    {
+      "id": "L-002",
+      "key": "surviving_mutant::teste que itera uma colecao passa por vacuidade quando ela vem vazia asserir que a colecao e nao vazia antes do laco",
+      "text": "Teste que itera uma colecao passa por vacuidade quando ela vem vazia. Asserir que a colecao e nao-vazia antes do laco.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "M10 (tests)"
+      ],
+      "created": "2026-07-20T17:27:05Z",
+      "last_seen": "2026-07-20T17:27:05Z"
+    },
+    {
+      "id": "L-003",
+      "key": "surviving_mutant::parametro declarado configuravel precisa de teste com dois valores distintos que produzam resultados distintos senao hardcodear o valor passa despercebido",
+      "text": "Parametro declarado configuravel precisa de teste com dois valores distintos que produzam resultados distintos, senao hardcodear o valor passa despercebido.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "M8 (tests)"
+      ],
+      "created": "2026-07-20T17:27:05Z",
+      "last_seen": "2026-07-20T17:27:05Z"
+    },
+    {
+      "id": "L-004",
+      "key": "spec_precision_gap::todo limiar precisa de teste na fronteira exata e a spec precisa declarar se a comparacao e estrita ou inclusiva",
+      "text": "Todo limiar precisa de teste na fronteira exata, e a spec precisa declarar se a comparacao e estrita ou inclusiva.",
+      "signal": "spec_precision_gap",
+      "scope": "spec",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "VITALS-03,VITALS-09 (spec)"
+      ],
+      "created": "2026-07-20T17:27:05Z",
+      "last_seen": "2026-07-20T17:27:05Z"
+    },
+    {
+      "id": "L-005",
+      "key": "ac_gap::modulo com testes proprios mas nao importado por ninguem e codigo morto verificar integracao real grep pelo modulo antes de marcar a tarefa concluida",
+      "text": "Modulo com testes proprios mas nao importado por ninguem e codigo morto: verificar integracao real (grep pelo modulo) antes de marcar a tarefa concluida.",
+      "signal": "ac_gap",
+      "scope": "process",
+      "status": "candidate",
+      "features": [
+        "vitals-anomaly"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "VITALS-11 AC2 (process)"
+      ],
+      "created": "2026-07-20T17:27:05Z",
+      "last_seen": "2026-07-20T17:27:05Z"
+    }
+  ]
+}

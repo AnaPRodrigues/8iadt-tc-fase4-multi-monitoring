@@ -54,11 +54,24 @@ def test_toda_evidencia_tem_artefato_e_sidecar(tmp_path, escritor):
     saida = tmp_path / "out" / "vitals" / "teste"
     sidecars = [p for p in saida.glob("*.json") if p.name != "metrics.json"]
 
+    # Sem esta guarda o teste passa por vacuidade quando o pipeline gera zero evidências.
+    assert sidecars, "o cenário deve produzir ao menos uma evidência"
+
     for side in sidecars:
         dados_side = json.loads(side.read_text(encoding="utf-8"))
+        meta = dados_side["metadata"]
+
         assert dados_side["source_record_id"] == "0001"
         assert (saida / dados_side["artifact"]).is_file()
-        assert "ph" in dados_side["metadata"]
+
+        # Valor, não presença: um payload preenchido com lixo passaria no `in`.
+        assert meta["ph"] == 7.01
+        assert meta["detector"] in {"zscore", "isolation_forest"}
+        assert meta["record_id"] == "0001"
+        assert meta["source_record_id"] == "0001"
+        assert isinstance(meta["score"], float)
+        assert meta["score"] != 0.0
+        assert meta["end_s"] > meta["start_s"]
 
 
 def test_dataset_ausente_retorna_erro_sem_excecao(tmp_path):
