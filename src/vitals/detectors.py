@@ -7,6 +7,7 @@ tornaria as duas situações indistinguíveis na agregação.
 """
 
 import math
+from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 import numpy as np
@@ -21,6 +22,22 @@ log = get_logger("vitals.detectors")
 # estatístico — melhor reportar "dados insuficientes" do que devolver um score
 # arbitrário que o relatório trataria como medida.
 MIN_TRAIN_SAMPLES = 10
+
+
+@dataclass(frozen=True)
+class AnomalyEvent:
+    """Uma janela sinalizada como anômala por um detector.
+
+    ``source_record_id`` é o registro real de onde o trecho veio — na timeline
+    composta de F3 ele difere de ``record_id`` (VITALS-07).
+    """
+
+    record_id: str
+    detector: str
+    start_s: float
+    end_s: float
+    score: float
+    source_record_id: str
 
 
 @runtime_checkable
