@@ -128,6 +128,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: iteracoes 1-4 (process)
 - last seen: 2026-07-20T22:49:19Z
 
+### L-020 — Antes de confiar numa URL de dataset, validar que ela serve o arquivo real (magic bytes / Content-Type application/zip), nao uma pagina de erro 403/HTML com exit 0. Ter um espelho alternativo (Dataverse/Zenodo) para fontes de sites institucionais instaveis.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `process` · harmful: 0
+- features: data-acquisition
+- evidence: ICBHI 403 (process)
+- last seen: 2026-07-20T23:55:54Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

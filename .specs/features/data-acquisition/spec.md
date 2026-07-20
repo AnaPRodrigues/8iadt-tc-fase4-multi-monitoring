@@ -34,7 +34,7 @@ todas as demais e os downloads (GB) rodam em paralelo enquanto o resto do SDD é
 | Assumption / decisão | Default escolhido | Rationale | Confirmado? |
 | --- | --- | --- | --- |
 | Método CTU-UHB | `wfdb.dl_database('ctu-uhb-ctgdb', 'data/ctu-uhb')` | `wfdb` já é dependência de F3; API oficial do PhysioNet | y |
-| URL do zip do ICBHI 2017 | `https://bhichallenge.med.auth.gr/sites/default/files/ICBHI_final_database/ICBHI_final_database.zip` → `data/icbhi/` | Confirmada pelo usuário | y |
+| Fonte do ICBHI 2017 | Harvard Dataverse, DOI `10.7910/DVN/HT6PKI` → `https://dataverse.harvard.edu/api/access/datafile/7127117` (zip único, ~1.9 GB, HTTP 206/resume) → `data/icbhi/`. **Substitui** a URL `bhichallenge.med.auth.gr` que o usuário passou, pois o site inteiro retorna HTTP 403 (bloqueio server-side) | Mesmo dataset (mesmo `ICBHI_final_database.zip`), de repositório aberto e citável que responde | y |
 | Âncora de vídeo/frames | **Endoscapes2023** via `wget --continue` de `https://s3.unistra.fr/camma_public/datasets/endoscapes/endoscapes.zip` (~6 GB) → `data/endoscapes/`, seguido de `unzip`. Substitui o Cholec80-CVS (AD-033) | Cholec80-CVS aberto é só anotações (24 KB xlsx); vídeos exigem CAMMA. Endoscapes é aberto, por URL direta, com frames+bbox COCO reais | y |
 | Subconjunto do Endoscapes para a demo | Usar Endoscapes-BBox201 (1933 frames com bbox COCO) como base do YOLOv8; frames de CVS201 conforme F1 precisar | Bbox201 é o que dá rótulo de detecção real; definição fina fica com F1 | y |
 | Linguagem do script | Shell (`download_datasets.sh`) chamando Python só onde precisa (`wfdb`) | Idempotência, `wget --continue` e `unzip` são naturais em shell; a AD-031 admite `.sh` ou `.py` | y |
@@ -75,7 +75,7 @@ manuais.
 **Acceptance Criteria**:
 
 1. WHEN `make data` (ou `backend/scripts/download_datasets.sh`) é executado THEN o sistema SHALL baixar CTU-UHB para `data/ctu-uhb/` via `wfdb.dl_database`.
-2. WHEN o script roda THEN o sistema SHALL baixar o ICBHI 2017 para `data/icbhi/` via `wget --continue` da URL definida como variável no topo, seguido de `unzip`.
+2. WHEN o script roda THEN o sistema SHALL baixar o ICBHI 2017 para `data/icbhi/` do Harvard Dataverse (DOI `10.7910/DVN/HT6PKI`) com retomada (`curl -C -` / `wget --continue`), seguido de `unzip`.
 3. WHEN o script roda THEN o sistema SHALL baixar o Endoscapes2023 para `data/endoscapes/` via `wget --continue` da URL definida como variável no topo, seguido de `unzip`.
 4. WHEN um dataset já foi baixado por completo (sentinela `.complete` presente) THEN o sistema SHALL pular esse dataset e registrar que foi pulado.
 5. WHEN todas as URLs/paths são referenciados THEN o sistema SHALL defini-los como variáveis no topo do script, não espalhados no corpo.

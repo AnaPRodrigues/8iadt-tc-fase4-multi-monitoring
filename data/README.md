@@ -15,7 +15,7 @@ sem credenciamento (AD-016, AD-031):
 | Dataset | Destino | Método | Papel |
 | --- | --- | --- | --- |
 | CTU-UHB Intrapartum CTG | `data/ctu-uhb/` | `wfdb.dl_database('ctu-uhb-ctgdb', ...)` | F3 — FHR + contração + pH do cordão (rótulo real) |
-| ICBHI 2017 Respiratory Sound | `data/icbhi/` | `wget --continue` + `unzip` | F2 — ciclos respiratórios anotados (crackle/wheeze/normal) |
+| ICBHI 2017 Respiratory Sound | `data/icbhi/` | Harvard Dataverse (`curl -C -`) + `unzip` | F2 — ciclos respiratórios anotados (crackle/wheeze/normal) |
 | Endoscapes2023 | `data/endoscapes/` | `wget --continue` (~6 GB) + `unzip` | F1 — frames cirúrgicos reais + bounding boxes COCO (5 anatomias + 1 instrumento) |
 
 O script é idempotente: se o dataset já existe, pula. Downloads interrompidos são
@@ -23,7 +23,7 @@ retomados (`--continue`).
 
 ## Fontes confirmadas
 
-- ICBHI 2017: `https://bhichallenge.med.auth.gr/sites/default/files/ICBHI_final_database/ICBHI_final_database.zip`
+- ICBHI 2017: Harvard Dataverse DOI `10.7910/DVN/HT6PKI` (`https://dataverse.harvard.edu/api/access/datafile/7127117`, ~1.9 GB). A URL original `bhichallenge.med.auth.gr` retorna HTTP 403 (site bloqueado); o Dataverse serve o mesmo `ICBHI_final_database.zip`.
 - Endoscapes2023: `https://s3.unistra.fr/camma_public/datasets/endoscapes/endoscapes.zip` (~6 GB, aberto, sem formulário). Substitui o Cholec80-CVS, cujos vídeos exigem CAMMA (AD-033).
 
 ## Datasets NÃO usados

@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 20,
+  "next_id": 21,
   "lessons": [
     {
       "id": "L-001",
@@ -346,6 +346,24 @@
       ],
       "created": "2026-07-20T22:49:19Z",
       "last_seen": "2026-07-20T22:49:19Z"
+    },
+    {
+      "id": "L-020",
+      "key": "spec_precision_gap::antes de confiar numa url de dataset validar que ela serve o arquivo real magic bytes content type application zip nao uma pagina de erro 403 html com exit 0 ter um espelho alternativo dataverse zenodo para fontes de sites institucionais instaveis",
+      "text": "Antes de confiar numa URL de dataset, validar que ela serve o arquivo real (magic bytes / Content-Type application/zip), nao uma pagina de erro 403/HTML com exit 0. Ter um espelho alternativo (Dataverse/Zenodo) para fontes de sites institucionais instaveis.",
+      "signal": "spec_precision_gap",
+      "scope": "process",
+      "status": "candidate",
+      "features": [
+        "data-acquisition"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "ICBHI 403 (process)"
+      ],
+      "created": "2026-07-20T23:55:54Z",
+      "last_seen": "2026-07-20T23:55:54Z"
     }
   ]
 }
