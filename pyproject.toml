@@ -1,0 +1,22 @@
+[project]
+name = "monitoramento-multimodal"
+version = "0.1.0"
+description = "Monitoramento hospitalar multimodal — Tech Challenge Fase 4 (POSTECH 8IADT)"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0",
+    "scikit-learn>=1.5",
+    "wfdb>=4.3",
+    "matplotlib>=3.9",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = [
+    "integration: teste de integração ponta a ponta (exclua com -m 'not integration')",
+]
