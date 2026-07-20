@@ -200,7 +200,7 @@
 - **Trade-off**: Exige disciplina de organização desde a primeira feature e cria acoplamento entre features via `core/`; mudanças em `core/` afetam todas.
 - **Scope**: Todas as features (F1–F5).
 - **Date**: 2026-07-20
-- **Status**: active
+- **Status**: superseded by AD-029
 
 ### AD-026
 - **Decision**: Formato único de evidência para todo o projeto, definido em `src/core/evidence.py`: cada anomalia produz metadados estruturados + um artefato visual, gravados sob `output/[feature]/[run_id]/`. Toda feature (gráfico de janela em F3, espectrograma em F2, frame anotado em F1, PDF anotado em F4) usa esse mesmo contrato.
@@ -226,16 +226,48 @@
 - **Date**: 2026-07-20
 - **Status**: active
 
+### AD-029
+- **Decision**: Monorepo com separação front/back. `backend/` = Python (FastAPI expondo REST; pipelines F1–F4; motor de fusão/score em `backend/fusion/`; integração AWS via boto3 e handlers de Lambda em `backend/aws/`; scripts de dados). `frontend/` = app separado que apenas **consome a API** (dashboard de timeline do paciente, replay do cenário de demo, visualização de evidências), sem nenhuma lógica de processamento. Contrato: API REST versionada com, no mínimo, `/patients/{id}/timeline`, `/analyze`, `/alerts`, `/evidence/{id}`.
+- **Reason**: Separa apresentação de processamento; permite demonstrar o fluxo multimodal por uma API real (mais defensável no relatório/vídeo que um script monolítico) e um dashboard desacoplado. Substitui a estrutura `src/core` + módulo por feature da AD-025, que não previa front/back nem API.
+- **Trade-off**: Mais superfície (API + contrato + app de frontend) para manter num prazo de 7 dias; exige disciplina de contrato entre as duas metades.
+- **Scope**: Todas as features (F1–F5) e a estrutura do repositório. **Supersede AD-025.**
+- **Date**: 2026-07-20
+- **Status**: active
+
+### AD-030
+- **Decision**: Estrutura do repositório: `backend/app/` (FastAPI: rotas, schemas, main), `backend/pipelines/{video,audio,vitals,prescription}/`, `backend/fusion/`, `backend/aws/`, `backend/scripts/` (inclui `download_datasets`), `backend/tests/`, `frontend/`, `data/` (gitignored, populado por F0), `infra/` (CloudFormation ou boto3 idempotente). Código compartilhado entre pipelines (formato de evidência, métricas, config, logging — o antigo `src/core/`) passa a viver em `backend/common/`. Adiciona-se `.gitignore` (com `data/`, venvs, artefatos), `data/README.md` e um `Makefile` de raiz com alvos `data`, `demo`, `test`, `lint`.
+- **Reason**: Concretiza a AD-029 em uma árvore de diretórios explícita; `backend/common/` é proposto como lar do código transversal por não ser específico do FastAPI (é usado também pelos pipelines e handlers de Lambda) — **item a confirmar com o usuário na revisão do esqueleto**.
+- **Trade-off**: `backend/common/` é um nome escolhido pelo agente, não presente no brief; se o grupo preferir outro (`backend/app/core/`, `backend/shared/`), ajusta-se antes da migração.
+- **Scope**: Estrutura do repositório; todas as features.
+- **Date**: 2026-07-20
+- **Status**: active
+
+### AD-031
+- **Decision**: Aquisição de dados por script idempotente (feature F0), nada de download manual. `backend/scripts/download_datasets` baixa só as fontes sem barreira: CTU-UHB via `wfdb.dl_database('ctu-uhb-ctgdb', ...)`; ICBHI 2017 via `wget --continue` do zip oficial (URL como variável no topo, **a confirmar com o usuário**) + `unzip`; Cholec80-CVS via `git clone` do repositório aberto no GitHub (**nome do repo a confirmar**), buscando via Git LFS só os poucos vídeos da demo. Requisitos: idempotência ("já existe? pula"), retomada de download, checagem de espaço, URLs/paths como variáveis no topo. `data/` no `.gitignore`; versiona-se só o script + `data/README.md`. `make data` reproduz tudo.
+- **Reason**: Reprodutibilidade é critério de aceite global; o professor/avaliador precisa recriar os dados com um comando. Datasets grandes não entram no Git.
+- **Trade-off**: Depende de URLs/repos externos estáveis; duas fontes (ICBHI, Cholec80) têm identificador ainda não confirmado.
+- **Scope**: F0 (data-acquisition); pré-requisito de F1, F2, F3.
+- **Date**: 2026-07-20
+- **Status**: active
+
+### AD-032
+- **Decision**: A F3 (vitals-anomaly), já implementada e testada em `src/core/` + `src/vitals/` na branch `feat/f3-vitals-anomaly` (165 testes), é **migrada** para a nova estrutura: `src/core/` → `backend/common/` e `src/vitals/` → `backend/pipelines/vitals/`, com os testes correspondentes movidos para `backend/tests/`, preservando o histórico git (`git mv`) e mantendo os 165 testes verdes. Os caminhos citados na AD-026 (`src/core/evidence.py`) e na AD-028 (`src/vitals/mitbih.py`) atualizam-se para os novos locais. A migração é a **primeira etapa de execução após aprovação** — nenhum código é movido antes disso.
+- **Reason**: O usuário escolheu preservar e migrar em vez de recomeçar; descartar uma feature pronta e verificada seria retrabalho dentro do prazo de 27/07.
+- **Trade-off**: Commits antigos referenciam AD-025 (agora superseded) e caminhos `src/…` que deixam de existir; a rastreabilidade fica no histórico git e nesta AD.
+- **Scope**: F3 (vitals-anomaly); estrutura do repositório.
+- **Date**: 2026-07-20
+- **Status**: active
+
 ## Handoff
 
-- **Feature**: F3 vitals-anomaly (`.specs/features/vitals-anomaly/`)
-- **Phase / Task**: Execute COMPLETO — 18/18 tarefas implementadas, testadas e commitadas na branch `feat/f3-vitals-anomaly`. Verificação independente (Verifier) em andamento.
-- **Completed**: AD-001 a AD-027; specs das 5 features confirmadas; design e tasks de F3 aprovados; T1–T18 commitados individualmente (um commit atômico por tarefa). Suíte: 161 testes passando (150 unitários + 11 de integração), lint limpo.
-- **In-progress**: reverificação após a rodada extra (autorizada pelo usuário fora do loop de 3). As 5 lacunas (V1, V2, V6, V7, N7) foram corrigidas no commit `aa63a26` e validadas localmente com o mutante nomeado mais uma variante vizinha — todos mortos, árvore limpa.
-- **Next step**: ler o veredito do Verifier; se FAIL, rotear lacunas como tarefas de correção (loop limitado a 3 iterações). Se PASS, F3 está encerrada e a próxima feature do plano de 7 dias é F4 (prescription-analysis), que precisa de Design + Tasks antes de Execute.
-- **Blockers**: none. Ambiente resolvido — `.venv` na raiz com pytest, ruff, numpy, scikit-learn, wfdb 4.3.1, matplotlib e pyyaml. `make demo` exige o CTU-UHB baixado em `data/ctu-uhb-ctgdb/` (ainda não baixado); sem ele o comando falha com mensagem acionável, e os testes rodam com fixtures WFDB sintéticas.
-- **Uncommitted files**: `.specs/` (design, tasks e STATE atualizados durante o Execute)
-- **Branch**: `feat/f3-vitals-anomaly` (partiu de `main`; `main` tem apenas o commit inicial de planejamento)
+- **Feature**: reestruturação do projeto para monorepo front/back (AD-029..AD-032) + F0 (data-acquisition). F3 já implementada, a migrar.
+- **Phase / Task**: Reestruturação para monorepo front/back CONCLUÍDA e F3 MIGRADA para `backend/`. STATE + spec de F0 aprovados pelo usuário; migração + reverificação escolhidas como próximo passo. Migração feita e verde (165 testes); reverificação independente de F3 na nova estrutura ainda pendente.
+- **Completed**: AD-001 a AD-032 (AD-025 superseded por AD-029). Esqueleto `backend/`+`frontend/`+`data/`+`infra/` criado. **F3 migrada** via `git mv`: `src/core/`→`backend/common/`, `src/vitals/`→`backend/pipelines/vitals/`, testes→`backend/tests/`, demo config→`backend/pipelines/vitals/configs/`. Imports reescritos (`core.`→`common.`, `vitals.`→`pipelines.vitals.`); `pyproject`/`ruff`/`Makefile` reapontados para `backend/`. 165 testes verdes, lint limpo. Spec de F0 aprovada.
+- **In-progress**: nada em execução. Aguardando disparar a reverificação de F3 na estrutura nova.
+- **Next step** (nesta ordem): (1) rodar o Verifier independente sobre F3 já em `backend/` para fechá-la formalmente (o 5º passe nunca completou; W9 foi corrigido mas não reverificado); (2) confirmar com o usuário a URL do ICBHI e o nome do repo Cholec80-CVS; (3) Design + Tasks + Execute de F0.
+- **Blockers**: **2 confirmações pendentes antes de executar F0** — URL exata do zip do ICBHI 2017 e nome/URL do repositório Cholec80-CVS no GitHub. `backend/common/` foi aceito ao aprovar o STATE (AD-030).
+- **Uncommitted files**: nenhum após o commit da reestruturação.
+- **Branch**: `feat/f3-vitals-anomaly` (contém a F3 e agora a reestruturação; `main` tem só o commit inicial de planejamento — estratégia de merge/rename a decidir).
 
 ### Achados verificados durante o Execute (não presumir de novo)
 

@@ -1,0 +1,24 @@
+# Cenário de demonstração de F3 (vitals-anomaly).
+#
+# Requer o CTU-UHB baixado em data/ctu-uhb-ctgdb/ (PhysioNet, Open Data Commons):
+#   wget -r -N -c -np https://physionet.org/files/ctu-uhb-ctgdb/1.0.0/
+#
+# Os limiares abaixo são pontos de partida documentados, não valores calibrados —
+# a calibração usa um conjunto de desenvolvimento separado do de avaliação (AD-027).
+
+dataset_dir: data/ctu-uhb
+
+# Janela de 10 min com passo de 5 min: longa o bastante para conter uma deceleração
+# clínica completa (>=15 s) e curta o bastante para localizar o evento no tempo.
+window_size_s: 600.0
+window_stride_s: 300.0
+
+zscore_threshold: 3.0
+iforest_contamination: 0.1
+
+# Fração de janelas anômalas acima da qual o registro é classificado como
+# patológico (AD-027).
+tau: 0.15
+
+seed: 42
+output_root: output

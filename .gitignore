@@ -4,7 +4,17 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Saídas de execução e datasets — nunca versionados
+# Saídas de execução — nunca versionadas
 output/
-data/
 *.egg-info/
+
+# Datasets baixados por F0 — mantém só o README (o script vive em backend/scripts/)
+data/*
+!data/README.md
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/build/
+.env
+

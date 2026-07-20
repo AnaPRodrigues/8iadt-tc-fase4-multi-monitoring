@@ -15,8 +15,8 @@ dependencies = [
 dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
-testpaths = ["tests"]
+pythonpath = ["backend"]
+testpaths = ["backend/tests"]
 markers = [
     "integration: teste de integração ponta a ponta (exclua com -m 'not integration')",
 ]
