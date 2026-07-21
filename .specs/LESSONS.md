@@ -146,6 +146,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: M8/M9 (download_datasets.sh:190,134) (scripts)
 - last seen: 2026-07-21T01:30:56Z
 
+### L-023 — Sem __init__.py entre subpastas de testes, dois conftest.py disputam o mesmo nome de modulo 'conftest' e um pode sombrear o outro dependendo da ordem de colecao. Manter um unico conftest.py compartilhado na raiz de tests/, nunca um por subpasta.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: aws-foundation
+- evidence: conftest collision (tests)
+- last seen: 2026-07-21T16:03:28Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 23,
+  "next_id": 24,
   "lessons": [
     {
       "id": "L-001",
@@ -400,6 +400,24 @@
       ],
       "created": "2026-07-21T01:30:56Z",
       "last_seen": "2026-07-21T01:30:56Z"
+    },
+    {
+      "id": "L-023",
+      "key": "gate_fail::sem init py entre subpastas de testes dois conftest py disputam o mesmo nome de modulo conftest e um pode sombrear o outro dependendo da ordem de colecao manter um unico conftest py compartilhado na raiz de tests nunca um por subpasta",
+      "text": "Sem __init__.py entre subpastas de testes, dois conftest.py disputam o mesmo nome de modulo 'conftest' e um pode sombrear o outro dependendo da ordem de colecao. Manter um unico conftest.py compartilhado na raiz de tests/, nunca um por subpasta.",
+      "signal": "gate_fail",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "aws-foundation"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "conftest collision (tests)"
+      ],
+      "created": "2026-07-21T16:03:28Z",
+      "last_seen": "2026-07-21T16:03:28Z"
     }
   ]
 }

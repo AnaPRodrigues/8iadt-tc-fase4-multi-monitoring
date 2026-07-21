@@ -14,6 +14,15 @@ import numpy as np
 import pytest
 import wfdb
 
+from aws import adapters
+
+
+@pytest.fixture(autouse=True)
+def _registro_de_adapters_limpo(monkeypatch):
+    """Isola o registro de adapters AWS entre testes (evita vazamento de estado global)."""
+    monkeypatch.setattr(adapters, "_TEXT_EXTRACTORS", {})
+    monkeypatch.setattr(adapters, "_IMAGE_ANALYZERS", {})
+
 FS = 4
 
 # ---- Harness do script shell de aquisição (F0) — sem download real ----
