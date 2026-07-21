@@ -322,6 +322,14 @@
 - **Date**: 2026-07-21
 - **Status**: active
 
+### AD-041
+- **Decision**: A **pressão arterial (PA)** permanece **fora do caminho crítico** — documentada como desenvolvimento futuro no relatório técnico, não bloqueadora (é exemplo do enunciado, não item-lista obrigatório estrito; nenhum requisito obrigatório depende dela). Fonte identificada para fechá-la quando houver tempo: **VitalDB** (`vitaldb.net`; também no PhysioNet, DOI `10.13026/czw8-9p62`) — aberto após cadastro + data usage agreement, **sem credenciamento CITI**. Contém pressão arterial invasiva (ABP) real + ECG, PPG, SpO2 de ~6.388 casos cirúrgicos/anestésicos; biblioteca Python própria (`vitaldb`) + API. **Condição de execução**: só entra depois do MVP fechado (F1, F2, F4, F5, aws-foundation e frontend construídos, vídeo/relatório encaminhados) — enriquecimento, não bloqueador. **Não adicionar ao F0 (`download_datasets`) agora**; se/quando priorizado, acrescentar `fetch_vitaldb` usando a lib `vitaldb` (confirmar o loader exato na doc antes de implementar — formato próprio `.vital`, não reaproveita os loaders `wfdb` de F3, terceiro domínio de série vital além do materno-fetal/CTU-UHB e UTI/BIDMC).
+- **Reason**: Fecha a lacuna de "fonte aberta identificada" para PA sem comprometer o prazo — formaliza o caminho de fechamento sem puxá-lo para o caminho crítico.
+- **Trade-off**: PA segue sem implementação nesta entrega; VitalDB é código novo (formato `.vital` próprio), não um ajuste incremental de F3.
+- **Scope**: F3 (vitals-anomaly), trabalho futuro; não altera F0/F1/F2/F4/F5 nem o caminho crítico. Refina a nota de AD-040 sobre PA.
+- **Date**: 2026-07-21
+- **Status**: active
+
 ## Rastreabilidade de Requisitos Obrigatórios
 
 Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) às features.
@@ -337,7 +345,7 @@ Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) �
 | Req.2 — Áudio: disartria | Trabalho futuro (sem dataset aberto rotulado, AD-020) | ⚠️ Deferido |
 | Req.3 — Vitais: batimentos (HR) | F3 caso UTI: BIDMC (AD-040) + FHR do CTU-UHB | ✅ Coberto |
 | Req.3 — Vitais: oxigenação (SpO2) | F3 caso UTI: BIDMC (AD-040) | ✅ Coberto |
-| Req.3 — Vitais: pressão arterial (PA) | Trabalho futuro (PA aberta ~só no MIMIC credenciado, AD-040) | ⚠️ Deferido |
+| Req.3 — Vitais: pressão arterial (PA) | Trabalho futuro — fonte aberta identificada: VitalDB (AD-041) | ⚠️ Deferido |
 | Req.3 — Prescrições: evolução | F4: Textract/adapter + regras (AD-022/035) | ✅ Planejado |
 | Req.3 — Padrões de movimentação do paciente | F1 raia pose: URFD fall/ADL (AD-039) | ✅ Coberto |
 | Req.3 — Alertas automáticos à equipe | F5: Lambda → SNS (AD-004/024) | ✅ Planejado |

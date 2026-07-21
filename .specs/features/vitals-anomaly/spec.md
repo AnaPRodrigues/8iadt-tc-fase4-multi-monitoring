@@ -182,3 +182,34 @@ a história central de detecção já está provada pelo P1/P2 com CTU-UHB.
 - [ ] Precision, recall e F1 calculados contra o rótulo pH real, por detector, reportados no relatório técnico.
 - [ ] Ao menos uma timeline composta (normal → patológico) demonstrada com evidências corretamente atribuídas ao registro de origem.
 - [ ] Toda anomalia reportada tem evidência visual/textual correspondente na saída (critério de aceite global do projeto).
+
+---
+
+## Desenvolvimento Futuro — PA via VitalDB (Emenda AD-041)
+
+> Documentação, não implementação. Não altera nenhuma tarefa fechada de F3, nem o caminho crítico
+> do prazo (27/07/2026).
+
+A **pressão arterial (PA)** é um exemplo do enunciado (batimento/PA/oxigenação), não um item-lista
+obrigatório estrito — nenhum requisito obrigatório depende dela (ver tabela de rastreabilidade em
+`.specs/STATE.md`). Ela permanece **fora do caminho crítico** desta entrega, documentada como
+trabalho futuro no relatório técnico.
+
+**Fonte identificada para fechá-la, se/quando priorizado:** [VitalDB](https://vitaldb.net)
+(também disponível no PhysioNet, DOI `10.13026/czw8-9p62`) — aberto após cadastro + data usage
+agreement, **sem credenciamento CITI**. Contém pressão arterial invasiva (ABP) real, além de ECG,
+PPG e SpO2, de ~6.388 casos cirúrgicos/anestésicos. Possui biblioteca Python própria (`vitaldb`) e
+API para acesso aos dados.
+
+**Condição de execução:** só entra depois do MVP fechado — F1, F2, F4, F5, aws-foundation e
+frontend construídos, vídeo e relatório encaminhados. É enriquecimento pós-entrega, não bloqueador.
+
+**Custo/atenção quando for feito** (não avaliar agora):
+- VitalDB usa um formato próprio `.vital` com biblioteca própria — **não reaproveita os loaders
+  `wfdb`** já construídos para CTU-UHB/BIDMC nesta feature.
+- Seria um **terceiro domínio de série vital** (perioperatório), além do materno-fetal (CTU-UHB) e
+  do de UTI (BIDMC) já cobertos — código novo, não um ajuste incremental de `loader.py`.
+- Confirmar o loader exato da lib `vitaldb` na documentação oficial antes de implementar (não
+  presumir a API a partir deste registro).
+- Se priorizado, adicionar uma função `fetch_vitaldb` em `backend/scripts/download_datasets.sh`
+  (F0) — não faz parte do escopo atual do script.
