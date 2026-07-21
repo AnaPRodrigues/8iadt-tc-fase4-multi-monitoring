@@ -16,5 +16,12 @@ data/*
 node_modules/
 frontend/dist/
 frontend/build/
+
+# Config de ambiente (AD-037) — só .env.example é versionado
 .env
+.env.local
+.env.cloud
+
+# Estado do LocalStack (AD-034)
+.localstack/
 

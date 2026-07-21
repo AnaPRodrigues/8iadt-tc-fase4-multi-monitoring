@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: install data demo test test-unit lint fmt clean
+.PHONY: install data demo test test-unit lint fmt clean localstack-up localstack-down infra-local infra-cloud
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -23,6 +23,21 @@ lint:
 
 fmt:
 	$(PY) -m ruff format backend
+
+# --- LocalStack (profile local, AD-034) ---
+localstack-up:
+	docker compose up -d localstack
+
+localstack-down:
+	docker compose down
+
+# --- IaC idempotente (mesmos recursos nos dois ambientes, AD-034) ---
+# Provisionadas na feature de infra; por ora apenas os alvos.
+infra-local:
+	ENV=local $(PY) -m aws.provision
+
+infra-cloud:
+	ENV=cloud $(PY) -m aws.provision
 
 clean:
 	rm -rf output/* .pytest_cache

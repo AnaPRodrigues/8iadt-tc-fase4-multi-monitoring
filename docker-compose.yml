@@ -1,0 +1,14 @@
+# Sobe o LocalStack para o profile local (ENV=local, AD-034).
+# `make localstack-up` / `make localstack-down`.
+services:
+  localstack:
+    image: localstack/localstack:3
+    ports:
+      - "4566:4566"          # edge endpoint único (S3, Lambda, SNS, SQS, DynamoDB, ...)
+    environment:
+      - SERVICES=s3,lambda,sns,sqs,dynamodb,events,stepfunctions,cloudwatch,secretsmanager,apigateway
+      - DEBUG=0
+      # Textract e Rekognition NÃO estão no Community — resolvidos por adapter local (AD-035).
+    volumes:
+      - "./.localstack:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"   # necessário para Lambda

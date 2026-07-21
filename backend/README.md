@@ -14,7 +14,7 @@ processamento; o `frontend/` apenas consome a API (AD-029).
 | `pipelines/video/` | F1 — YOLOv8 + cliente Rekognition |
 | `pipelines/prescription/` | F4 — cliente Textract + parser + regras |
 | `fusion/` | F5 — late fusion, score de risco, níveis |
-| `aws/` | boto3 clients, handlers de Lambda, helpers de IaC |
+| `aws/` | `clients.py` (factory boto3 por `ENV`, AD-034), `adapters/` (`TextExtractor`/`ImageAnalyzer` cloud+local, AD-035), `lambdas/` (handlers). Perfis local (LocalStack) / cloud (Learner Lab) |
 | `scripts/` | `download_datasets` (F0) e outros utilitários |
 | `tests/` | Testes do backend (os 165 de F3 migram para cá) |
 

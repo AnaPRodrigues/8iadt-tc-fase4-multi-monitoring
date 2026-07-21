@@ -264,16 +264,48 @@
 - **Trade-off**: Endoscapes são frames amostrados em intervalos, não vídeo contínuo — perde-se o ângulo "sequência temporal de fases". Download de ~6 GB exige a checagem de espaço já prevista em F0 (DATA-08).
 - **Scope**: F1 (video-analysis) e F0/DATA-03. **Supersede a parte Cholec80-CVS das AD-016, AD-019 e AD-023** (AD-016 permanece válida para CTU-UHB, ICBHI e MIT-BIH).
 - **Date**: 2026-07-20
+- **Status**: active (reafirmada por AD-036 — Endoscapes segue como âncora de F1)
+
+### AD-034
+- **Decision**: Todo acesso a serviços AWS passa por **dois profiles selecionados pela variável `ENV`** (`local` | `cloud`). `local` → **LocalStack** (endpoint `http://localhost:4566`, credenciais dummy `test/test`), para dev e testes 100% offline sem gastar budget nem lidar com credenciais rotativas do lab; `cloud` → AWS real do Learner Lab (credenciais temporárias, sem `endpoint_url`). Implementação obrigatória: um **factory único de cliente boto3** (`backend/aws/clients.py`) que injeta `endpoint_url` só quando `ENV=local`. **NUNCA** instanciar `boto3.client(...)` direto nos pipelines — sempre via o factory. Config por `.env.local`/`.env.cloud` (+ `.env.example`); `docker-compose.yml` sobe o LocalStack; a IaC de `infra/` provisiona os MESMOS recursos nos dois ambientes (só muda o endpoint).
+- **Reason**: Permite desenvolver e testar todo o fluxo event-driven (S3/Lambda/SNS/DynamoDB) sem sessão AWS ativa, sem gastar o budget do Learner Lab e sem depender das credenciais que rotacionam por sessão. Um factory único garante que trocar de ambiente seja só mudar `ENV`.
+- **Trade-off**: Exige rodar LocalStack (Docker) localmente e manter a IaC agnóstica de endpoint; LocalStack Community não cobre todos os serviços (ver AD-035).
+- **Scope**: Todas as features com AWS (F1, F4, F5); `backend/aws/`, `infra/`, `docker-compose.yml`.
+- **Date**: 2026-07-21
+- **Status**: active
+
+### AD-035
+- **Decision**: Textract e Rekognition **não existem no LocalStack Community** (são Pro). Resolver com padrão **ADAPTER**: interfaces únicas `TextExtractor` e `ImageAnalyzer` em `backend/aws/adapters/`, cada uma com dois adaptadores — **cloud** (Textract / Rekognition reais) e **local** (OSS: Tesseract/pdfplumber para OCR de prescrição em F4; YOLOv8 local para labels de imagem em F1). O resto do pipeline depende só da interface, nunca do serviço concreto.
+- **Reason**: Sem isso, o profile `local` (AD-034) não conseguiria exercitar F4/F1 offline. O adapter isola a dependência do serviço gerenciado num único ponto.
+- **Trade-off**: Os resultados dos adaptadores local e cloud diferem (Tesseract ≠ Textract); o relatório precisa deixar claro qual ambiente gerou cada métrica.
+- **Scope**: F4 (TextExtractor), F1 (ImageAnalyzer); `backend/aws/adapters/`.
+- **Date**: 2026-07-21
+- **Status**: active
+
+### AD-036
+- **Decision**: F1 usa **apenas datasets abertos** já discutidos (e eventualmente outros abertos encontrados no futuro) — **sem nenhuma gravação de vídeo pelo próprio grupo**. A âncora de vídeo/frames **permanece o Endoscapes2023** (AD-033, já baixado em `data/endoscapes/`): YOLOv8 sobre os frames anotados (bbox COCO) + `ImageAnalyzer` na nuvem para keyframes (AD-035). O **MediaPipe Pose** fica **condicionado** a encontrar um dataset **aberto** de vídeo de corpo inteiro (nenhum identificado até agora); sem essa fonte, o ângulo postura/queda **não entra no caminho crítico**. O **Cholec80-CVS** (anotações XLSX, sem vídeo) segue como enriquecimento opcional.
+- **Reason**: O usuário optou por não gravar vídeo próprio e usar só dados abertos. Entre os datasets discutidos, o único com frames reais e acesso aberto é o Endoscapes2023 — por isso ele volta a ser a âncora, e o Endoscapes baixado deixa de estar órfão.
+- **Trade-off**: Sem fonte aberta de vídeo de corpo inteiro, o MediaPipe Pose (AD-006) fica sem uso imediato e o caso "fisioterapia/queda" do enunciado vira contingente a um dataset futuro. F1 no caminho crítico é detecção sobre frames cirúrgicos (Endoscapes), não análise postural.
+- **Scope**: F1 (video-analysis). **Reafirma a AD-033** (não a supersede); torna a aplicação de MediaPipe (AD-006) condicional a uma fonte aberta futura.
+- **Date**: 2026-07-21
+- **Status**: active
+
+### AD-037
+- **Decision**: A estrutura de `backend/aws/` é: `clients.py` (factory de cliente boto3 por `ENV`, AD-034), `adapters/` (`TextExtractor`/`ImageAnalyzer` cloud+local, AD-035), `lambdas/` (handlers de Lambda). Acrescenta-se `docker-compose.yml` (sobe LocalStack), `.env.local`/`.env.cloud`/`.env.example`, e alvos no `Makefile`: `localstack-up`/`localstack-down` (docker-compose) e `infra-local`/`infra-cloud` (mesma IaC nos dois ambientes, só muda o endpoint). `.env.local` e `.env.cloud` entram no `.gitignore`; só `.env.example` é versionado. Refina a AD-030.
+- **Reason**: Concretiza AD-034/AD-035 em arquivos e comandos; mantém segredos/endpoints fora do Git e o mesmo IaC recriável nos dois ambientes.
+- **Trade-off**: Mais superfície de configuração (dois `.env`, docker-compose, quatro alvos novos de Make).
+- **Scope**: `backend/aws/`, `infra/`, raiz do repo. Refina AD-030.
+- **Date**: 2026-07-21
 - **Status**: active
 
 ## Handoff
 
-- **Feature**: F0 (data-acquisition) FECHADA. Próxima: F4 (prescription-analysis).
-- **Phase / Task**: F0 FECHADA — Verifier PASS (0 bloqueadores). F3 fechada e migrada. Duas features prontas; faltam F4, F2, F1, F5.
+- **Feature**: Arquitetura LocalStack/AWS registrada (AD-034..037). Próxima a construir: fundação AWS (factory + adapters + IaC) e depois F4.
+- **Phase / Task**: F0 e F3 FECHADAS (Verifier PASS). **Novo brief absorvido**: AD-034 (duplo-profile LocalStack/AWS via `ENV`), AD-035 (adapter Textract/Rekognition ↔ Tesseract/YOLOv8 local), AD-036 (F1 = Endoscapes aberto, **sem gravação do grupo**, MediaPipe condicional a dataset aberto futuro), AD-037 (estrutura `backend/aws/` + docker-compose + `.env` + alvos Make). AD-033 reafirmada (Endoscapes NÃO é órfão). Esqueleto estendido.
 - **Completed**: AD-001 a AD-033. **F3** fechada (Verifier passe 6 PASS) e migrada para `backend/`. **F0** fechada (Verifier PASS): `backend/scripts/download_datasets.sh` completo; 32 testes de F0 (19 unit + 13 integração), suíte total **197 verdes**, lint limpo; idempotência confirmada com `make data` real (pulou os 3). **Datasets reais baixados** em `data/`: CTU-UHB (552 registros), ICBHI (920 wav + 922 txt), Endoscapes2023 (6.28 GB, extraído). Commits F0 T1–T7: `9045e32`,`b5b779c`,`b1ce73a`,`2a8a832`,`9622662`,`58dc9c1`,`ee405af`.
 - **In-progress**: nada. Verifier de F0 concluído.
-- **Next step**: **F4 (prescription-analysis)** — Specify já confirmado; falta Design → Tasks → Execute. É a fatia que valida a integração AWS cedo (S3 → Lambda → Textract → SNS + DynamoDB). Requer credenciais do Learner Lab (region us-east-1, role `LabRole`) e IaC recriável em `infra/` (AD-007, AD-014). Provável necessidade de instalar `boto3`/`reportlab` (gerador de PDF) no venv.
-- **Blockers**: none para começar o Design de F4. Para o Execute de F4 será preciso: sessão AWS Academy ativa + credenciais no ambiente (`.env`/profile), e definir a biblioteca de geração de PDF sintético (F4 é o único ponto com dado sintético, AD-022).
+- **Next step**: (1) **Fundação AWS** habilitada por AD-034/035/037 — `backend/aws/clients.py` (factory boto3 por `ENV`), `adapters/` (`TextExtractor`/`ImageAnalyzer` cloud+local), IaC idempotente em `infra/` + `aws.provision`, docker-compose do LocalStack. Isso destrava F4/F1/F5 e permite dev/teste offline (nenhuma sessão AWS necessária no profile local). (2) Depois, **F4 (prescription-analysis)** usando `TextExtractor` (Textract no cloud, Tesseract/pdfplumber no local). Com LocalStack, o Execute de F4 **não** exige mais sessão do Learner Lab. Instalar no venv: `boto3`, `pytesseract`/`pdfplumber`, `reportlab` (gerador de PDF sintético).
+- **Blockers**: none para o Design da fundação AWS/F4. Docker precisa estar disponível para `make localstack-up` (profile local). F1 continua usando o Endoscapes já baixado; MediaPipe só se surgir dataset aberto de corpo inteiro (AD-036).
 - **Residual aceito em F0**: 4 mutantes sobreviventes (dívida de teste P2, não bugs): retomada `-C -`/`--continue` sem teste comportamental (L-021) e defesa-em-profundidade do verify_zip do endoscapes (unzip é backstop, L-022). A propriedade central ("`.complete` só sobre zip real") é testada e morre por mutação.
 - **Uncommitted files**: `.specs/` (validation.md de F0, lessons, status de spec/tasks/STATE) — commitar.
 - **Branch**: `feat/f3-vitals-anomaly` (contém F3 + reestruturação + F0; `main` só tem o commit inicial — estratégia de merge/rename a decidir).
