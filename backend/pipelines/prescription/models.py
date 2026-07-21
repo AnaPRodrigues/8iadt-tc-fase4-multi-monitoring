@@ -7,7 +7,7 @@ from dataclasses import dataclass
 class DrugRange:
     """Faixa terapêutica de referência para um medicamento."""
 
-    drug: str
+    name: str
     min_dose: float
     max_dose: float
     unit: str
@@ -38,22 +38,31 @@ class AnomalyResult:
     """Resultado de uma regra de anomalia aplicada a um ``PrescriptionRecord``."""
 
     kind: str
-    detail: str
+    reason: str
 
 
 @dataclass(frozen=True)
 class GroundTruthEntry:
     """Rótulo esperado de um PDF sintético gerado por ``generator.py``."""
 
-    record: PrescriptionRecord
-    expected_kind: str
+    patient_id: str
+    drug: str
+    dose: float
+    is_anomalous: bool
+    anomaly_type: str | None
 
 
 @dataclass(frozen=True)
 class ProcessResult:
-    """Resultado do processamento de ponta a ponta de um evento S3."""
+    """Resultado do processamento de ponta a ponta de um evento S3.
+
+    SPEC_DEVIATION: o design não previa um campo para falha de parsing —
+    ``parse_failure`` foi acrescentado para que ``handler.py`` distinga "PDF
+    ilegível" (move para ``errors/``, PRESC-07) de "parseado, sem anomalias".
+    """
 
     record: PrescriptionRecord | None
     anomalies: list[AnomalyResult]
+    evidence_id: str | None
     deduplicated: bool
-    parse_failure: ParseFailure | None
+    parse_failure: ParseFailure | None = None

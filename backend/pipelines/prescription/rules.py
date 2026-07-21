@@ -22,17 +22,17 @@ def check_dose_range(
     if drug_range is None:
         return AnomalyResult(
             kind="sem_referencia",
-            detail=f"medicamento '{record.drug}' fora do catálogo",
+            reason=f"medicamento '{record.drug}' fora do catálogo",
         )
     if record.dose < drug_range.min_dose or record.dose > drug_range.max_dose:
         return AnomalyResult(
             kind="dose_fora_de_faixa",
-            detail=(
+            reason=(
                 f"dose {record.dose}{record.unit} fora da faixa "
                 f"[{drug_range.min_dose}, {drug_range.max_dose}]{drug_range.unit}"
             ),
         )
-    return AnomalyResult(kind="normal", detail="dose dentro da faixa terapêutica")
+    return AnomalyResult(kind="normal", reason="dose dentro da faixa terapêutica")
 
 
 def check_abrupt_change(
@@ -42,15 +42,15 @@ def check_abrupt_change(
 ) -> AnomalyResult:
     """Compara a dose atual com a do registro anterior do mesmo paciente/medicamento."""
     if previous is None:
-        return AnomalyResult(kind="normal", detail="sem histórico anterior")
+        return AnomalyResult(kind="normal", reason="sem histórico anterior")
 
     relative_change = abs(record.dose - previous.dose) / previous.dose
     if relative_change > threshold:
         return AnomalyResult(
             kind="mudanca_abrupta",
-            detail=(
+            reason=(
                 f"variação de {relative_change:.0%} em relação à dose anterior "
                 f"({previous.dose}{previous.unit} -> {record.dose}{record.unit})"
             ),
         )
-    return AnomalyResult(kind="normal", detail="variação dentro do esperado")
+    return AnomalyResult(kind="normal", reason="variação dentro do esperado")

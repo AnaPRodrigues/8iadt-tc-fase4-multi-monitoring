@@ -4,7 +4,7 @@ from pipelines.prescription import catalog
 def test_lookup_medicamento_conhecido():
     drug_range = catalog.lookup("paracetamol")
     assert drug_range is not None
-    assert drug_range.drug == "paracetamol"
+    assert drug_range.name == "paracetamol"
     assert drug_range.min_dose < drug_range.max_dose
 
 
