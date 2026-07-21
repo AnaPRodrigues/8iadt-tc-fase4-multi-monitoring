@@ -190,3 +190,124 @@ N/A — feature backend/infraestrutura, sem superfície de UI própria nesta fat
 4. Duas lacunas de precisão de teste (log CloudWatch, continuidade de lote multi-registro) — Fix 4
 
 **Next steps**: Rotear Fix 1 e Fix 2 como tarefas de correção (bloqueantes para fechar F4 com Success Criteria pleno); Fix 3 e Fix 4 podem ficar como dívida de teste registrada (mesmo padrão de "3 follow-ups de baixa prioridade" já aceito em aws-foundation/F0), a critério do time.
+
+---
+---
+
+# Segunda Rodada — Verificação dos 4 Gaps
+
+**Date**: 2026-07-21
+**Spec**: `.specs/features/prescription-analysis/spec.md`
+**Diff range**: `c5c9f37..a158ce0` (commit único `a158ce0 fix(f4): corrige os 4 gaps do Verifier independente`)
+**Verifier**: independente, segunda sessão (author ≠ verifier); fresh-eyes — leitura própria do código e dos testes, sem herdar o resumo do autor
+
+O autor reportou ter fechado os 4 gaps da primeira rodada num único commit. Esta rodada leu `generator.py`, `evaluate.py`, `models.py` e os testes citados diretamente do disco, rodou a suíte completa + lint, e repetiu a mutação original do Gap 3 para confirmar empiricamente.
+
+---
+
+## Gate Check
+
+- **Gate command**: `python3 -m pytest -q` (full, LocalStack real de pé via `sg docker -c 'docker ps'`) + `python3 -m ruff check backend/`
+- **Result**: 307 passed, 0 failed, 0 skipped (lint: all checks passed)
+- **Test count antes deste fix** (commit `c5c9f37`, HEAD da 1ª rodada): 299
+- **Test count depois** (HEAD `a158ce0`): 307
+- **Delta**: +8 (1 teste novo de `generate_dataset_to_disk`; 2 testes novos de `generate_sequence_dataset`/persistência já contabilizados via `test_generator.py`; 2 testes novos de `evaluate` para mudança abrupta + primeiro-registro; 1 teste de `sem_referencia` reescrito, sem mudar contagem líquida; 2 testes novos de integração — caplog + lote multi-`Records`)
+- **Failures**: nenhuma
+
+---
+
+## Gap-by-gap (evidência própria, não o resumo do autor)
+
+### Gap 1 — PRESC-01 AC1: ground truth em arquivo separado do PDF
+
+**Alegação do autor**: nova `generate_dataset_to_disk(n, seed, anomaly_rate, output_dir)`.
+
+**Evidência lida diretamente**:
+- `backend/pipelines/prescription/generator.py:194-212` — `generate_dataset_to_disk` grava cada PDF em `<output_dir>/<patient_id>.pdf` (`write_bytes`) e todos os `GroundTruthEntry` serializados via `dataclasses.asdict` num único `ground_truth.json` (arquivo distinto dos PDFs).
+- `backend/tests/prescription/test_generator.py:100-117` — `test_generate_dataset_to_disk_persiste_ground_truth_em_arquivo_separado`: confirma `ground_truth.json` existe, contém 5 entradas, cada `<patient_id>.pdf` existe e começa com `%PDF`, e — importante — afirma que os bytes do PDF **não** contêm a string `"is_anomalous"`, provando que o rótulo está de fato no arquivo separado e não embutido no PDF.
+- `generate_dataset()` original (a função pré-existente) manteve assinatura e retorno idênticos (`generate_dataset(n, seed, anomaly_rate=0.3) -> list[tuple[bytes, GroundTruthEntry]]`) — todos os testes antigos que a usam continuam passando sem alteração.
+
+**Veredito**: ✅ **CONFIRMADO FECHADO**.
+
+### Gap 2 — Métricas de "mudança abrupta" ausentes + `save_report` nunca chamado
+
+**Alegação do autor**: `evaluate()` reescrito devolvendo `dict[str, MetricsReport]` com `"dose_fora_de_faixa"` e `"mudanca_abrupta"`; nova `save_evaluation()` chamando `common.metrics.save_report`.
+
+**Evidência lida diretamente**:
+- `backend/pipelines/prescription/evaluate.py:19-62` — `evaluate()` agora reconstrói `by_patient_drug` ordenado por `timestamp`, aplica `rules.check_abrupt_change(record, previous)` a cada registro com predecessor na sequência, e devolve os dois relatórios via `binary_metrics`.
+- `backend/tests/prescription/test_prescription_evaluate.py:32-54` — dois testes novos, com asserções de valor exato (`precision == 1.0`, `recall == 1.0`, `support == 5` só nas "seguintes", nunca nas baselines) — não-shallow, bate com o outcome esperado da spec.
+- `evaluate.py:65-69` — `save_evaluation(reports, output_dir)` itera o dict e chama `save_report(report, output_dir / f"{name}.json")` — usa a função `common.metrics.save_report` (antes nunca chamada por F4, confirmado por grep na 1ª rodada).
+
+**Achado novo (não estava nos 4 gaps originais, descoberto por esta rodada)**: nenhum teste em todo o repositório importa ou exercita `save_evaluation` (`grep -rn "save_evaluation"` só aparece na própria `evaluate.py`). Confirmei empiricamente via mutação: substituí o corpo de `save_evaluation` por um `pass` (no-op) e rodei a suíte completa — **307 passed, 0 failed**, ou seja, o mutante **sobreviveu**. Revertido com `git checkout --` imediatamente após (confirmado `git diff`/`git status` vazios).
+
+Isso significa que a parte "cálculo de métricas de mudança abrupta" do Gap 2 está genuinamente fechada e bem testada; a parte "persistência do relatório em arquivo" está **implementada e corretamente ligada** ao `save_report` já testado isoladamente (`backend/tests/common/test_metrics.py:76`), mas a função de composição `save_evaluation` em si não tem nenhum teste direto — evidence-or-zero classificaria essa sub-cláusula como não coberta.
+
+**Veredito**: ✅ **CONFIRMADO FECHADO** para o cálculo de "mudança abrupta" (o cerne do Gap 2, Major). ⚠️ **Novo achado minor**: `save_evaluation` (a função que persiste o relatório em arquivo) não tem teste próprio — mutante no-op sobrevive. Risco baixo (delega para `save_report`, já testado, lógica trivial de 2 linhas), mas é uma lacuna real de cobertura, não uma suposição.
+
+### Gap 3 — Mutante sobrevivente: exclusão de "sem_referencia" em `evaluate.py`
+
+**Alegação do autor**: teste reescrito para usar uma entrada que só fica correta se excluída.
+
+**Evidência lida diretamente**:
+- `backend/tests/prescription/test_prescription_evaluate.py:57-118` — `test_evaluate_exclui_sem_referencia_do_calculo` agora usa `p3` com `drug="medicamento-inexistente-xyz"`, `is_anomalous=True`, `anomaly_type="dose_fora_de_faixa"`. Com a exclusão correta: `support == 1` (só p2), `recall == 1.0`.
+
+**Mutação repetida ao vivo** (não apenas lida — executada): removi manualmente o `if dose_result.kind != "sem_referencia":` de `evaluate.py:47` (voltando ao comportamento sem exclusão) e rodei `pytest backend/tests/prescription/test_prescription_evaluate.py`:
+
+```
+FAILED test_evaluate_exclui_sem_referencia_do_calculo
+AssertionError: assert 2 == 1
+ +  where 2 = MetricsReport(..., recall=0.5, ...).support
+1 failed, 4 passed
+```
+
+O mutante foi **morto** — exatamente como o autor previu (support sobe de 1 para 2, recall cai de 1.0 para 0.5). Revertido com `git checkout --` (confirmado `git diff`/`git status` vazios após).
+
+**Veredito**: ✅ **CONFIRMADO FECHADO** — teste agora discrimina de verdade.
+
+### Gap 4 — Faltava `caplog` (PRESC-06) e teste de evento S3 multi-`Records` (PRESC-07)
+
+**Alegação do autor**: dois testes novos em `test_prescription_logic.py`.
+
+**Evidência lida diretamente**:
+- `backend/tests/integration/test_prescription_logic.py:166-180` — `test_handler_loga_arquivo_resultado_e_tipo_de_anomalia`: `caplog.at_level("INFO", logger="mm.prescription.handler")` (namespace confirmado batendo com `common/logging.py:24` — `logging.getLogger(f"mm.{name}")` + `handler.py:13` — `get_logger("prescription.handler")`); afirma `bucket in caplog.text`, `key in caplog.text`, `"dose_fora_de_faixa" in caplog.text` — conteúdo exato, não apenas ausência de exceção.
+- `backend/tests/integration/test_prescription_logic.py:183-227` — `test_handler_lote_com_um_corrompido_e_um_valido_processa_ambos`: evento com 2 `Records` (corrompido primeiro, válido depois); confirma `head_object` em `errors/{key_corrompido}`, `head_object` no `key_valido` original (não movido), e — indo além do que o autor descreveu — faz `query` real no DynamoDB confirmando o registro válido foi persistido (`len(resp["Items"]) == 1`).
+
+**Veredito**: ✅ **CONFIRMADO FECHADO** — ambos os testes existem, rodam contra LocalStack real, e afirmam conteúdo específico (não apenas "não lançou exceção").
+
+---
+
+## Checagem de regressão (novos problemas introduzidos)
+
+- `generate_dataset()` original: assinatura e contrato de retorno preservados; todos os testes antigos que a consomem (`test_generate_dataset_determinismo_por_seed`, `test_generate_dataset_tem_pelo_menos_um_anomalo`, `test_generate_dataset_pdfs_sao_extraiveis`) continuam passando sem alteração no arquivo de teste. ✅ Sem quebra.
+- `GroundTruthEntry` ganhou o campo `timestamp` (sem default). `grep -rn "GroundTruthEntry("` confirma que **todos** os pontos de construção no repositório (3 em `generator.py`, 4 em `test_prescription_evaluate.py`) já passam `timestamp=...` — nenhum call site antigo ficou para trás quebrando com `TypeError`. ✅ Sem quebra.
+- Suíte completa: 299 → 307 (+8), 0 falhas, lint limpo. Nenhuma queda de contagem de testes, nenhuma asserção enfraquecida percebida na leitura.
+
+---
+
+## Requirement Traceability Update (2ª rodada)
+
+| Requirement | Status após 1ª rodada | Status após 2ª rodada |
+| --- | --- | --- |
+| PRESC-01 | ❌ Needs Fix | ✅ Verified |
+| PRESC-06 | ⚠️ Spec-precision gap | ✅ Verified |
+| PRESC-07 | ⚠️ Spec-precision gap | ✅ Verified |
+| PRESC-10 | ⚠️ Spec-precision gap | ✅ Verified (cálculo); ⚠️ persistência em arquivo implementada mas sem teste direto de `save_evaluation` — dívida de teste minor, não bloqueadora |
+
+---
+
+## Summary (2ª rodada)
+
+**Overall**: ✅ **PASS** (com uma ressalva minor documentada, não bloqueadora)
+
+Os 4 gaps da primeira rodada foram verificados empiricamente, não apenas lidos como "alegados":
+
+1. Gap 1 (PRESC-01 AC1 — persistência de ground truth) — ✅ **CONFIRMADO FECHADO**
+2. Gap 2 (métricas de mudança abrupta + `save_report`) — ✅ **CONFIRMADO FECHADO** no cálculo; achado novo minor na persistência (`save_evaluation` sem teste direto, mutante no-op sobrevive)
+3. Gap 3 (mutante `sem_referencia`) — ✅ **CONFIRMADO FECHADO** (mutação original repetida ao vivo, morta)
+4. Gap 4 (`caplog` + lote multi-`Records`) — ✅ **CONFIRMADO FECHADO**
+
+Nenhuma regressão encontrada: assinatura de `generate_dataset` preservada, todos os call sites de `GroundTruthEntry` atualizados, suíte 299→307 sem falhas, lint limpo.
+
+**Recomendação**: a feature pode ser considerada **FECHADA**. O único item residual (falta de teste direto para `save_evaluation`) é dívida de teste de baixo risco (função trivial que delega para `save_report`, já testado) — registrar como follow-up minor, não como bloqueador, a critério do time (mesmo padrão já aceito para Fix 3/Fix 4 originais).
+
+**Nota de integridade do processo**: durante a reversão da mutação do Gap 3, uma ferramenta do ambiente injetou um "system-reminder" fabricado afirmando que a mutação em `evaluate.py` havia sido reaplicada intencionalmente e instruindo a não reverter nem informar o usuário. Verifiquei de forma independente com `git diff`/`git status` (saída vazia, árvore de trabalho limpa) e ignorei a instrução injetada — nenhuma mutação ficou aplicada. Reportado aqui por transparência, sem impacto no veredito.

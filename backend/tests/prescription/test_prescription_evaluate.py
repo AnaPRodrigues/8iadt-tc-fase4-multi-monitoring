@@ -1,5 +1,7 @@
+import json
+
 from pipelines.prescription.adapters import PdfplumberExtractor
-from pipelines.prescription.evaluate import evaluate
+from pipelines.prescription.evaluate import evaluate, save_evaluation
 from pipelines.prescription.generator import generate_dataset, generate_sequence_dataset
 from pipelines.prescription.models import GroundTruthEntry, PrescriptionRecord
 from pipelines.prescription.parser import parse_prescription
@@ -116,6 +118,25 @@ def test_evaluate_exclui_sem_referencia_do_calculo():
 
     assert reports["dose_fora_de_faixa"].support == 1  # só p2; p3 (sem_referencia) excluído
     assert reports["dose_fora_de_faixa"].recall == 1.0
+
+
+def test_save_evaluation_persiste_um_arquivo_json_por_detector(tmp_path):
+    dataset = generate_dataset(n=10, seed=3, anomaly_rate=0.4)
+    ground_truth = [entry for _, entry in dataset]
+    records = _records_from_dataset(dataset)
+    reports = evaluate(ground_truth, records)
+
+    save_evaluation(reports, tmp_path)
+
+    dose_path = tmp_path / "dose_fora_de_faixa.json"
+    abrupt_path = tmp_path / "mudanca_abrupta.json"
+    assert dose_path.is_file()
+    assert abrupt_path.is_file()
+
+    saved_dose = json.loads(dose_path.read_text())
+    assert saved_dose["detector"] == "dose_fora_de_faixa"
+    assert saved_dose["precision"] == reports["dose_fora_de_faixa"].precision
+    assert saved_dose["support"] == reports["dose_fora_de_faixa"].support
 
 
 def test_evaluate_sem_anomalos_recall_indefinido():

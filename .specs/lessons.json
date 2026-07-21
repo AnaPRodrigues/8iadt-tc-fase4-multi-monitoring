@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 30,
+  "next_id": 31,
   "lessons": [
     {
       "id": "L-001",
@@ -526,6 +526,24 @@
       ],
       "created": "2026-07-21T20:14:48Z",
       "last_seen": "2026-07-21T20:14:48Z"
+    },
+    {
+      "id": "L-030",
+      "key": "surviving_mutant::a thin function that only composes delegates to an already tested primitive e g loop call an existing save persist helper still needs its own direct test asserting the delegation actually happens for each expected key glue code is exactly where untested wiring hides even when the underlying primitive is well covered",
+      "text": "A thin function that only composes/delegates to an already-tested primitive (e.g., loop + call an existing save/persist helper) still needs its own direct test asserting the delegation actually happens for each expected key — glue code is exactly where untested wiring hides even when the underlying primitive is well covered.",
+      "signal": "surviving_mutant",
+      "scope": "test-coverage",
+      "status": "candidate",
+      "features": [
+        "prescription-analysis"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "backend/pipelines/prescription/evaluate.py:65-69 (save_evaluation, no direct test — no-op mutant survived full suite) (test-coverage)"
+      ],
+      "created": "2026-07-21T20:51:09Z",
+      "last_seen": "2026-07-21T20:51:09Z"
     }
   ]
 }

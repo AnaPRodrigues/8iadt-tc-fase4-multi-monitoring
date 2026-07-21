@@ -188,6 +188,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: PRESC-06/PRESC-10 — backend/pipelines/prescription/handler.py:36,41,45-51; backend/pipelines/prescription/evaluate.py (no save_report call) (prescription)
 - last seen: 2026-07-21T20:14:48Z
 
+### L-030 — A thin function that only composes/delegates to an already-tested primitive (e.g., loop + call an existing save/persist helper) still needs its own direct test asserting the delegation actually happens for each expected key — glue code is exactly where untested wiring hides even when the underlying primitive is well covered.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `test-coverage` · harmful: 0
+- features: prescription-analysis
+- evidence: backend/pipelines/prescription/evaluate.py:65-69 (save_evaluation, no direct test — no-op mutant survived full suite) (test-coverage)
+- last seen: 2026-07-21T20:51:09Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
