@@ -20,10 +20,16 @@ ICBHI_DATAVERSE_URL="${ICBHI_DATAVERSE_URL:-https://dataverse.harvard.edu/api/ac
 ICBHI_ORIGINAL_URL="${ICBHI_ORIGINAL_URL:-https://bhichallenge.med.auth.gr/sites/default/files/ICBHI_final_database/ICBHI_final_database.zip}"
 ENDOSCAPES_URL="${ENDOSCAPES_URL:-https://s3.unistra.fr/camma_public/datasets/endoscapes/endoscapes.zip}"
 
+# URFD (AD-039): ~70 zips por sequência, um por fall-NN/adl-NN. Contagens da AD-039.
+URFD_BASE_URL="${URFD_BASE_URL:-https://fenix.ur.edu.pl/~mkepski/ds/data}"
+URFD_N_FALL="${URFD_N_FALL:-30}"
+URFD_N_ADL="${URFD_N_ADL:-40}"
+
 # Estimativas de tamanho (bytes) para a checagem de espaço.
 CTU_EST_BYTES="${CTU_EST_BYTES:-600000000}"          # ~0.6 GB
 ICBHI_EST_BYTES="${ICBHI_EST_BYTES:-2100000000}"     # ~2.0 GB
 ENDOSCAPES_EST_BYTES="${ENDOSCAPES_EST_BYTES:-6500000000}"  # ~6.3 GB
+URFD_EST_BYTES="${URFD_EST_BYTES:-3000000000}"       # ~3 GB (estimativa; tamanho não documentado)
 MIN_ZIP_BYTES="${MIN_ZIP_BYTES:-1000}"               # abaixo disso não é um dataset
 
 log() { printf '[data] %s\n' "$*" >&2; }
@@ -199,6 +205,68 @@ fetch_endoscapes() {
     fi
     mark_complete "$dest"
     log "Endoscapes: OK"
+    FETCH_STATUS="baixado"
+    return 0
+}
+
+# _fetch_urfd_seq — baixa uma sequência do URFD; sentinela PRÓPRIA da sequência
+# (não confundir com a sentinela de dataset de fetch_urfd).
+_fetch_urfd_seq() {
+    local seq="$1" dest zip
+    dest="$DATA_DIR/urfd/$seq"
+    if is_complete "$dest"; then
+        return 0
+    fi
+    mkdir -p "$dest"
+    zip="$dest/$seq-cam0-rgb.zip"
+    if ! wget --continue -q -O "$zip" "$URFD_BASE_URL/$seq-cam0-rgb.zip"; then
+        err "URFD $seq: download falhou"
+        rm -f "$zip"
+        return 1
+    fi
+    if ! verify_zip "$zip"; then
+        rm -f "$zip"
+        return 1
+    fi
+    if ! unzip -o -q "$zip" -d "$dest"; then
+        err "URFD $seq: unzip falhou"
+        return 1
+    fi
+    mark_complete "$dest"
+    return 0
+}
+
+# fetch_urfd — 70 sequências (fall+adl) do URFD (DATA-14). Idempotência em DOIS
+# níveis: por sequência (evita rebaixar 69 zips já prontos por causa de 1) e por
+# dataset (só marca completo quando TODAS as sequências completam).
+fetch_urfd() {
+    local dataset_dest="$DATA_DIR/urfd"
+    if is_complete "$dataset_dest"; then
+        log "URFD: já completo — pulando"
+        FETCH_STATUS="pulado"
+        return 0
+    fi
+    mkdir -p "$dataset_dest"
+
+    # Padding fixo em 2 dígitos: é a convenção real de nomes do dataset (fall-01,
+    # adl-01, ...), independente de N — `seq -w` erraria isso para N<10 (ex.: testes).
+    local rc=0 n i
+    for n in $(seq 1 "$URFD_N_FALL"); do
+        printf -v i '%02d' "$n"
+        _fetch_urfd_seq "fall-$i" || rc=1
+    done
+    for n in $(seq 1 "$URFD_N_ADL"); do
+        printf -v i '%02d' "$n"
+        _fetch_urfd_seq "adl-$i" || rc=1
+    done
+
+    if [ "$rc" -ne 0 ]; then
+        err "URFD: uma ou mais sequências falharam — dataset não marcado completo"
+        FETCH_STATUS="falhou"
+        return 1
+    fi
+    mark_complete "$dataset_dest"
+    log "URFD: OK (todas as sequências completas)"
     FETCH_STATUS="baixado"
     return 0
 }

@@ -301,3 +301,93 @@ def test_main_falha_de_um_nao_derruba_os_outros(run, tmp_path):
     # Endoscapes rodou apesar de o ICBHI ter falhado antes
     assert (data / "endoscapes" / ".complete").is_file()
     assert not (data / "icbhi" / ".complete").exists()
+
+
+# ---------- URFD (T8): sentinela por sequência + por dataset ----------
+
+_WGET_URFD_STUB = r"""
+out=""; prev=""; url=""
+for a in "$@"; do
+  [ "$prev" = "-O" ] && out="$a"
+  case "$a" in http*) url="$a";; esac
+  prev="$a"
+done
+seq=$(basename "$url" | sed -E 's/-cam0-rgb\.zip$//')
+[ -n "${CALL_LOG:-}" ] && echo "$seq" >> "$CALL_LOG"
+if [ "$seq" = "${URFD_FAIL_SEQ:-}" ]; then
+  exit 9
+fi
+cp "$FIXTURE_ZIP" "$out"
+"""
+
+
+def _urfd_env(tmp_path, n_fall, n_adl, fail_seq=""):
+    data = tmp_path / "data"
+    fixture = _zip_fixture(tmp_path / "urfd_fix.zip")
+    call_log = tmp_path / "calls.log"
+    call_log.write_text("", encoding="utf-8")
+    stubdir = tmp_path / "bin"
+    stubdir.mkdir()
+    _stub(stubdir, "wget", _WGET_URFD_STUB)
+    env = {
+        "DATA_DIR": str(data),
+        "FIXTURE_ZIP": str(fixture),
+        "URFD_N_FALL": str(n_fall),
+        "URFD_N_ADL": str(n_adl),
+        "URFD_FAIL_SEQ": fail_seq,
+        "CALL_LOG": str(call_log),
+    }
+    return data, env, _path_with(stubdir), call_log
+
+
+def test_urfd_variaveis_do_topo_tem_defaults(run, tmp_path):
+    r = run('echo "$URFD_BASE_URL|$URFD_N_FALL|$URFD_N_ADL"')
+
+    assert r.returncode == 0
+    assert "fenix.ur.edu.pl" in r.stdout
+    assert "30" in r.stdout
+    assert "40" in r.stdout
+
+
+def test_urfd_todas_sequencias_sucesso_marca_completo_de_dataset(run, tmp_path):
+    data, env, path, _ = _urfd_env(tmp_path, n_fall=2, n_adl=2)
+
+    rc, status, _ = _call(run, "fetch_urfd", env, path)
+
+    assert rc == 0
+    assert status == "baixado"
+    assert (data / "urfd" / ".complete").is_file()
+    for seq in ("fall-01", "fall-02", "adl-01", "adl-02"):
+        assert (data / "urfd" / seq / ".complete").is_file()
+        assert (data / "urfd" / seq / "registro.wav").is_file()  # unzip real
+
+
+def test_urfd_sequencia_falha_nao_marca_completo_de_dataset_mas_demais_completam(
+    run, tmp_path
+):
+    data, env, path, _ = _urfd_env(tmp_path, n_fall=2, n_adl=1, fail_seq="fall-02")
+
+    rc, status, _ = _call(run, "fetch_urfd", env, path)
+
+    assert rc != 0
+    assert status == "falhou"
+    assert not (data / "urfd" / ".complete").exists()
+    # A sequência que falhou não tem sentinela própria...
+    assert not (data / "urfd" / "fall-02" / ".complete").exists()
+    # ...mas as demais completam normalmente.
+    assert (data / "urfd" / "fall-01" / ".complete").is_file()
+    assert (data / "urfd" / "adl-01" / ".complete").is_file()
+
+
+def test_urfd_sequencia_ja_completa_nao_e_rebaixada(run, tmp_path):
+    data, env, path, call_log = _urfd_env(tmp_path, n_fall=2, n_adl=1)
+    pronta = data / "urfd" / "fall-01"
+    pronta.mkdir(parents=True)
+    (pronta / ".complete").touch()
+
+    rc, status, _ = _call(run, "fetch_urfd", env, path)
+
+    assert rc == 0
+    assert status == "baixado"
+    assert "fall-01" not in call_log.read_text(encoding="utf-8").split()
+    assert (data / "urfd" / "fall-02" / ".complete").is_file()
