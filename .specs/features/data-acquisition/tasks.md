@@ -9,18 +9,18 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/data-acquisition/design.md`
-**Status**: Núcleo (T1–T7) Done, **Verifier PASS**. **Emenda (T8–T10) em Execute.**
+**Status**: Núcleo (T1–T7) Done, **Verifier PASS**. **Emenda (T8–T10) implementada, aguardando Verifier.**
 
 ## Progresso
 
 | Fase | Tarefas | Status |
 | --- | --- | --- |
 | 1 — Helpers | T1–T3 | ✅ (`9045e32`, `b5b779c`, `b1ce73a`) |
-| 2 — Aquisições | T4–T6 | ✅ (`2a8a832`, `9622662`, `58dc9c1`) |
+| 2 — Aquisições | T4–T6 | ✅ (`2a8a832`, `9622962`, `58dc9c1`) |
 | 3 — Orquestração | T7 | ✅ (`ee405af`) |
-| 4 — Emenda URFD/BIDMC | T8–T10 | ⏳ Em andamento |
+| 4 — Emenda URFD/BIDMC | T8–T10 | ✅ (`acd304f`, `ec54dfa`, `cd42c04`) |
 
-Núcleo: 197 testes verdes (25 de F0), lint limpo, Verifier PASS. Emenda: em Execute.
+Suíte: 207 testes verdes (35 de F0), lint limpo. Verifier da emenda: pendente (próximo passo).
 
 ---
 
