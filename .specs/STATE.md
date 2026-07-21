@@ -346,7 +346,7 @@ Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) �
 | Req.3 — Vitais: batimentos (HR) | F3 caso UTI: BIDMC (AD-040) + FHR do CTU-UHB | ✅ Coberto |
 | Req.3 — Vitais: oxigenação (SpO2) | F3 caso UTI: BIDMC (AD-040) | ✅ Coberto |
 | Req.3 — Vitais: pressão arterial (PA) | Trabalho futuro — fonte aberta identificada: VitalDB (AD-041) | ⚠️ Deferido |
-| Req.3 — Prescrições: evolução | F4: Textract/adapter + regras (AD-022/035) | ✅ Planejado |
+| Req.3 — Prescrições: evolução | F4: Textract/adapter + regras — **FECHADO, Verifier PASS** (AD-022/035) | ✅ Coberto |
 | Req.3 — Padrões de movimentação do paciente | F1 raia pose: URFD fall/ADL (AD-039) | ✅ Coberto |
 | Req.3 — Alertas automáticos à equipe | F5: Lambda → SNS (AD-004/024) | ✅ Planejado |
 | Objetivo — Fusão multimodal | F5: late fusion + risk score (AD-024) | ✅ Planejado |
@@ -359,20 +359,17 @@ Lacunas obrigatórias remanescentes: **nenhuma** (PA e disartria são deferidas 
 
 ## Handoff
 
-- **Feature**: F4 (prescription-analysis) **em execução** — Design e Tasks aprovados (8 tarefas), Execute em andamento. T1–T5 concluídas e commitadas; T6 (`logic.py`+`handler.py`) começada mas **nenhum arquivo de T6 foi escrito ainda** (parei antes de codar, a pedido do usuário, para economizar tokens).
-- **Phase / Task**: aws-foundation e F0 seguem fechadas (Verifier PASS). F4: T1 catálogo+regras, T2 gerador sintético, T3 adapter local pdfplumber, T4 parser, T5 histórico DynamoDB — todas com testes reais passando. LocalStack de pé e saudável (`sg docker -c 'docker ps'`), usado nos testes de integração de T5 (4 testes reais contra DynamoDB).
-- **Completed (F4)**:
-  - `backend/pipelines/prescription/models.py` — dataclasses alinhadas ao design.md (`DrugRange.name`, `AnomalyResult.reason`, `GroundTruthEntry` achatado, `ProcessResult.evidence_id`; `parse_failure` acrescentado como SPEC_DEVIATION documentada).
-  - `catalog.py` — 14 medicamentos, faixas ilustrativas (nota de validação contra bulário já no docstring).
-  - `rules.py` — `check_dose_range`/`check_abrupt_change` (threshold 50%, estrito: exatamente 50% não é anômalo).
-  - `generator.py` — `generate_prescription`/`generate_dataset` via reportlab; achado não óbvio: reportlab embute um `/ID` aleatório no trailer do PDF, então os bytes nunca são idênticos entre chamadas com o mesmo seed — o teste de determinismo compara o **texto extraído**, não os bytes brutos.
-  - `adapters.py` — `PdfplumberExtractor` + `register_local_adapters()`.
-  - `parser.py` — `parse_prescription(extracted) -> PrescriptionRecord | ParseFailure`.
-  - `history.py` — `dedup_key`/`save_record`/`get_latest`; **sem parâmetro de tabela nas assinaturas** (conforme design.md) — lê `DYNAMODB_TABLE` do ambiente, mesma convenção de `aws.provision.main()`.
-  - Testes: 24 unit (`backend/tests/prescription/`) + 4 integration reais (`backend/tests/integration/test_prescription_history.py`). Suíte completa do projeto: 282 testes verdes.
-  - Commits: `7fe8216` (T1), `d5bc0e0` (fix de alinhamento de campos ao design), `880112e` (T2), `765357b` (T3), `5a9b2f1` (T4), `4e4ae28` (T5), `3d251d9` (tasks.md).
-- **In-progress**: T6 (`logic.py` orquestração + `handler.py` Lambda fino) — **não iniciada em código**. Próximo passo ao retomar: escrever `logic.process(pdf_bytes, bucket, key, etag) -> ProcessResult` chamando `history.dedup_key` → `get_text_extractor()` (precisa de `register_local_adapters()` chamado em algum ponto de bootstrap — decisão a tomar: registrar no topo de `logic.py`, é idempotente e não afeta `env=cloud`) → `parser.parse_prescription` → `history.get_latest`/`save_record` → `rules.check_dose_range`/`check_abrupt_change` → `common.evidence.save_evidence` se houver anomalia (precisa escrever `pdf_bytes` em arquivo temporário antes, já que `save_evidence` exige `artifact_path.is_file()`). Depois `handler.py` (thin, lê evento S3, chama `logic.process`, trata erro movendo para `errors/`).
-- **Next step**: T6 → T7 (`infra.py`: `package_lambda`/`ensure_lambda`/`ensure_s3_trigger`, com os "achados a verificar" do design — API exata do LocalStack para `create_function`+`put_bucket_notification_configuration`+`add_permission`, e se o zip com `pdfplumber`/`pdfminer.six` cabe no limite do Lambda) → T8 (`evaluate.py`) → Verifier independente da F4.
+- **Feature**: **F4 (prescription-analysis) FECHADA** (Verifier PASS em 2ª rodada, após corrigir 4 gaps da 1ª). Próxima construção: **F1 (video-analysis)** — precisa reconciliar a spec com AD-039 (URFD, raia pose) + AD-033 (Endoscapes, raia objeto).
+- **Phase / Task**: aws-foundation, F0 e F4 fechadas (Verifier PASS). 308 testes verdes no total, lint limpo. LocalStack de pé e saudável (`sg docker -c 'docker ps'`).
+- **Completed (F4 — todas as 8 tarefas T1-T8)**:
+  - `models.py`/`catalog.py`/`rules.py` (T1), `generator.py` (T2, + `generate_sequence_dataset`/`generate_dataset_to_disk` acrescentadas no fix pós-Verifier), `adapters.py` (T3), `parser.py` (T4), `history.py` (T5), `logic.py`/`handler.py` (T6), `infra.py` (T7 — deploy real do Lambda testado ponta a ponta no LocalStack), `evaluate.py` (T8, reescrito para cobrir os dois tipos de anomalia).
+  - Fix na fundação (`aws/clients.py`): fallback de `LOCALSTACK_HOSTNAME`/`EDGE_PORT` para quando o código roda **dentro** de um container Lambda do próprio LocalStack (a variável de projeto `LOCALSTACK_ENDPOINT` não existe lá — só as do LocalStack).
+  - `GroundTruthEntry` ganhou `timestamp` (SPEC_DEVIATION) para casar rótulo↔registro em sequências de mudança abrupta.
+  - Makefile: `infra-prescription-local`/`infra-prescription-cloud` (encadeia `aws.provision` + `pipelines.prescription.infra`).
+  - Verifier 1ª rodada achou 4 gaps (ground truth só em memória, métricas de mudança abrupta ausentes, mutante sobrevivente em `evaluate.py`, cobertura de log/lote faltando) — todos corrigidos e uma 2ª rodada confirmou PASS. Um achado residual novo (função `save_evaluation` sem teste próprio) também foi fechado na sequência.
+  - Testes: 308 no total do projeto (era 254 antes de F4). Commits principais: `7fe8216`..`c5c9f37` (T1-T8), `95d2c03` (fix da fundação), `a158ce0` (fix dos 4 gaps), `4f4df7a` (fecha achado residual). `validation.md` tem as duas rodadas do Verifier.
+- **In-progress**: nada. F4 encerrada.
+- **Next step**: **F1 (video-analysis)** — Specify existe mas precisa reconciliar com a arquitetura atual (dual-profile ENV, adapter pattern, AD-039 URFD/raia pose + AD-033 Endoscapes/raia objeto) antes de Design, seguindo o mesmo padrão de reconciliação usado no design.md de F4. Depois: F2 (audio-analysis), F5 (fusion-and-alerting).
 - **Blockers**: none.
 - **Residual aceito em aws-foundation**: 2 mutantes sobreviventes (dívida de teste, não bugs) — teste de variável ausente em `main()` passa por acidente (comportamento de produção correto, só o teste não discrimina o mecanismo); paginação de `ensure_topic` nunca forçada por teste (risco latente que cresce com o nº de tópicos no Learner Lab ao longo do tempo — não bloqueador agora). 3 follow-ups de baixa prioridade registrados em `validation.md`, não agendados.
 - **Ambiente**: grupo `docker` do usuário exige `sg docker -c '...'` até um logout/login completo aplicar a mudança de verdade.
@@ -380,7 +377,7 @@ Lacunas obrigatórias remanescentes: **nenhuma** (PA e disartria são deferidas 
 - **Fontes verificadas (não re-checar)**: URFD zips em `https://fenix.ur.edu.pl/~mkepski/ds/data/{fall,adl}-NN-cam0-rgb.zip` (fall 01–30, adl 01–40) — HTTP 206, `application/zip`, magic `PK`. BIDMC via `wfdb.dl_database('bidmc', ...)` — 53 registros contíguos `bidmc01`..`bidmc53` confirmados via `get_record_list`; numerics = mesmo nome + sufixo `n`, fora do `RECORDS`.
 - **Residual aceito em F0 (núcleo)**: 4 mutantes sobreviventes pré-existentes (dívida de teste P2, não bugs) — ver validation.md.
 - **Uncommitted files**: nenhum (tudo commitado, working tree limpa) — parada segura confirmada via `git status` antes de encerrar.
-- **Branch**: `feat/f3-vitals-anomaly` (contém F3 + reestruturação + F0 completa + aws-foundation + F4 T1-T5; `main` só tem o commit inicial — estratégia de merge/rename a decidir).
+- **Branch**: `feat/f3-vitals-anomaly` (contém F3 + reestruturação + F0 completa + aws-foundation + F4 completa; `main` só tem o commit inicial — estratégia de merge/rename a decidir).
 - **Aberto (decisões futuras)**: estratégia de branch/merge para `main`; framework do `frontend/`; DATA-12 (checksum) diferido P3.
 
 ### Achados verificados durante o Execute (não presumir de novo)
