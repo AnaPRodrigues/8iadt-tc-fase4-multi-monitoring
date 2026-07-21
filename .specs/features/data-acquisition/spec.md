@@ -43,7 +43,7 @@ todas as demais e os downloads (GB) rodam em paralelo enquanto o resto do SDD é
 | Marcador de conclusão por dataset | Um arquivo-sentinela (ex.: `data/<ds>/.complete`) escrito só ao fim de cada download bem-sucedido | Distinguir "baixado por completo" de "baixado pela metade" — presença do diretório não basta | y |
 | `wget`, `unzip`, `python`/`wfdb` disponíveis | Assumidos presentes; script verifica e falha com instrução se faltar. (`git`/`git-lfs` não são mais necessários após AD-033) | Ambiente é notebook Linux; dependências comuns, mas a ausência precisa de mensagem clara | y |
 
-**Open questions:** none — as duas fontes antes pendentes (ICBHI e a âncora de vídeo) estão confirmadas: ICBHI pela URL do usuário; vídeo pela adoção do Endoscapes2023 (AD-033), após verificar que o Cholec80-CVS aberto não contém vídeo.
+**Open questions:** none — as três fontes estão confirmadas e testadas: CTU-UHB (`wfdb`), ICBHI (Harvard Dataverse, após a URL original 403), Endoscapes2023 (URL direta aberta). A fonte alternativa do ICBHI com bypass de SSL é decisão confirmada do usuário.
 
 ---
 

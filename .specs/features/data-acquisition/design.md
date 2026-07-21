@@ -1,0 +1,144 @@
+# F0 — Data Acquisition Design
+
+**Spec**: `.specs/features/data-acquisition/spec.md`
+**Status**: Draft
+
+---
+
+## Achados verificados (fonte da verdade, não presumir de novo)
+
+Confirmado empiricamente ao adiantar os downloads em paralelo:
+
+| Fonte | Fato verificado | Consequência no design |
+| --- | --- | --- |
+| CTU-UHB | `wfdb.dl_database('ctu-uhb-ctgdb', dest)` funciona; enumera 552 registros e baixa `.hea`/`.dat` | Passo em Python, não shell puro |
+| ICBHI (original) | `bhichallenge.med.auth.gr` tem cert SSL **autoassinado** E retorna **HTTP 403 no site inteiro** (inclusive a home); wget `-q` gravava **0 bytes** com exit 0 | Fonte primária trocada; a original vira alternativa com `--no-check-certificate` |
+| ICBHI (Dataverse) | Harvard Dataverse DOI `10.7910/DVN/HT6PKI`, datafile `7127117`, zip único ~1.9 GB, **HTTP 206** (suporta resume), magic bytes `PK` | Fonte primária do ICBHI; `curl -L -C -` |
+| Endoscapes | `s3.unistra.fr/.../endoscapes.zip`, HTTP 200, ~6 GB, `application/zip` | `wget --continue`; exige checagem de espaço |
+| Disco | ~83 GB livres no ambiente atual | Folga para ~8 GB de datasets + margem |
+
+**Lição incorporada** (L-020): um download pode retornar HTTP 200/exit 0 e ainda ser uma **página HTML de erro**, não o arquivo. Toda fonte deve ser validada pela assinatura/tipo do conteúdo antes de marcar `.complete`.
+
+---
+
+## Architecture Overview
+
+Um único script shell (`backend/scripts/download_datasets.sh`) orquestra três aquisições
+independentes, cada uma idempotente e verificada. Estado por dataset é uma sentinela `.complete`.
+
+```mermaid
+graph TD
+    M["make data"] --> S["download_datasets.sh"]
+    S --> V["verificações globais<br/>(ferramentas + espaço em disco)"]
+    V --> C["fetch_ctu_uhb<br/>(python wfdb)"]
+    V --> I["fetch_icbhi<br/>(Dataverse → fallback SSL)"]
+    V --> E["fetch_endoscapes<br/>(wget --continue)"]
+    C --> VC["verifica + .complete"]
+    I --> VI["verifica zip PK + .complete"]
+    E --> VE["verifica zip + .complete"]
+    VC --> R["resumo final<br/>(baixado / pulado / falhou)"]
+    VI --> R
+    VE --> R
+    R --> X["exit 0 se tudo ok, !=0 se algo falhou"]
+```
+
+Cada `fetch_*` segue o mesmo contrato: **se `.complete` existe → pula; senão baixa → verifica →
+escreve `.complete`**. Uma falha em um dataset não interrompe os outros; o exit code final reflete
+se houve qualquer falha.
+
+---
+
+## Code Reuse Analysis
+
+F0 é a primeira feature do backend a ter um script de dados; não há shell anterior a reutilizar.
+O que se reaproveita:
+
+| Elemento | Origem | Uso |
+| --- | --- | --- |
+| `.venv/bin/python` + `wfdb` | já instalado para F3 | passo CTU-UHB |
+| Alvo `data` do Makefile | AD-030 | ponto de entrada `make data` |
+| Convenção `data/<ds>/` + `.gitignore` | AD-031 | destinos e não-versionamento |
+
+O script **não** importa código Python do backend (é infra de aquisição, roda antes de qualquer
+pipeline). Mantido desacoplado de `common/`/`pipelines/`.
+
+---
+
+## Components
+
+### `download_datasets.sh`
+
+- **Purpose**: Orquestrar as três aquisições de forma idempotente e verificada.
+- **Location**: `backend/scripts/download_datasets.sh`
+- **Estrutura interna** (funções shell):
+  - `main()` — roda checagens globais, chama os três `fetch_*`, imprime o resumo, define o exit code
+  - `require_tools()` — confirma `curl`/`wget`, `unzip`, `.venv/bin/python`; falha nomeando o que falta
+  - `check_disk_space(min_bytes)` — aborta se o livre < estimativa + margem
+  - `is_complete(dir)` / `mark_complete(dir)` — leitura/escrita da sentinela
+  - `verify_zip(path)` — confere assinatura `PK` (primeiros bytes) e tamanho > limiar; rejeita HTML/erro
+  - `fetch_ctu_uhb()` — `python -c "import wfdb; wfdb.dl_database(...)"`; verifica presença de `.hea`/`.dat`
+  - `fetch_icbhi()` — tenta Dataverse (`curl -L -C -`); se falhar, tenta a URL original com `--no-check-certificate`; `verify_zip` antes de `unzip`
+  - `fetch_endoscapes()` — `wget --continue`; `verify_zip`; `unzip`
+- **Variáveis no topo** (DATA-05): `DATA_DIR`, `ICBHI_DATAVERSE_URL`, `ICBHI_ORIGINAL_URL`, `ENDOSCAPES_URL`, `CTU_DB`, estimativas de tamanho por dataset.
+- **Dependencies**: `curl`/`wget`, `unzip`, `.venv/bin/python` (`wfdb`)
+- **Reuses**: —
+
+---
+
+## Data Models
+
+Não há modelo de dados de aplicação. O "estado" persistido é o sistema de arquivos:
+
+```
+data/
+├── README.md                # versionado
+├── ctu-uhb/{*.hea,*.dat,.complete}
+├── icbhi/{ICBHI_final_database.zip, <extraído>, .complete}
+└── endoscapes/{endoscapes.zip, <extraído>, .complete}
+```
+
+`.complete` = contrato de idempotência. Sua presença é a única coisa que autoriza pular um dataset.
+
+---
+
+## Error Handling Strategy
+
+| Cenário | Tratamento | Impacto no usuário |
+| --- | --- | --- |
+| Ferramenta ausente | `require_tools` aborta cedo nomeando a ferramenta + como instalar | Mensagem acionável, exit ≠ 0, sem sentinela |
+| Espaço insuficiente | `check_disk_space` aborta antes de baixar | Diz espaço necessário vs. disponível |
+| Download 403/HTML disfarçado de sucesso | `verify_zip` rejeita conteúdo não-PK | Não escreve `.complete`; tenta fallback (ICBHI) |
+| Download interrompido | `curl -C -` / `wget --continue` retomam | Segunda execução continua de onde parou |
+| Dataverse fora do ar (ICBHI) | Fallback para URL original com `--no-check-certificate` + `verify_zip` | ICBHI ainda obtível; TLS não verificado é mitigado pela verificação |
+| `unzip` falha (zip corrompido/parcial) | Erro registrado, sem `.complete` | Dataset elegível a nova tentativa |
+| Falha em 1 dataset | Os outros continuam; exit final ≠ 0 | Resumo mostra qual falhou |
+
+---
+
+## Risks & Concerns
+
+| Concern | Impacto | Mitigação |
+| --- | --- | --- |
+| **`--no-check-certificate` baixa por TLS não verificado** (fonte alt. do ICBHI) | Conteúdo poderia ser adulterado/interceptado | Só na fonte alternativa; `verify_zip` (assinatura + tamanho) obrigatório antes de aceitar; Dataverse é a primária e é verificável |
+| **Download "bem-sucedido" que é página de erro** (visto no ICBHI 403) | `.complete` marcado sobre lixo → idempotência corrompida, F2 quebra depois | `verify_zip` checa magic bytes `PK` e tamanho mínimo; nunca marca `.complete` sem passar |
+| **Endoscapes ~6 GB** em rede acadêmica | Download longo, sujeito a corte | `wget --continue`; `check_disk_space` antes; sentinela evita rebaixar |
+| **`wfdb.dl_database` sem verificação de completude** | Pode deixar o CTU-UHB pela metade | Verificar contagem mínima de `.hea`/`.dat` antes de `.complete` |
+| **Estimativa de espaço imprecisa** | Aborto indevido ou download que estoura o disco | Usar soma conservadora (~10 GB) com margem; documentar no script |
+
+> Sem código legado para flagear — feature nova, greenfield.
+
+---
+
+## Tech Decisions
+
+| Decisão | Escolha | Rationale |
+| --- | --- | --- |
+| Fonte primária do ICBHI | Harvard Dataverse | A URL original 403a o site inteiro; Dataverse é aberto, citável e responde (206/resume) |
+| Fonte alternativa do ICBHI | URL original + `--no-check-certificate` | Pedido do usuário; cobre redes onde o site responde |
+| Verificação de conteúdo | Assinatura `PK` + tamanho mínimo, sempre | Um 403/HTML com exit 0 não pode virar `.complete` (L-020) |
+| Idempotência | Sentinela `.complete` por dataset | Presença do diretório não distingue parcial de completo |
+| Downloader | `curl -L -C -` (ICBHI/Dataverse) e `wget --continue` (Endoscapes) | Ambos suportam resume; escolha por qual lida melhor com cada origem (Dataverse redireciona 303→`curl -L`) |
+| Linguagem | Shell + 1 chamada Python | Idempotência/resume/unzip são naturais em shell; CTU-UHB exige `wfdb` (Python) |
+| Isolamento | Script não importa `backend/` | Aquisição roda antes dos pipelines; sem acoplamento |
+
+> Nenhuma decisão aqui é project-level nova — as ADs relevantes (AD-030 estrutura, AD-031 F0, AD-033 Endoscapes) já estão no STATE.
