@@ -45,6 +45,30 @@ require_tools() {
     return "$missing"
 }
 
+# verify_zip — aceita só um zip real (DATA-09, DATA-13).
+# Rejeita página de erro HTML (o caso do ICBHI 403, que vinha com exit 0) e
+# arquivos pequenos demais, checando a assinatura PK\x03\x04 e o tamanho.
+verify_zip() {
+    local path="$1"
+    if [ ! -f "$path" ]; then
+        err "arquivo inexistente: $path"
+        return 1
+    fi
+    local size
+    size=$(stat -c %s "$path" 2>/dev/null || echo 0)
+    if [ "$size" -lt "$MIN_ZIP_BYTES" ]; then
+        err "arquivo pequeno demais para ser um dataset ($size bytes): $path"
+        return 1
+    fi
+    local magic
+    magic=$(head -c 4 "$path" | od -An -tx1 | tr -d ' \n')
+    if [ "$magic" != "504b0304" ]; then
+        err "conteúdo não é um zip (assinatura '$magic') — possível página de erro: $path"
+        return 1
+    fi
+    return 0
+}
+
 main() {
     require_tools || return 1
     # fetch_ctu_uhb / fetch_icbhi / fetch_endoscapes e o resumo entram nas próximas tarefas.
