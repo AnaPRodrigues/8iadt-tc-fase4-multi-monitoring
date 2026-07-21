@@ -134,6 +134,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: ICBHI 403 (process)
 - last seen: 2026-07-20T23:55:54Z
 
+### L-021 — Test resume behavior by stubbing the downloader to assert the resume flag is passed, not just that a download succeeds
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `scripts` · harmful: 0
+- features: data-acquisition
+- evidence: M10/M11 (download_datasets.sh:184,128) (scripts)
+- last seen: 2026-07-21T01:30:56Z
+
+### L-022 — When a later backstop can mask an earlier guard, add a test that isolates the guard with input only it rejects
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `scripts` · harmful: 0
+- features: data-acquisition
+- evidence: M8/M9 (download_datasets.sh:190,134) (scripts)
+- last seen: 2026-07-21T01:30:56Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.
