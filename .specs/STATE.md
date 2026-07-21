@@ -298,6 +298,14 @@
 - **Date**: 2026-07-21
 - **Status**: active
 
+### AD-038
+- **Decision**: A fundação AWS (factory de cliente boto3 por `ENV`, adapters `TextExtractor`/`ImageAnalyzer`, IaC idempotente que provisiona os recursos nos dois ambientes) é uma **feature dedicada `aws-foundation`**, construída **antes** de F4/F1/F5, que passam a depender dela. Os **testes de integração usam LocalStack real** (Docker), conforme escolha do usuário — não moto. Docker é pré-requisito do Execute desta feature.
+- **Reason**: A infra AWS é compartilhada por três features; isolá-la numa fatia fechada e verificável evita acoplá-la à lógica de prescrição (F4) e ter que extraí-la depois para F1/F5. LocalStack real dá fidelidade ao ambiente-alvo.
+- **Trade-off**: Adiciona uma feature ao caminho antes de entregar valor de F4; e o Execute fica bloqueado por Docker (instalação de sistema, sudo).
+- **Scope**: nova feature `aws-foundation`; pré-requisito de F4, F1, F5.
+- **Date**: 2026-07-21
+- **Status**: active
+
 ## Handoff
 
 - **Feature**: Arquitetura LocalStack/AWS registrada (AD-034..037). Próxima a construir: fundação AWS (factory + adapters + IaC) e depois F4.
