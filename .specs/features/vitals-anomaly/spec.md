@@ -1,5 +1,16 @@
 # F3 — Vitals Anomaly Detection Specification
 
+> **⚠️ EMENDA (2026-07-21) — segundo caso de sinais vitais (AD-040).** O caso CTU-UHB
+> (materno-fetal, FHR + contração, rótulo por pH) está **implementado, verificado e FECHADO** —
+> tudo abaixo permanece válido. A emenda **acrescenta** um segundo caso: **BIDMC PPG and
+> Respiration** (aberto, via `wfdb.dl_database('bidmc', ...)`), com **HR e SpO2** reais de UTI
+> adulto, para cobrir "batimentos" e "oxigenação" do enunciado (a F3 só tinha FHR fetal). Os mesmos
+> detectores (rolling z-score + IsolationForest) são aplicados; métricas contra faixas/rótulos
+> clínicos reais. **Pressão arterial (PA)** fica como trabalho futuro (waveform aberto ~só no MIMIC
+> credenciado). Isso **REABRE a F3** para: loader do BIDMC, aplicação dos detectores ao novo
+> formato, métricas e evidência — com Design/Tasks/Execute e nova verificação próprios. MIT-BIH
+> permanece descopado (AD-028; BIDMC o torna redundante).
+
 ## Problem Statement
 
 A equipe médica precisa identificar precocemente sinais de risco em sinais vitais sem depender de
@@ -16,6 +27,7 @@ demonstrada no vídeo.
 - [ ] Compor uma timeline de demo concatenando registros CTU-UHB reais (ex.: normal → patológico) para simular deterioração ao longo da internação, mantendo o dado 100% real.
 - [ ] Incluir opcionalmente o MIT-BIH Arrhythmia (ECG anotado) como segundo caso de série vital.
 - [ ] Produzir evidência reproduzível (gráfico + metadados) para cada anomalia detectada, consumível pela fusão (F5).
+- [ ] **(Emenda, AD-040)** Adicionar o caso BIDMC (HR, SpO2, RESP de UTI adulto) como segundo domínio de série vital, com os mesmos detectores e métricas contra faixas/rótulos clínicos reais. PA = trabalho futuro.
 
 ## Out of Scope
 

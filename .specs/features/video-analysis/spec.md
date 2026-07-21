@@ -1,23 +1,33 @@
 # F1 — Video Analysis Specification
 
+> **⚠️ EMENDA (2026-07-21) — esta spec está sendo reescrita.** O Problem Statement e os Goals
+> abaixo já refletem a estrutura de **duas raias** (AD-033, AD-035, AD-039). As seções seguintes
+> (User Stories, ACs, Traceability) ainda são da versão antiga (Cholec80-CVS / sequência de fases,
+> AD-023) e serão **reconciliadas no Design da F1**. Onde houver conflito, valem o Problem
+> Statement/Goals atualizados e as ADs.
+
 ## Problem Statement
 
-A equipe médica precisa identificar desvios de procedimento em vídeos clínicos (ex.: instrumento
-usado fora da fase esperada, ausência de instrumento esperado) sem revisar cada gravação
-manualmente. Assim como em F3, priorizamos dado real e anotado: o Cholec80-CVS fornece vídeo
-cirúrgico laparoscópico real com anotação de fase/instrumento, permitindo detectar anomalia como
-desvio da sequência anotada em vez de fabricar eventos. Complementarmente, keyframes selecionados
-são analisados na nuvem via Rekognition, demonstrando a integração de serviços gerenciados de IA
-exigida pelo desafio (AD-023: escopo restrito ao pipeline cirúrgico, sem MediaPipe Pose/clipe
-gravado pelo grupo).
+O enunciado exige duas coisas de vídeo: **análise postural** (Req.1) e **detecção de objeto/área
+crítica** (Req.1), além de **padrões de movimentação do paciente** (Req.3). A F1 atende isso com
+**duas raias, ambas com dado real aberto** (sem gravação do grupo, sem credenciamento):
+
+- **Raia pose/movimento** (AD-039): **URFD** (UR Fall Detection) → **MediaPipe Pose** extrai
+  keypoints por frame → assimetria, amplitude de movimento, velocidade e detecção de queda
+  (variação brusca do centro de massa). Classificação **queda vs ADL** com métricas de
+  precision/recall contra o rótulo real. Fecha Req.1 (postura) e Req.3 (movimentação).
+- **Raia objeto/área crítica** (AD-033/035): frames cirúrgicos do **Endoscapes2023** →
+  **YOLOv8 local** para instrumentos/objetos; na nuvem, keyframes → S3 → Lambda → `ImageAnalyzer`
+  (adapter: Rekognition no cloud, YOLOv8 no local). Fecha Req.1 (detecção de objeto).
+
+Cholec80-CVS (anotações XLSX, sem vídeo) permanece como enriquecimento opcional.
 
 ## Goals
 
-- [ ] Carregar vídeos do Cholec80-CVS com sua anotação real de fase/instrumento como ground truth.
-- [ ] Detectar eventos fora da sequência de fases esperada usando YOLOv8 local (anomalia = desvio da anotação).
-- [ ] Complementar com análise de keyframes na nuvem via S3 → Lambda → Rekognition (labels/objetos).
-- [ ] Produzir evidência reproduzível (frame anotado + JSON de eventos) e um relatório automático por vídeo, consumíveis pela fusão (F5).
-- [ ] Medir precision/recall/F1 dos eventos detectados contra a anotação real.
+- [ ] **Raia pose**: carregar sequências RGB do URFD (queda + ADL), extrair keypoints com MediaPipe Pose, calcular assimetria/amplitude/velocidade/queda e classificar queda vs ADL, com precision/recall/F1 contra o rótulo real.
+- [ ] **Raia objeto**: rodar YOLOv8 sobre frames do Endoscapes para instrumentos/objetos; na nuvem, keyframes via `ImageAnalyzer` (Rekognition/YOLOv8 por `ENV`).
+- [ ] Produzir evidência reproduzível das duas raias (frame anotado + JSON de eventos) no contrato único (AD-026), consumível pela fusão (F5).
+- [ ] Gerar relatório automático por vídeo/sequência indicando desvios (Req.1).
 
 ## Out of Scope
 

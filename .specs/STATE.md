@@ -288,7 +288,7 @@
 - **Trade-off**: Sem fonte aberta de vídeo de corpo inteiro, o MediaPipe Pose (AD-006) fica sem uso imediato e o caso "fisioterapia/queda" do enunciado vira contingente a um dataset futuro. F1 no caminho crítico é detecção sobre frames cirúrgicos (Endoscapes), não análise postural.
 - **Scope**: F1 (video-analysis). **Reafirma a AD-033** (não a supersede); torna a aplicação de MediaPipe (AD-006) condicional a uma fonte aberta futura.
 - **Date**: 2026-07-21
-- **Status**: active
+- **Status**: superseded by AD-039
 
 ### AD-037
 - **Decision**: A estrutura de `backend/aws/` é: `clients.py` (factory de cliente boto3 por `ENV`, AD-034), `adapters/` (`TextExtractor`/`ImageAnalyzer` cloud+local, AD-035), `lambdas/` (handlers de Lambda). Acrescenta-se `docker-compose.yml` (sobe LocalStack), `.env.local`/`.env.cloud`/`.env.example`, e alvos no `Makefile`: `localstack-up`/`localstack-down` (docker-compose) e `infra-local`/`infra-cloud` (mesma IaC nos dois ambientes, só muda o endpoint). `.env.local` e `.env.cloud` entram no `.gitignore`; só `.env.example` é versionado. Refina a AD-030.
@@ -306,14 +306,58 @@
 - **Date**: 2026-07-21
 - **Status**: active
 
+### AD-039
+- **Decision**: A raia de **pose/movimento** de F1 usa o **UR Fall Detection Dataset (URFD)** — dado real aberto, sem credenciamento e sem gravação do grupo. Fonte: `https://fenix.ur.edu.pl/~mkepski/ds/uf.html`; zips por sequência em `https://fenix.ur.edu.pl/~mkepski/ds/data/<seq>-cam0-rgb.zip` (verificado: HTTP 206, `application/zip`, magic `PK`). Conteúdo: 70 sequências (30 quedas + 40 ADL), RGB corpo inteiro 640×480 em PNG + acelerômetro. **MediaPipe Pose** extrai keypoints por frame → assimetria, amplitude, velocidade, detecção de queda (variação brusca do centro de massa); classificação **queda vs ADL** com métricas precision/recall contra o rótulo real. Isso **fecha o Requisito 1 (análise postural)** e o **Requisito 3 (padrões de movimentação do paciente)**. F1 passa a ter **duas raias**: pose (URFD + MediaPipe) e objeto/área crítica (Endoscapes/Cholec80 + YOLOv8/`ImageAnalyzer`). **Supersede a AD-036** (MediaPipe deixa de ser condicional — URFD é a fonte).
+- **Reason**: URFD é a fonte aberta que faltava para habilitar MediaPipe sem gravação do grupo e com rótulo real (fall/ADL), cobrindo dois requisitos obrigatórios que estavam sem fonte.
+- **Trade-off**: URFD são sequências de PNG por câmera (não vídeo contínuo nem clínico) e ~70 zips a baixar; o cenário é queda/ADL genérico, não fisioterapia clínica — mas atende "análise postural" e "padrões de movimentação". AD-006 (MediaPipe) volta a ser incondicional.
+- **Scope**: F1 (video-analysis), raia pose; F0 (nova fonte). Supersede AD-036; reafirma AD-033 para a raia objeto.
+- **Date**: 2026-07-21
+- **Status**: active
+
+### AD-040
+- **Decision**: F3 ganha um **segundo caso de sinais vitais** com o **BIDMC PPG and Respiration Dataset** — aberto, sem credenciamento (subconjunto liberado do MIMIC-II matched, SEM a barreira do MIMIC). Fonte: `https://physionet.org/content/bidmc/1.0.0/` (verificado: página HTTP 200); baixável via `wfdb.dl_database('bidmc', 'data/bidmc')`. Conteúdo: 53 gravações de 8 min de UTI adulto; numéricos a 1 Hz — **HR, PULSE, RESP, SpO2** — + ECG e PPG a 125 Hz. Cobre **"batimentos" (HR)** e **"oxigenação" (SpO2)** com sinal real de internação. CTU-UHB permanece como caso materno-fetal (FHR + contração). **Pressão arterial (PA)** fica documentada como **trabalho futuro** (PA em waveform aberto praticamente só no MIMIC credenciado). **MIT-BIH (AD-028) permanece descopado** — BIDMC já entrega HR derivado de ECG, tornando-o redundante.
+- **Reason**: Fecha o gap parcial de sinais vitais (o enunciado exemplifica batimento/PA/SpO2; F3 só tinha FHR fetal). BIDMC dá HR e SpO2 reais de internação sem credenciamento.
+- **Trade-off**: PA continua descoberta (aceito como trabalho futuro); F3 passa a lidar com dois formatos/domínios de série (CTG materno-fetal e UTI adulto).
+- **Scope**: F3 (vitals-anomaly), segundo caso; F0 (nova fonte). Complementa AD-021; mantém AD-028 (MIT-BIH descopado).
+- **Date**: 2026-07-21
+- **Status**: active
+
+## Rastreabilidade de Requisitos Obrigatórios
+
+Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) às features.
+
+| Requisito do enunciado | Feature / cobertura | Status |
+| --- | --- | --- |
+| Req.1 — Vídeo: análise postural (OpenPose/pose) | F1 raia pose: URFD + MediaPipe Pose (AD-039) | ✅ Coberto |
+| Req.1 — Vídeo: detecção de objeto/área crítica (YOLOv8) | F1 raia objeto: Endoscapes/Cholec80 + YOLOv8/Rekognition (AD-033/035) | ✅ Coberto |
+| Req.1 — Vídeo: relatórios automáticos de desvios | F1 (saída: JSON de eventos + frames anotados + relatório) | ✅ Planejado |
+| Req.2 — Áudio: alterações vocais (cansaço, dif. respiratória) | F2: ICBHI (crackle/wheeze) + jitter/shimmer/HNR (AD-020) | ✅ Planejado |
+| Req.2 — Áudio: transcrição (Azure STT → faster-whisper) | F2 (AD-003) | ✅ Substituído |
+| Req.2 — Áudio: termos críticos + sentimento (Text Analytics → local) | F2 (AD-003) | ✅ Substituído |
+| Req.2 — Áudio: disartria | Trabalho futuro (sem dataset aberto rotulado, AD-020) | ⚠️ Deferido |
+| Req.3 — Vitais: batimentos (HR) | F3 caso UTI: BIDMC (AD-040) + FHR do CTU-UHB | ✅ Coberto |
+| Req.3 — Vitais: oxigenação (SpO2) | F3 caso UTI: BIDMC (AD-040) | ✅ Coberto |
+| Req.3 — Vitais: pressão arterial (PA) | Trabalho futuro (PA aberta ~só no MIMIC credenciado, AD-040) | ⚠️ Deferido |
+| Req.3 — Prescrições: evolução | F4: Textract/adapter + regras (AD-022/035) | ✅ Planejado |
+| Req.3 — Padrões de movimentação do paciente | F1 raia pose: URFD fall/ADL (AD-039) | ✅ Coberto |
+| Req.3 — Alertas automáticos à equipe | F5: Lambda → SNS (AD-004/024) | ✅ Planejado |
+| Objetivo — Fusão multimodal | F5: late fusion + risk score (AD-024) | ✅ Planejado |
+| Objetivo — Nuvem gerenciada (Azure → AWS) | AWS Learner Lab + LocalStack (AD-001/034); **explicar a troca no relatório/vídeo** | ✅ Substituído |
+| Objetivo — Tempo real | Near-real-time por micro-batch (AD-011) | ✅ Substituído |
+| Entregável — Relatório técnico | Pendente (escrever ao final) | ⏳ Pendente |
+| Entregável — Vídeo demo ≤15 min | Pendente (gravar ao final) | ⏳ Pendente |
+
+Lacunas obrigatórias remanescentes: **nenhuma** (PA e disartria são deferidas com justificativa, não requisitos-lista obrigatórios estritos). Entregáveis (relatório + vídeo) pendentes por natureza (fase final).
+
 ## Handoff
 
-- **Feature**: Arquitetura LocalStack/AWS registrada (AD-034..037). Próxima a construir: fundação AWS (factory + adapters + IaC) e depois F4.
-- **Phase / Task**: F0 e F3 FECHADAS (Verifier PASS). **Novo brief absorvido**: AD-034 (duplo-profile LocalStack/AWS via `ENV`), AD-035 (adapter Textract/Rekognition ↔ Tesseract/YOLOv8 local), AD-036 (F1 = Endoscapes aberto, **sem gravação do grupo**, MediaPipe condicional a dataset aberto futuro), AD-037 (estrutura `backend/aws/` + docker-compose + `.env` + alvos Make). AD-033 reafirmada (Endoscapes NÃO é órfão). Esqueleto estendido.
+- **Feature**: Emenda de cobertura de requisitos aplicada (AD-039 URFD, AD-040 BIDMC). Aguardando aprovação do usuário para executar. Próxima construção: fundação AWS (aws-foundation) e reabertura de F0/F3/F1.
+- **Phase / Task**: **Emenda documentada, PARADO em ponto seguro para retomar amanhã.** STATE + specs de F0/F1/F3 revisadas para aprovação; **nada executado**. F0 e F3 seguem fechadas para o que já tinham; a emenda as REABRE para acréscimos (URFD/BIDMC).
 - **Completed**: AD-001 a AD-033. **F3** fechada (Verifier passe 6 PASS) e migrada para `backend/`. **F0** fechada (Verifier PASS): `backend/scripts/download_datasets.sh` completo; 32 testes de F0 (19 unit + 13 integração), suíte total **197 verdes**, lint limpo; idempotência confirmada com `make data` real (pulou os 3). **Datasets reais baixados** em `data/`: CTU-UHB (552 registros), ICBHI (920 wav + 922 txt), Endoscapes2023 (6.28 GB, extraído). Commits F0 T1–T7: `9045e32`,`b5b779c`,`b1ce73a`,`2a8a832`,`9622662`,`58dc9c1`,`ee405af`.
 - **In-progress**: nada. Verifier de F0 concluído.
-- **Next step**: (1) **Fundação AWS** habilitada por AD-034/035/037 — `backend/aws/clients.py` (factory boto3 por `ENV`), `adapters/` (`TextExtractor`/`ImageAnalyzer` cloud+local), IaC idempotente em `infra/` + `aws.provision`, docker-compose do LocalStack. Isso destrava F4/F1/F5 e permite dev/teste offline (nenhuma sessão AWS necessária no profile local). (2) Depois, **F4 (prescription-analysis)** usando `TextExtractor` (Textract no cloud, Tesseract/pdfplumber no local). Com LocalStack, o Execute de F4 **não** exige mais sessão do Learner Lab. Instalar no venv: `boto3`, `pytesseract`/`pdfplumber`, `reportlab` (gerador de PDF sintético).
-- **Blockers**: none para o Design da fundação AWS/F4. Docker precisa estar disponível para `make localstack-up` (profile local). F1 continua usando o Endoscapes já baixado; MediaPipe só se surgir dataset aberto de corpo inteiro (AD-036).
+- **Next step** (ao retomar amanhã, após aprovação da emenda): (1) **Reabrir F0** — Design/Tasks/Execute de `fetch_urfd` (DATA-14, ~70 zips URFD) e `fetch_bidmc` (DATA-15, wfdb), + verificação; confirmar antes se o Endoscapes fica no F0 (a emenda listou 4 fontes sem citá-lo — ver Assumptions da spec de F0). (2) **aws-foundation** (spec pronta, aguarda aprovação + Docker instalado): factory boto3 por `ENV`, adapters, IaC idempotente. (3) **F4** sobre a fundação. F1 e F3 ganham as raias/casos novos (URFD pose; BIDMC vitais) quando forem construídas. Aprovar a spec da aws-foundation também.
+- **Blockers**: aprovação da emenda + da spec da aws-foundation. Docker (sudo) para o Execute com LocalStack. Instalar no venv quando for a hora: `pytesseract`/`pdfplumber`/`reportlab` (F4), e libs de pose (MediaPipe) + YOLOv8/ultralytics (F1).
+- **Fontes verificadas na emenda (não re-checar)**: URFD zips em `https://fenix.ur.edu.pl/~mkepski/ds/data/{fall,adl}-NN-cam0-rgb.zip` (fall 01–30, adl 01–40) — HTTP 206, `application/zip`, magic `PK`. BIDMC via `wfdb.dl_database('bidmc', ...)` — página PhysioNet HTTP 200.
 - **Residual aceito em F0**: 4 mutantes sobreviventes (dívida de teste P2, não bugs): retomada `-C -`/`--continue` sem teste comportamental (L-021) e defesa-em-profundidade do verify_zip do endoscapes (unzip é backstop, L-022). A propriedade central ("`.complete` só sobre zip real") é testada e morre por mutação.
 - **Uncommitted files**: `.specs/` (validation.md de F0, lessons, status de spec/tasks/STATE) — commitar.
 - **Branch**: `feat/f3-vitals-anomaly` (contém F3 + reestruturação + F0; `main` só tem o commit inicial — estratégia de merge/rename a decidir).

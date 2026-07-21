@@ -10,7 +10,7 @@ todas as demais e os downloads (GB) rodam em paralelo enquanto o resto do SDD é
 
 ## Goals
 
-- [ ] Baixar as três fontes abertas sem barreira (CTU-UHB, ICBHI 2017, Endoscapes2023) por um único comando (`make data`).
+- [ ] Baixar as fontes abertas sem barreira por um único comando (`make data`): CTU-UHB, ICBHI 2017, Endoscapes2023, **URFD** (pose/movimento, AD-039) e **BIDMC** (vitais UTI, AD-040).
 - [ ] Ser idempotente: re-executar não rebaixa o que já existe.
 - [ ] Retomar downloads interrompidos em vez de recomeçar do zero.
 - [ ] Manter `data/` fora do Git, versionando apenas o script e `data/README.md`.
@@ -36,7 +36,10 @@ todas as demais e os downloads (GB) rodam em paralelo enquanto o resto do SDD é
 | Método CTU-UHB | `wfdb.dl_database('ctu-uhb-ctgdb', 'data/ctu-uhb')` | `wfdb` já é dependência de F3; API oficial do PhysioNet | y |
 | Fonte do ICBHI 2017 | **Primária**: Harvard Dataverse, DOI `10.7910/DVN/HT6PKI` → `https://dataverse.harvard.edu/api/access/datafile/7127117` (zip único, ~1.9 GB, HTTP 206/resume) → `data/icbhi/`. **Alternativa**: a URL original `bhichallenge.med.auth.gr` (variável no topo), que exige `--no-check-certificate` por ter cert SSL autoassinado — do ambiente atual o site retorna HTTP 403, mas a alternativa fica pronta para redes onde ele responde | Dataverse é aberto/citável e funciona daqui; a alternativa cobre quem quiser a fonte original. Mesmo `ICBHI_final_database.zip` nas duas | y |
 | Trade-off de segurança do `--no-check-certificate` | Só aplicado à fonte alternativa do ICBHI; obrigatório verificar o zip baixado (assinatura PK + tamanho, e checksum se disponível) antes de escrever `.complete` | Baixar por TLS não verificado exige confirmar que o conteúdo é o zip esperado, não um interceptador/página de erro — ver DATA-12, DATA-13 | y |
-| Âncora de vídeo/frames | **Endoscapes2023** via `wget --continue` de `https://s3.unistra.fr/camma_public/datasets/endoscapes/endoscapes.zip` (~6 GB) → `data/endoscapes/`, seguido de `unzip`. Substitui o Cholec80-CVS (AD-033) | Cholec80-CVS aberto é só anotações (24 KB xlsx); vídeos exigem CAMMA. Endoscapes é aberto, por URL direta, com frames+bbox COCO reais | y |
+| Âncora de vídeo/frames (raia objeto de F1) | **Endoscapes2023** via `wget --continue` de `https://s3.unistra.fr/camma_public/datasets/endoscapes/endoscapes.zip` (~6 GB) → `data/endoscapes/`, seguido de `unzip`. Substitui o Cholec80-CVS (AD-033) | Cholec80-CVS aberto é só anotações (24 KB xlsx); vídeos exigem CAMMA. Endoscapes é aberto, por URL direta, com frames+bbox COCO reais | y |
+| Fonte de pose/movimento (raia pose de F1, AD-039) | **URFD** — `~70` zips por sequência em `https://fenix.ur.edu.pl/~mkepski/ds/data/{fall,adl}-NN-cam0-rgb.zip` (fall 01–30, adl 01–40), `wget --continue` + `unzip` para `data/urfd/`. Verificado: HTTP 206, `application/zip`, magic `PK`. No mínimo câmera 0 RGB | Único dataset aberto de vídeo de corpo inteiro com rótulo real (fall/ADL); habilita MediaPipe (Req.1 postura + Req.3 movimentação) | y |
+| Fonte de vitais UTI (segundo caso de F3, AD-040) | **BIDMC** via `wfdb.dl_database('bidmc', 'data/bidmc')`. Verificado: página PhysioNet HTTP 200 | Aberto (subconjunto liberado do MIMIC-II, sem credenciamento); traz HR e SpO2 reais de internação | y |
+| Endoscapes na lista da emenda | A emenda lista 4 fontes (CTU-UHB, ICBHI, URFD, BIDMC) e **não** cita o Endoscapes, mas a raia objeto de F1 usa Endoscapes (já baixado). Default proposto: **manter** o Endoscapes no script (5 fontes no total) | F1 depende do Endoscapes; removê-lo do F0 deixaria a raia objeto sem dado | **n — confirmar com o usuário na aprovação** |
 | Subconjunto do Endoscapes para a demo | Usar Endoscapes-BBox201 (1933 frames com bbox COCO) como base do YOLOv8; frames de CVS201 conforme F1 precisar | Bbox201 é o que dá rótulo de detecção real; definição fina fica com F1 | y |
 | Linguagem do script | Shell (`download_datasets.sh`) chamando Python só onde precisa (`wfdb`) | Idempotência, `wget --continue` e `unzip` são naturais em shell; a AD-031 admite `.sh` ou `.py` | y |
 | Limiar de espaço em disco | Estimar o total das três fontes e abortar se o livre for menor que esse total + margem | Evita download parcial que corrompe a idempotência ("existe mas incompleto") | y |
@@ -147,12 +150,14 @@ foi baixado quando o dataset publica hashes, para confiar que o `.complete` refl
 | DATA-11 | P2: Ferramenta ausente falha com mensagem acionável | T1 | Verified |
 | DATA-12 | P3: Verificação de checksum quando disponível | Design | Pending |
 | DATA-13 | P1/P2: Fonte primária + alternativa do ICBHI; validar zip real (assinatura PK); `--no-check-certificate` só na alternativa | T2, T5 | Verified |
+| DATA-14 | Emenda: download idempotente do URFD (~70 zips de sequência, câmera 0 RGB) → `data/urfd/`, com `verify_zip` e `.complete` (AD-039) | T8 (a criar) | Pending |
+| DATA-15 | Emenda: download idempotente do BIDMC via `wfdb.dl_database` → `data/bidmc/`, com verificação de completude (AD-040) | T9 (a criar) | Pending |
 
 **ID format:** `DATA-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 12 de 13 requisitos Verified (Verifier F0 PASS: 32 testes, 7/11 mutantes mortos; os 4 sobreviventes são dívida de teste P2 sobre retomada e defesa-em-profundidade — não bugs, `.complete` nunca sobre lixo). DATA-12 (checksum) diferido como P3. **F0 FECHADA.**
+**Coverage:** DATA-01..11,13 Verified (Verifier F0 PASS: 32 testes; DATA-12/checksum diferido P3). **DATA-14 (URFD) e DATA-15 (BIDMC) pendentes** — a emenda (AD-039/040) **REABRE a F0** para dois novos fetchers (T8 `fetch_urfd`, T9 `fetch_bidmc`), que precisam de Design/Tasks/Execute + nova verificação. O núcleo fechado permanece; só se acrescenta.
 
 ---
 
