@@ -4,6 +4,8 @@ Cada `ensure_*` checa existência antes de criar — nunca "cria e ignora erro d
 já existir". Roda igual nos dois ambientes; só o endpoint muda (via `ENV`).
 """
 
+import os
+import sys
 from dataclasses import dataclass
 
 from botocore.exceptions import ClientError
@@ -71,3 +73,38 @@ def ensure_table(name: str) -> ProvisionResult:
     client.get_waiter("table_exists").wait(TableName=name)
     log.info("tabela %s criada", name)
     return ProvisionResult(resource=name, created=True)
+
+
+def main() -> int:
+    """Provisiona os três recursos compartilhados (`make infra-local`/`infra-cloud`)."""
+    required = {
+        "S3_BUCKET": os.environ.get("S3_BUCKET"),
+        "SNS_TOPIC": os.environ.get("SNS_TOPIC"),
+        "DYNAMODB_TABLE": os.environ.get("DYNAMODB_TABLE"),
+    }
+    missing = [name for name, value in required.items() if not value]
+    if missing:
+        log.error("variável(is) ausente(s): %s", ", ".join(missing))
+        return 1
+
+    try:
+        results = [
+            ensure_bucket(required["S3_BUCKET"]),
+            ensure_topic(required["SNS_TOPIC"]),
+            ensure_table(required["DYNAMODB_TABLE"]),
+        ]
+    except Exception as exc:  # conexão recusada (LocalStack fora do ar), etc.
+        log.error(
+            "provisionamento falhou: %s\n"
+            "Se ENV=local, confirme que o LocalStack está de pé: make localstack-up",
+            exc,
+        )
+        return 1
+
+    for result in results:
+        log.info("%s: %s", result.resource, "criado" if result.created else "já existia")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

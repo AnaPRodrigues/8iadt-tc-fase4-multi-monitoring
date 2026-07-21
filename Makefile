@@ -32,12 +32,15 @@ localstack-down:
 	docker compose down
 
 # --- IaC idempotente (mesmos recursos nos dois ambientes, AD-034) ---
-# Provisionadas na feature de infra; por ora apenas os alvos.
+# Sourcing do .env.* é opcional: se ausente, usa o que já estiver no ambiente
+# (útil em testes que exportam as variáveis diretamente).
 infra-local:
-	ENV=local $(PY) -m aws.provision
+	bash -c 'set -a; [ -f .env.local ] && source .env.local; set +a; \
+	  PYTHONPATH=backend ENV=local $(PY) -m aws.provision'
 
 infra-cloud:
-	ENV=cloud $(PY) -m aws.provision
+	bash -c 'set -a; [ -f .env.cloud ] && source .env.cloud; set +a; \
+	  PYTHONPATH=backend ENV=cloud $(PY) -m aws.provision'
 
 clean:
 	rm -rf output/* .pytest_cache
