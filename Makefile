@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: install data demo test test-unit lint fmt clean localstack-up localstack-down infra-local infra-cloud
+.PHONY: install data demo test test-unit lint fmt clean localstack-up localstack-down infra-local infra-cloud infra-prescription-local infra-prescription-cloud
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -41,6 +41,17 @@ infra-local:
 infra-cloud:
 	bash -c 'set -a; [ -f .env.cloud ] && source .env.cloud; set +a; \
 	  PYTHONPATH=backend ENV=cloud $(PY) -m aws.provision'
+
+# --- F4: Lambda de prescrições + gatilho S3 (específico da feature, sobre a IaC acima) ---
+infra-prescription-local:
+	bash -c 'set -a; [ -f .env.local ] && source .env.local; set +a; \
+	  PYTHONPATH=backend ENV=local $(PY) -m aws.provision && \
+	  PYTHONPATH=backend ENV=local $(PY) -m pipelines.prescription.infra'
+
+infra-prescription-cloud:
+	bash -c 'set -a; [ -f .env.cloud ] && source .env.cloud; set +a; \
+	  PYTHONPATH=backend ENV=cloud $(PY) -m aws.provision && \
+	  PYTHONPATH=backend ENV=cloud $(PY) -m pipelines.prescription.infra'
 
 clean:
 	rm -rf output/* .pytest_cache
