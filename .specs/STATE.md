@@ -268,15 +268,16 @@
 
 ## Handoff
 
-- **Feature**: F0 (data-acquisition) — implementação concluída. F3 fechada e migrada.
-- **Phase / Task**: F0 Execute COMPLETO — 7/7 tarefas implementadas, testadas e commitadas. **Parado num ponto seguro a pedido do usuário (pausa por tokens); o Verifier independente de F0 ainda NÃO rodou.**
-- **Completed**: AD-001 a AD-033. **F3 fechada** (Verifier passe 6 PASS) e migrada para `backend/`. **F0 implementada**: `backend/scripts/download_datasets.sh` (require_tools, verify_zip por magic bytes PK, sentinela `.complete`, check_disk_space, fetch_ctu_uhb, fetch_icbhi com Dataverse+fallback SSL, fetch_endoscapes, main com resumo e exit code). Testes via pytest dublando curl/wget/python no PATH — 25 testes de F0, suíte total 197 verdes, lint limpo. Commits T1–T7: `9045e32`, `b5b779c`, `b1ce73a`, `2a8a832`, `9622662`, `58dc9c1`, `ee405af`.
-- **In-progress**: nada em execução. Downloads em background: **CTU-UHB e ICBHI concluídos** (sentinela `.complete` OK; ICBHI = 920 wav + 922 txt); **Endoscapes ~4.4 GB de ~6 GB, AINDA baixando** (detached; grava `.complete` ao terminar).
-- **Next step** (ao retomar, nesta ordem): (1) rodar o **Verifier independente de F0** — passo de fechamento obrigatório do Execute, adiado só pela pausa; (2) confirmar que o Endoscapes terminou (`data/endoscapes/.complete`); (3) rodar `make data` de verdade e confirmar que os três datasets são reconhecidos como completos e pulados (idempotência ponta a ponta com dado real); (4) próxima feature do plano: F4 (prescription-analysis) — precisa de Design+Tasks+Execute; valida a integração AWS cedo.
-- **Blockers**: none.
-- **Uncommitted files**: `.specs/STATE.md` e `.specs/features/data-acquisition/tasks.md` (atualizações de status deste handoff) — commitar junto.
-- **Branch**: `feat/f3-vitals-anomaly` (contém F3 + reestruturação + F0; `main` só tem o commit inicial de planejamento — estratégia de merge/rename a decidir).
-- **Aberto (decisões futuras)**: estratégia de branch/merge para `main`; framework do `frontend/` (ainda não escolhido); DATA-12 (checksum) diferido como P3.
+- **Feature**: F0 (data-acquisition) FECHADA. Próxima: F4 (prescription-analysis).
+- **Phase / Task**: F0 FECHADA — Verifier PASS (0 bloqueadores). F3 fechada e migrada. Duas features prontas; faltam F4, F2, F1, F5.
+- **Completed**: AD-001 a AD-033. **F3** fechada (Verifier passe 6 PASS) e migrada para `backend/`. **F0** fechada (Verifier PASS): `backend/scripts/download_datasets.sh` completo; 32 testes de F0 (19 unit + 13 integração), suíte total **197 verdes**, lint limpo; idempotência confirmada com `make data` real (pulou os 3). **Datasets reais baixados** em `data/`: CTU-UHB (552 registros), ICBHI (920 wav + 922 txt), Endoscapes2023 (6.28 GB, extraído). Commits F0 T1–T7: `9045e32`,`b5b779c`,`b1ce73a`,`2a8a832`,`9622662`,`58dc9c1`,`ee405af`.
+- **In-progress**: nada. Verifier de F0 concluído.
+- **Next step**: **F4 (prescription-analysis)** — Specify já confirmado; falta Design → Tasks → Execute. É a fatia que valida a integração AWS cedo (S3 → Lambda → Textract → SNS + DynamoDB). Requer credenciais do Learner Lab (region us-east-1, role `LabRole`) e IaC recriável em `infra/` (AD-007, AD-014). Provável necessidade de instalar `boto3`/`reportlab` (gerador de PDF) no venv.
+- **Blockers**: none para começar o Design de F4. Para o Execute de F4 será preciso: sessão AWS Academy ativa + credenciais no ambiente (`.env`/profile), e definir a biblioteca de geração de PDF sintético (F4 é o único ponto com dado sintético, AD-022).
+- **Residual aceito em F0**: 4 mutantes sobreviventes (dívida de teste P2, não bugs): retomada `-C -`/`--continue` sem teste comportamental (L-021) e defesa-em-profundidade do verify_zip do endoscapes (unzip é backstop, L-022). A propriedade central ("`.complete` só sobre zip real") é testada e morre por mutação.
+- **Uncommitted files**: `.specs/` (validation.md de F0, lessons, status de spec/tasks/STATE) — commitar.
+- **Branch**: `feat/f3-vitals-anomaly` (contém F3 + reestruturação + F0; `main` só tem o commit inicial — estratégia de merge/rename a decidir).
+- **Aberto (decisões futuras)**: estratégia de branch/merge para `main`; framework do `frontend/`; DATA-12 (checksum) diferido P3.
 
 ### Achados verificados durante o Execute (não presumir de novo)
 

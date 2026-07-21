@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/data-acquisition/design.md`
-**Status**: In Progress — 7/7 tarefas implementadas e commitadas; **Verifier pendente** (adiado a pedido do usuário)
+**Status**: Done — 7/7 tarefas; **Verifier PASS** (validation.md). F0 FECHADA.
 
 ## Progresso
 

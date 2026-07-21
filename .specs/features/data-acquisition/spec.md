@@ -135,24 +135,24 @@ foi baixado quando o dataset publica hashes, para confiar que o `.complete` refl
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| DATA-01 | P1: Download CTU-UHB (wfdb) | Design | Pending |
-| DATA-02 | P1: Download ICBHI (wget --continue + unzip) | Design | Pending |
-| DATA-03 | P1: Download Endoscapes2023 (wget --continue + unzip) | Design | Pending |
-| DATA-05 | P1: URLs/paths como variáveis no topo | Design | Pending |
-| DATA-06 | P2: Retomada de download interrompido | Design | Pending |
-| DATA-07 | P1: Idempotência por dataset (pula se completo) | Design | Pending |
-| DATA-08 | P2: Checagem de espaço em disco antes de baixar | Design | Pending |
-| DATA-09 | P1/P2: Sentinela `.complete` só em sucesso; parcial ≠ completo | Design | Pending |
-| DATA-10 | P1: Log por dataset + resumo final (baixado/pulado/falhou) | Design | Pending |
-| DATA-11 | P2: Ferramenta ausente falha com mensagem acionável | Design | Pending |
+| DATA-01 | P1: Download CTU-UHB (wfdb) | T4 | Verified |
+| DATA-02 | P1: Download ICBHI (Dataverse + unzip) | T5 | Verified |
+| DATA-03 | P1: Download Endoscapes2023 (wget --continue + unzip) | T6 | Verified |
+| DATA-05 | P1: URLs/paths como variáveis no topo | T1 | Verified |
+| DATA-06 | P2: Retomada de download interrompido | T5, T6 | Verified (flags `-C -`/`--continue` corretos; retomada **não testada comportamentalmente** — dívida P2 aceita, L-021) |
+| DATA-07 | P1: Idempotência por dataset (pula se completo) | T3, T7 | Verified (também confirmado com `make data` real) |
+| DATA-08 | P2: Checagem de espaço em disco antes de baixar | T3 | Verified |
+| DATA-09 | P1/P2: Sentinela `.complete` só em sucesso; parcial ≠ completo | T2, T3, T4 | Verified |
+| DATA-10 | P1: Log por dataset + resumo final (baixado/pulado/falhou) | T7 | Verified |
+| DATA-11 | P2: Ferramenta ausente falha com mensagem acionável | T1 | Verified |
 | DATA-12 | P3: Verificação de checksum quando disponível | Design | Pending |
-| DATA-13 | P1/P2: Fonte primária + alternativa do ICBHI; validar que o download é zip real (assinatura PK), não página de erro; `--no-check-certificate` só na alternativa | Design | Pending |
+| DATA-13 | P1/P2: Fonte primária + alternativa do ICBHI; validar zip real (assinatura PK); `--no-check-certificate` só na alternativa | T2, T5 | Verified |
 
 **ID format:** `DATA-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 12 requisitos, 0 mapeados para tarefas (aguardando Design/Tasks).
+**Coverage:** 12 de 13 requisitos Verified (Verifier F0 PASS: 32 testes, 7/11 mutantes mortos; os 4 sobreviventes são dívida de teste P2 sobre retomada e defesa-em-profundidade — não bugs, `.complete` nunca sobre lixo). DATA-12 (checksum) diferido como P3. **F0 FECHADA.**
 
 ---
 
