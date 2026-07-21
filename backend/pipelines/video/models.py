@@ -34,3 +34,18 @@ class SequenceVerdict:
     seq_id: str
     predicted: str  # "queda" | "adl" | "dados_insuficientes"
     label: str  # "fall" | "adl" (rótulo real)
+
+
+@dataclass(frozen=True)
+class BoundingBox:
+    class_name: str
+    x: float
+    y: float
+    width: float
+    height: float
+
+
+@dataclass(frozen=True)
+class AnnotatedFrame:
+    image_path: Path
+    boxes: list[BoundingBox]
