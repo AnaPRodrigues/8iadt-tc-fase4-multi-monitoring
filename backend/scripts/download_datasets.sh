@@ -69,6 +69,25 @@ verify_zip() {
     return 0
 }
 
+# Idempotência (DATA-07): a sentinela `.complete` é a única coisa que autoriza pular.
+is_complete()   { [ -f "$1/.complete" ]; }
+mark_complete() { touch "$1/.complete"; }
+
+# check_disk_space (DATA-08): aborta antes de baixar se o livre < necessário.
+check_disk_space() {
+    local need="$1" avail
+    avail=$(df -PB1 "$DATA_DIR" 2>/dev/null | awk 'NR==2 {print $4}')
+    if [ -z "$avail" ]; then
+        err "não foi possível medir o espaço livre em $DATA_DIR"
+        return 1
+    fi
+    if [ "$avail" -lt "$need" ]; then
+        err "espaço insuficiente em $DATA_DIR: precisa de $need bytes, há $avail"
+        return 1
+    fi
+    return 0
+}
+
 main() {
     require_tools || return 1
     # fetch_ctu_uhb / fetch_icbhi / fetch_endoscapes e o resumo entram nas próximas tarefas.
