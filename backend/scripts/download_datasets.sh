@@ -88,6 +88,37 @@ check_disk_space() {
     return 0
 }
 
+# fetch_ctu_uhb — CTU-UHB via wfdb (DATA-01). Só marca completo com .hea/.dat presentes.
+# CTU_DEST é exportado para o python; o wfdb real usa o argumento do -c, e o stub
+# de teste usa o env — o mesmo contrato serve para os dois.
+fetch_ctu_uhb() {
+    local dest="$DATA_DIR/ctu-uhb"
+    if is_complete "$dest"; then
+        log "CTU-UHB: já completo — pulando"
+        FETCH_STATUS="pulado"
+        return 0
+    fi
+    mkdir -p "$dest"
+    log "CTU-UHB: baixando via wfdb.dl_database"
+    if ! CTU_DEST="$dest" "$PY" -c "import wfdb; wfdb.dl_database('$CTU_DB', '$dest')"; then
+        err "CTU-UHB: falha no wfdb.dl_database"
+        FETCH_STATUS="falhou"
+        return 1
+    fi
+    local n_hea n_dat
+    n_hea=$(find "$dest" -name '*.hea' | wc -l)
+    n_dat=$(find "$dest" -name '*.dat' | wc -l)
+    if [ "$n_hea" -lt 1 ] || [ "$n_dat" -lt 1 ]; then
+        err "CTU-UHB: download sem .hea/.dat ($n_hea/$n_dat) — não marcando completo"
+        FETCH_STATUS="falhou"
+        return 1
+    fi
+    mark_complete "$dest"
+    log "CTU-UHB: OK ($n_hea registros)"
+    FETCH_STATUS="baixado"
+    return 0
+}
+
 main() {
     require_tools || return 1
     # fetch_ctu_uhb / fetch_icbhi / fetch_endoscapes e o resumo entram nas próximas tarefas.
