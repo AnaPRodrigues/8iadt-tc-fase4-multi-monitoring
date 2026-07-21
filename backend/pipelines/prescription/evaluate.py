@@ -1,36 +1,69 @@
-"""Precision/recall do detector de dose fora de faixa contra o ground truth (PRESC-10).
+"""Precision/recall por tipo de anomalia, contra o ground truth do gerador (PRESC-10).
 
-O DynamoDB não persiste o veredito da regra, só o registro em si — este módulo
-reaplica `rules.check_dose_range` a cada registro e compara com o rótulo
-conhecido do gerador. Registros "sem_referencia" (medicamento fora do catálogo)
-são excluídos do cálculo, nunca contados como falso positivo/negativo (mesmo
-princípio de VITALS-10: indefinido não é a mesma coisa que zero).
+O DynamoDB não persiste o veredito das regras, só o registro em si — este módulo
+reaplica `rules.check_dose_range`/`check_abrupt_change` a cada registro e compara
+com o rótulo conhecido do gerador. Registros "sem_referencia" (medicamento fora
+do catálogo) são excluídos do cálculo de dose, nunca contados como falso
+positivo/negativo (mesmo princípio de VITALS-10: indefinido não é a mesma coisa
+que zero).
 """
 
-from common.metrics import MetricsReport, binary_metrics
+from collections import defaultdict
+from pathlib import Path
+
+from common.metrics import MetricsReport, binary_metrics, save_report
 from pipelines.prescription import rules
 from pipelines.prescription.models import GroundTruthEntry, PrescriptionRecord
 
 
 def evaluate(
     ground_truth: list[GroundTruthEntry], records: list[PrescriptionRecord]
-) -> MetricsReport:
-    """Compara o veredito de `check_dose_range` com o ground truth conhecido."""
-    records_by_patient_drug = {(r.patient_id, r.drug): r for r in records}
+) -> dict[str, MetricsReport]:
+    """Compara o veredito das duas regras com o ground truth conhecido.
 
-    y_true: list[bool] = []
-    y_pred: list[bool] = []
+    Casa cada rótulo ao registro exato por `(patient_id, drug, timestamp)` — em
+    sequências de mudança abrupta o mesmo paciente/medicamento aparece mais de
+    uma vez, então `(patient_id, drug)` sozinho não identifica o registro certo.
+    """
+    records_by_key = {(r.patient_id, r.drug, r.timestamp): r for r in records}
+
+    by_patient_drug: dict[tuple[str, str], list[PrescriptionRecord]] = defaultdict(list)
+    for record in records:
+        by_patient_drug[(record.patient_id, record.drug)].append(record)
+    for sequence in by_patient_drug.values():
+        sequence.sort(key=lambda r: r.timestamp)
+
+    dose_true: list[bool] = []
+    dose_pred: list[bool] = []
+    abrupt_true: list[bool] = []
+    abrupt_pred: list[bool] = []
 
     for entry in ground_truth:
-        record = records_by_patient_drug.get((entry.patient_id, entry.drug))
+        record = records_by_key.get((entry.patient_id, entry.drug, entry.timestamp))
         if record is None:
             continue
 
-        result = rules.check_dose_range(record)
-        if result.kind == "sem_referencia":
-            continue
+        dose_result = rules.check_dose_range(record)
+        if dose_result.kind != "sem_referencia":
+            dose_true.append(entry.anomaly_type == "dose_fora_de_faixa")
+            dose_pred.append(dose_result.kind == "dose_fora_de_faixa")
 
-        y_true.append(entry.is_anomalous)
-        y_pred.append(result.kind == "dose_fora_de_faixa")
+        sequence = by_patient_drug[(entry.patient_id, entry.drug)]
+        index = sequence.index(record)
+        previous = sequence[index - 1] if index > 0 else None
+        if previous is not None:
+            abrupt_result = rules.check_abrupt_change(record, previous)
+            abrupt_true.append(entry.anomaly_type == "mudanca_abrupta")
+            abrupt_pred.append(abrupt_result.kind == "mudanca_abrupta")
 
-    return binary_metrics(y_true, y_pred, detector="dose_fora_de_faixa")
+    return {
+        "dose_fora_de_faixa": binary_metrics(dose_true, dose_pred, detector="dose_fora_de_faixa"),
+        "mudanca_abrupta": binary_metrics(abrupt_true, abrupt_pred, detector="mudanca_abrupta"),
+    }
+
+
+def save_evaluation(reports: dict[str, MetricsReport], output_dir: Path) -> None:
+    """Persiste um relatório JSON por detector em `output_dir/<detector>.json`."""
+    output_dir = Path(output_dir)
+    for name, report in reports.items():
+        save_report(report, output_dir / f"{name}.json")

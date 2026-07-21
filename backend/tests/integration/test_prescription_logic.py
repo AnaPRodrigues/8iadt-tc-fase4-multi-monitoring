@@ -161,3 +161,67 @@ def test_handler_pdf_ilegivel_move_para_errors(table, bucket):
 def test_handler_evento_sem_records_nao_falha():
     response = lambda_handler({"Records": []}, context=None)
     assert response["statusCode"] == 200
+
+
+def test_handler_loga_arquivo_resultado_e_tipo_de_anomalia(table, bucket, caplog):
+    pdf_bytes = generate_prescription(
+        patient_id="p7", drug="paracetamol", dose=50000, frequency="8/8h", seed=7
+    )
+    client = get_client("s3")
+    key = "prescricoes/p7.pdf"
+    client.put_object(Bucket=bucket, Key=key, Body=pdf_bytes)
+    etag = client.head_object(Bucket=bucket, Key=key)["ETag"]
+
+    with caplog.at_level("INFO", logger="mm.prescription.handler"):
+        lambda_handler(_s3_event(bucket, key, etag), context=None)
+
+    assert bucket in caplog.text
+    assert key in caplog.text
+    assert "dose_fora_de_faixa" in caplog.text
+
+
+def test_handler_lote_com_um_corrompido_e_um_valido_processa_ambos(table, bucket):
+    client = get_client("s3")
+
+    key_valido = "prescricoes/valido.pdf"
+    pdf_bytes = generate_prescription(
+        patient_id="p8", drug="paracetamol", dose=500, frequency="8/8h", seed=8
+    )
+    client.put_object(Bucket=bucket, Key=key_valido, Body=pdf_bytes)
+    etag_valido = client.head_object(Bucket=bucket, Key=key_valido)["ETag"]
+
+    key_corrompido = "prescricoes/corrompido.pdf"
+    client.put_object(Bucket=bucket, Key=key_corrompido, Body=b"nao e um pdf valido")
+    etag_corrompido = client.head_object(Bucket=bucket, Key=key_corrompido)["ETag"]
+
+    event = {
+        "Records": [
+            {
+                "s3": {
+                    "bucket": {"name": bucket},
+                    "object": {"key": key_corrompido, "eTag": etag_corrompido},
+                }
+            },
+            {
+                "s3": {
+                    "bucket": {"name": bucket},
+                    "object": {"key": key_valido, "eTag": etag_valido},
+                }
+            },
+        ]
+    }
+
+    response = lambda_handler(event, context=None)
+
+    assert response["statusCode"] == 200
+    # o corrompido foi movido para errors/, mas isso não travou o processamento do válido
+    client.head_object(Bucket=bucket, Key=f"errors/{key_corrompido}")
+    client.head_object(Bucket=bucket, Key=key_valido)
+
+    ddb = get_client("dynamodb")
+    resp = ddb.query(
+        TableName=table,
+        KeyConditionExpression="pk = :pk",
+        ExpressionAttributeValues={":pk": {"S": "PATIENT#p8#DRUG#paracetamol"}},
+    )
+    assert len(resp["Items"]) == 1

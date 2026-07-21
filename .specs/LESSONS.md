@@ -164,6 +164,30 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: ensure_topic paginacao (tests)
 - last seen: 2026-07-21T16:49:51Z
 
+### L-026 — When a spec AC requires ground truth or labels to be written to a separate file, verify a file is actually created on disk — an in-memory return value is not a substitute.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `prescription` · harmful: 0
+- features: prescription-analysis
+- evidence: spec.md PRESC-01 AC1 / backend/pipelines/prescription/generator.py:64-110 (prescription)
+- last seen: 2026-07-21T20:14:39Z
+
+### L-027 — When testing that a category is excluded from a metrics calculation, use a ground-truth entry that would change the result if the exclusion were removed, not one that is already a true negative either way.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `metrics` · harmful: 0
+- features: prescription-analysis
+- evidence: backend/pipelines/prescription/evaluate.py:29-31 / backend/tests/prescription/test_prescription_evaluate.py:31-65 (metrics)
+- last seen: 2026-07-21T20:14:39Z
+
+### L-028 — When design.md or tasks.md commits to evaluating multiple categories/anomaly types, narrowing the implementation to one category without a SPEC_DEVIATION comment leaves an undocumented, undetected scope cut.
+- signal: `spec_deviation` · recurrence: 1 feature(s) · scope: `prescription` · harmful: 0
+- features: prescription-analysis
+- evidence: design.md evaluate.py Purpose vs backend/pipelines/prescription/evaluate.py:15-36 (só dose_fora_de_faixa) (prescription)
+- last seen: 2026-07-21T20:14:39Z
+
+### L-029 — When a spec AC requires an observable side effect such as a log statement or a persisted report file, assert its actual content or existence in a test, not just that the code path that produces it ran without raising.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `prescription` · harmful: 0
+- features: prescription-analysis
+- evidence: PRESC-06/PRESC-10 — backend/pipelines/prescription/handler.py:36,41,45-51; backend/pipelines/prescription/evaluate.py (no save_report call) (prescription)
+- last seen: 2026-07-21T20:14:48Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

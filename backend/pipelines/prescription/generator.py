@@ -18,9 +18,12 @@ T6, chamando ``generate_prescription`` duas vezes, não por um rótulo isolado
 aqui.
 """
 
+import dataclasses
 import io
+import json
 import random
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from reportlab.pdfgen import canvas
 
@@ -103,8 +106,107 @@ def generate_dataset(
                     dose=round(dose, 2),
                     is_anomalous=is_anomalous,
                     anomaly_type=anomaly_type,
+                    timestamp=_timestamp_from_seed(seed + i),
                 ),
             )
         )
 
     return dataset
+
+
+def generate_sequence_dataset(
+    n_sequences: int, seed: int, abrupt_rate: float = 0.3
+) -> list[tuple[bytes, GroundTruthEntry]]:
+    """Gera pares (baseline, seguinte) do mesmo paciente/medicamento, para avaliar
+    a regra de mudança abrupta (PRESC-12) — `generate_dataset` sozinho não produz
+    sequências, só casos independentes de dose fora de faixa.
+
+    Todo medicamento do catálogo tem `max_dose >= 2×min_dose`; usar os extremos da
+    faixa como baseline/seguinte garante uma variação > 50% sem sair da faixa
+    terapêutica (nunca contamina o rótulo com "dose_fora_de_faixa" também).
+    """
+    rng = random.Random(seed)
+    drugs = catalog.all_drugs()
+    dataset: list[tuple[bytes, GroundTruthEntry]] = []
+
+    for i in range(n_sequences):
+        drug = rng.choice(drugs)
+        drug_range = catalog.lookup(drug)
+        assert drug_range is not None  # vem do catálogo, sempre resolve
+        patient_id = f"seq-{seed}-{i:04d}"
+
+        baseline_seed = seed + 2 * i
+        baseline_dose = round(drug_range.min_dose, 2)
+        baseline_pdf = generate_prescription(
+            patient_id=patient_id,
+            drug=drug,
+            dose=baseline_dose,
+            frequency="8/8h",
+            seed=baseline_seed,
+        )
+        dataset.append(
+            (
+                baseline_pdf,
+                GroundTruthEntry(
+                    patient_id=patient_id,
+                    drug=drug,
+                    dose=baseline_dose,
+                    is_anomalous=False,
+                    anomaly_type=None,
+                    timestamp=_timestamp_from_seed(baseline_seed),
+                ),
+            )
+        )
+
+        is_abrupt = rng.random() < abrupt_rate
+        followup_seed = seed + 2 * i + 1
+        if is_abrupt:
+            followup_dose = round(drug_range.max_dose, 2)
+            anomaly_type = "mudanca_abrupta"
+        else:
+            followup_dose = round(baseline_dose * rng.uniform(0.95, 1.2), 2)
+            anomaly_type = None
+
+        followup_pdf = generate_prescription(
+            patient_id=patient_id,
+            drug=drug,
+            dose=followup_dose,
+            frequency="8/8h",
+            seed=followup_seed,
+        )
+        dataset.append(
+            (
+                followup_pdf,
+                GroundTruthEntry(
+                    patient_id=patient_id,
+                    drug=drug,
+                    dose=followup_dose,
+                    is_anomalous=is_abrupt,
+                    anomaly_type=anomaly_type,
+                    timestamp=_timestamp_from_seed(followup_seed),
+                ),
+            )
+        )
+
+    return dataset
+
+
+def generate_dataset_to_disk(
+    n: int, seed: int, anomaly_rate: float, output_dir: Path
+) -> list[GroundTruthEntry]:
+    """Gera o dataset e persiste os PDFs + o ground truth em arquivo separado (PRESC-01 AC1)."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    dataset = generate_dataset(n, seed, anomaly_rate)
+    entries = []
+    for pdf_bytes, entry in dataset:
+        (output_dir / f"{entry.patient_id}.pdf").write_bytes(pdf_bytes)
+        entries.append(entry)
+
+    ground_truth_path = output_dir / "ground_truth.json"
+    ground_truth_path.write_text(
+        json.dumps([dataclasses.asdict(e) for e in entries], indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return entries
