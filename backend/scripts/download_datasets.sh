@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# F0 — aquisição idempotente dos datasets abertos do projeto (AD-031, AD-033).
+#
+# Baixa só fontes abertas sem barreira: CTU-UHB (F3), ICBHI 2017 (F2),
+# Endoscapes2023 (F1). Idempotente por sentinela `.complete` por dataset.
+# Uso: ./backend/scripts/download_datasets.sh   (ou `make data`)
+#
+# Sem `set -e`: os fetch tratam falhas explicitamente para que a falha de um
+# dataset não derrube os outros.
+set -uo pipefail
+
+# ---- Variáveis (DATA-05) — sobrescrevíveis por ambiente (usado nos testes) ----
+DATA_DIR="${DATA_DIR:-data}"
+PY="${PY:-.venv/bin/python}"
+CTU_DB="${CTU_DB:-ctu-uhb-ctgdb}"
+
+# ICBHI: primária no Harvard Dataverse (aberto, responde); alternativa na URL
+# original, que exige --no-check-certificate (cert autoassinado) — ver AD/spec.
+ICBHI_DATAVERSE_URL="${ICBHI_DATAVERSE_URL:-https://dataverse.harvard.edu/api/access/datafile/7127117}"
+ICBHI_ORIGINAL_URL="${ICBHI_ORIGINAL_URL:-https://bhichallenge.med.auth.gr/sites/default/files/ICBHI_final_database/ICBHI_final_database.zip}"
+ENDOSCAPES_URL="${ENDOSCAPES_URL:-https://s3.unistra.fr/camma_public/datasets/endoscapes/endoscapes.zip}"
+
+# Estimativas de tamanho (bytes) para a checagem de espaço.
+CTU_EST_BYTES="${CTU_EST_BYTES:-600000000}"          # ~0.6 GB
+ICBHI_EST_BYTES="${ICBHI_EST_BYTES:-2100000000}"     # ~2.0 GB
+ENDOSCAPES_EST_BYTES="${ENDOSCAPES_EST_BYTES:-6500000000}"  # ~6.3 GB
+MIN_ZIP_BYTES="${MIN_ZIP_BYTES:-1000}"               # abaixo disso não é um dataset
+
+log() { printf '[data] %s\n' "$*" >&2; }
+err() { printf '[data] ERRO: %s\n' "$*" >&2; }
+
+# require_tools — falha nomeando a ferramenta ausente (DATA-11).
+require_tools() {
+    local missing=0 t
+    for t in curl wget unzip; do
+        if ! command -v "$t" >/dev/null 2>&1; then
+            err "ferramenta ausente: $t (instale pelo gerenciador de pacotes do sistema)"
+            missing=1
+        fi
+    done
+    if [ ! -x "$PY" ]; then
+        err "python do venv ausente ou não executável: $PY (crie o .venv e instale wfdb)"
+        missing=1
+    fi
+    return "$missing"
+}
+
+main() {
+    require_tools || return 1
+    # fetch_ctu_uhb / fetch_icbhi / fetch_endoscapes e o resumo entram nas próximas tarefas.
+    return 0
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    main "$@"
+fi
