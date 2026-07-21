@@ -9,7 +9,19 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/aws-foundation/design.md`
-**Status**: Draft
+**Status**: 8/8 tarefas implementadas e commitadas. Verifier pendente.
+
+## Progresso
+
+| Fase | Tarefas | Status |
+| --- | --- | --- |
+| 1 — Config e factory | T1–T2 | ✅ (`75f421f`, `76f7c44`) |
+| 2 — Interfaces e registry | T3–T4 | ✅ (`ab8ecf5`, `80d0dfa`) |
+| 3 — Adapters cloud | T5–T6 | ✅ (`1e7936b`, `0f2d8a4`) |
+| 4 — IaC idempotente | T7–T8 | ✅ (`b303225`, `9d3ce5c`) |
+
+Suíte: 254 testes verdes (45 de aws-foundation: unitários com cliente boto3 fake por
+duck-typing + integração real contra LocalStack), lint limpo.
 
 ---
 
