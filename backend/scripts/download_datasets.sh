@@ -341,6 +341,8 @@ main() {
     is_complete "$DATA_DIR/ctu-uhb"    || need=$((need + CTU_EST_BYTES))
     is_complete "$DATA_DIR/icbhi"      || need=$((need + ICBHI_EST_BYTES))
     is_complete "$DATA_DIR/endoscapes" || need=$((need + ENDOSCAPES_EST_BYTES))
+    is_complete "$DATA_DIR/urfd"       || need=$((need + URFD_EST_BYTES))
+    is_complete "$DATA_DIR/bidmc"      || need=$((need + BIDMC_EST_BYTES))
     if [ "$need" -gt 0 ]; then
         mkdir -p "$DATA_DIR"
         check_disk_space "$need" || return 1
@@ -351,10 +353,12 @@ main() {
     _run_fetch "CTU-UHB" fetch_ctu_uhb
     _run_fetch "ICBHI" fetch_icbhi
     _run_fetch "Endoscapes" fetch_endoscapes
+    _run_fetch "URFD" fetch_urfd
+    _run_fetch "BIDMC" fetch_bidmc
 
     log "resumo:"
     local k
-    for k in "CTU-UHB" "ICBHI" "Endoscapes"; do
+    for k in "CTU-UHB" "ICBHI" "Endoscapes" "URFD" "BIDMC"; do
         log "  $k: ${FETCH_RESULT[$k]}"
     done
     return "$FETCH_RC"

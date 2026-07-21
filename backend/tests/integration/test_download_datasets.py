@@ -249,9 +249,21 @@ def test_endoscapes_ja_completo_pula_sem_baixar(run, tmp_path):
     assert not mark.exists()
 
 
-# ---------- main: orquestração (T7) ----------
+# ---------- main: orquestração (T7 + emenda T10: URFD/BIDMC) ----------
 
-_PY_OK_MAIN = 'test -n "$CTU_DEST"\n: > "$CTU_DEST/1001.hea"\n: > "$CTU_DEST/1001.dat"\n'
+# Cobre CTU (CTU_DEST) e BIDMC (BIDMC_DEST) — cada fetch exporta só a sua
+# variável, então checar qual está setada basta para distinguir os dois.
+_PY_OK_MAIN = (
+    'if [ -n "${CTU_DEST:-}" ]; then\n'
+    '  : > "$CTU_DEST/1001.hea"\n'
+    '  : > "$CTU_DEST/1001.dat"\n'
+    'elif [ -n "${BIDMC_DEST:-}" ]; then\n'
+    '  : > "$BIDMC_DEST/bidmc01.hea"\n'
+    '  : > "$BIDMC_DEST/bidmc01.dat"\n'
+    '  : > "$BIDMC_DEST/bidmc01n.hea"\n'
+    '  : > "$BIDMC_DEST/bidmc01n.dat"\n'
+    'fi\n'
+)
 
 
 def _main_setup(tmp_path, dataverse, original, endo):
@@ -269,6 +281,10 @@ def _main_setup(tmp_path, dataverse, original, endo):
         "DATAVERSE_MODE": dataverse,
         "ORIGINAL_MODE": original,
         "ENDO_MODE": endo,
+        # Reduzido para o teste de main() ser rápido; a lógica de sentinela
+        # por sequência/dataset do URFD já é testada exaustivamente em T8.
+        "URFD_N_FALL": "2",
+        "URFD_N_ADL": "2",
     }
     return data, env, _path_with(stubdir)
 
@@ -285,11 +301,15 @@ def test_main_mistura_pula_completos_e_baixa_pendente(run, tmp_path):
     assert "CTU-UHB: pulado" in r.stderr
     assert "ICBHI: pulado" in r.stderr
     assert "Endoscapes: baixado" in r.stderr
+    assert "URFD: baixado" in r.stderr
+    assert "BIDMC: baixado" in r.stderr
     assert (data / "endoscapes" / ".complete").is_file()
+    assert (data / "urfd" / ".complete").is_file()
+    assert (data / "bidmc" / ".complete").is_file()
 
 
 def test_main_falha_de_um_nao_derruba_os_outros(run, tmp_path):
-    # ICBHI falha nas duas fontes; CTU e Endoscapes concluem.
+    # ICBHI falha nas duas fontes; CTU, Endoscapes, URFD e BIDMC concluem.
     data, env, path = _main_setup(tmp_path, "fail", "fail", "zip")
 
     r = run('main; echo "RC=$?"', env=env, path=path)
@@ -298,9 +318,41 @@ def test_main_falha_de_um_nao_derruba_os_outros(run, tmp_path):
     assert "CTU-UHB: baixado" in r.stderr
     assert "ICBHI: falhou" in r.stderr
     assert "Endoscapes: baixado" in r.stderr
-    # Endoscapes rodou apesar de o ICBHI ter falhado antes
+    assert "URFD: baixado" in r.stderr
+    assert "BIDMC: baixado" in r.stderr
+    # As demais rodaram apesar de o ICBHI ter falhado antes na sequência
     assert (data / "endoscapes" / ".complete").is_file()
+    assert (data / "urfd" / ".complete").is_file()
+    assert (data / "bidmc" / ".complete").is_file()
     assert not (data / "icbhi" / ".complete").exists()
+
+
+def test_main_espaco_conta_urfd_e_bidmc_pendentes(run, tmp_path):
+    data, env, path = _main_setup(tmp_path, "zip", "fail", "zip")
+    for ds in ("ctu-uhb", "icbhi", "endoscapes"):
+        (data / ds).mkdir(parents=True)
+        (data / ds / ".complete").touch()
+    # Só URFD/BIDMC estão pendentes; uma estimativa absurda para um deles
+    # precisa ser o suficiente para abortar — prova que main() soma as duas.
+    env["URFD_EST_BYTES"] = "999000000000000"
+
+    r = run('main; echo "RC=$?"', env=env, path=path)
+
+    assert "RC=1" in r.stdout
+    assert "insuficiente" in r.stderr
+
+
+def test_main_ignora_estimativa_de_fonte_ja_completa(run, tmp_path):
+    data, env, path = _main_setup(tmp_path, "zip", "fail", "zip")
+    for ds in ("ctu-uhb", "icbhi", "endoscapes", "urfd", "bidmc"):
+        (data / ds).mkdir(parents=True)
+        (data / ds / ".complete").touch()
+    # Estimativa absurda, mas a fonte já está completa — não deve contar.
+    env["URFD_EST_BYTES"] = "999000000000000"
+
+    r = run('main; echo "RC=$?"', env=env, path=path)
+
+    assert "RC=0" in r.stdout
 
 
 # ---------- URFD (T8): sentinela por sequência + por dataset ----------
