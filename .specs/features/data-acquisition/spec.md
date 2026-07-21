@@ -150,14 +150,14 @@ foi baixado quando o dataset publica hashes, para confiar que o `.complete` refl
 | DATA-11 | P2: Ferramenta ausente falha com mensagem acionável | T1 | Verified |
 | DATA-12 | P3: Verificação de checksum quando disponível | Design | Pending |
 | DATA-13 | P1/P2: Fonte primária + alternativa do ICBHI; validar zip real (assinatura PK); `--no-check-certificate` só na alternativa | T2, T5 | Verified |
-| DATA-14 | Emenda: download idempotente do URFD (~70 zips de sequência, câmera 0 RGB) → `data/urfd/`, com `verify_zip` e `.complete` (AD-039) | T8 (a criar) | Pending |
-| DATA-15 | Emenda: download idempotente do BIDMC via `wfdb.dl_database` → `data/bidmc/`, com verificação de completude (AD-040) | T9 (a criar) | Pending |
+| DATA-14 | Emenda: download idempotente do URFD (~70 zips de sequência, câmera 0 RGB) → `data/urfd/`, com `verify_zip` e `.complete` (AD-039) | T8 | Verified |
+| DATA-15 | Emenda: download idempotente do BIDMC via `wfdb.dl_database` (formas de onda + numerics) → `data/bidmc/`, com verificação de completude (AD-040) | T9 | Verified |
 
 **ID format:** `DATA-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** DATA-01..11,13 Verified (Verifier F0 PASS: 32 testes; DATA-12/checksum diferido P3). **DATA-14 (URFD) e DATA-15 (BIDMC) pendentes** — a emenda (AD-039/040) **REABRE a F0** para dois novos fetchers (T8 `fetch_urfd`, T9 `fetch_bidmc`), que precisam de Design/Tasks/Execute + nova verificação. O núcleo fechado permanece; só se acrescenta.
+**Coverage:** DATA-01..11,13,14,15 Verified (núcleo + emenda, ambos Verifier PASS: 42 testes de F0, 207 na suíte total). DATA-12/checksum diferido P3. **F0 FECHADA (núcleo + emenda).**
 
 ---
 

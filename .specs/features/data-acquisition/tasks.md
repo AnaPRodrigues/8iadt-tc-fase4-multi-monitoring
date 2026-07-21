@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/data-acquisition/design.md`
-**Status**: Núcleo (T1–T7) Done, **Verifier PASS**. **Emenda (T8–T10) implementada, aguardando Verifier.**
+**Status**: Done — núcleo (T1–T7) e emenda (T8–T10), **Verifier PASS nos dois**. F0 FECHADA.
 
 ## Progresso
 
@@ -20,7 +20,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 | 3 — Orquestração | T7 | ✅ (`ee405af`) |
 | 4 — Emenda URFD/BIDMC | T8–T10 | ✅ (`acd304f`, `ec54dfa`, `cd42c04`) |
 
-Suíte: 207 testes verdes (35 de F0), lint limpo. Verifier da emenda: pendente (próximo passo).
+Suíte: 207 testes verdes (**42 de F0** — contagem corrigida; a estimativa anterior de 35 estava desatualizada), lint limpo. Verifier da emenda: PASS.
 
 ---
 
@@ -366,7 +366,7 @@ Nenhuma violação.
 | DATA-11 | T1 | Mapeado |
 | DATA-12 | — | **Diferido (P3 opcional)** — verificação de checksum; o Dataverse expõe md5 e pode ser usado numa iteração futura |
 | DATA-13 | T2, T5 | Mapeado |
-| DATA-14 | T8 | Mapeado |
-| DATA-15 | T9 | Mapeado |
+| DATA-14 | T8 | Verified |
+| DATA-15 | T9 | Verified |
 
 **Coverage:** 14 de 15 requisitos mapeados; DATA-12 diferido explicitamente (P3 opcional, não bloqueia a demo).
