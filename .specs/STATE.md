@@ -268,18 +268,21 @@
 
 ## Handoff
 
-- **Feature**: reestruturação do projeto para monorepo front/back (AD-029..AD-032) + F0 (data-acquisition). F3 já implementada, a migrar.
-- **Phase / Task**: Reestruturação para monorepo front/back CONCLUÍDA e F3 MIGRADA para `backend/`. STATE + spec de F0 aprovados pelo usuário; migração + reverificação escolhidas como próximo passo. Migração feita e verde (165 testes); reverificação independente de F3 na nova estrutura ainda pendente.
-- **Completed**: AD-001 a AD-032 (AD-025 superseded por AD-029). Esqueleto `backend/`+`frontend/`+`data/`+`infra/` criado. **F3 migrada** via `git mv`: `src/core/`→`backend/common/`, `src/vitals/`→`backend/pipelines/vitals/`, testes→`backend/tests/`, demo config→`backend/pipelines/vitals/configs/`. Imports reescritos (`core.`→`common.`, `vitals.`→`pipelines.vitals.`); `pyproject`/`ruff`/`Makefile` reapontados para `backend/`. 165 testes verdes, lint limpo. Spec de F0 aprovada.
-- **In-progress**: nada em execução. **F3 FECHADA** — Verifier passe 6 (pós-migração) retornou PASS: 165 testes, 16/17 mutantes mortos, 1 sobrevivente residual aceitável (fronteira de interpolação de gap, fora da regra estrita da spec). VITALS-04/06/07 marcados Verified.
-- **Next step**: Design + Tasks + Execute de F0 (data-acquisition). **Downloads adiantados em paralelo (a pedido do usuário)** rodando em background: CTU-UHB (wfdb, gerando lista de registros), ICBHI (Harvard Dataverse, ~1.9 GB), Endoscapes (~6 GB). Sentinela `.complete` por dataset quando terminam.
-- **Blockers**: none. Achados durante o adiantamento dos downloads: (1) a URL do ICBHI que o usuário passou (`bhichallenge.med.auth.gr`) tem cert SSL autoassinado E o site inteiro retorna HTTP 403 — trocada pelo **Harvard Dataverse** (DOI 10.7910/DVN/HT6PKI, datafile 7127117), mesmo zip, aberto e citável. (2) F1: Endoscapes2023 adotado (AD-033). `backend/common/` aceito (AD-030). LIÇÃO p/ Design de F0: validar que a URL serve o arquivo real (magic bytes/Content-Type), não uma página de erro 403/HTML.
-- **Uncommitted files**: nenhum após o commit da reestruturação.
-- **Branch**: `feat/f3-vitals-anomaly` (contém a F3 e agora a reestruturação; `main` tem só o commit inicial de planejamento — estratégia de merge/rename a decidir).
+- **Feature**: F0 (data-acquisition) — implementação concluída. F3 fechada e migrada.
+- **Phase / Task**: F0 Execute COMPLETO — 7/7 tarefas implementadas, testadas e commitadas. **Parado num ponto seguro a pedido do usuário (pausa por tokens); o Verifier independente de F0 ainda NÃO rodou.**
+- **Completed**: AD-001 a AD-033. **F3 fechada** (Verifier passe 6 PASS) e migrada para `backend/`. **F0 implementada**: `backend/scripts/download_datasets.sh` (require_tools, verify_zip por magic bytes PK, sentinela `.complete`, check_disk_space, fetch_ctu_uhb, fetch_icbhi com Dataverse+fallback SSL, fetch_endoscapes, main com resumo e exit code). Testes via pytest dublando curl/wget/python no PATH — 25 testes de F0, suíte total 197 verdes, lint limpo. Commits T1–T7: `9045e32`, `b5b779c`, `b1ce73a`, `2a8a832`, `9622662`, `58dc9c1`, `ee405af`.
+- **In-progress**: nada em execução. Downloads em background: **CTU-UHB e ICBHI concluídos** (sentinela `.complete` OK; ICBHI = 920 wav + 922 txt); **Endoscapes ~4.4 GB de ~6 GB, AINDA baixando** (detached; grava `.complete` ao terminar).
+- **Next step** (ao retomar, nesta ordem): (1) rodar o **Verifier independente de F0** — passo de fechamento obrigatório do Execute, adiado só pela pausa; (2) confirmar que o Endoscapes terminou (`data/endoscapes/.complete`); (3) rodar `make data` de verdade e confirmar que os três datasets são reconhecidos como completos e pulados (idempotência ponta a ponta com dado real); (4) próxima feature do plano: F4 (prescription-analysis) — precisa de Design+Tasks+Execute; valida a integração AWS cedo.
+- **Blockers**: none.
+- **Uncommitted files**: `.specs/STATE.md` e `.specs/features/data-acquisition/tasks.md` (atualizações de status deste handoff) — commitar junto.
+- **Branch**: `feat/f3-vitals-anomaly` (contém F3 + reestruturação + F0; `main` só tem o commit inicial de planejamento — estratégia de merge/rename a decidir).
+- **Aberto (decisões futuras)**: estratégia de branch/merge para `main`; framework do `frontend/` (ainda não escolhido); DATA-12 (checksum) diferido como P3.
 
 ### Achados verificados durante o Execute (não presumir de novo)
 
 - `wfdb.rdrecord()` expõe `p_signal`, `sig_name`, `fs`, `comments`, `sig_len`, `record_name` (wfdb 4.3.1).
 - **O wfdb remove o `#` das linhas de comentário**: o campo do `.hea` chega como `'pH           7.26'`. Presumir o `#` faria a regex nunca casar e descartaria 100% dos registros silenciosamente.
 - CTU-UHB: 552 registros, 4 Hz uniforme, sinais `FHR` e `UC`; desfechos `pH`, `BDecf`, `BE`, `pCO2`, `Apgar1`, `Apgar5` no header.
-- `pythonpath` do pytest não vale para `python -m`: o alvo `demo` do Makefile precisa de `PYTHONPATH=src`.
+- `pythonpath` do pytest não vale para `python -m`: o alvo `demo` do Makefile usa `PYTHONPATH=backend` (após a migração).
+- ICBHI: a URL `bhichallenge.med.auth.gr` tem cert SSL autoassinado E retorna HTTP 403 no site inteiro — usar Harvard Dataverse (DOI 10.7910/DVN/HT6PKI, datafile 7127117, ~1.9 GB). Cholec80-CVS aberto (figshare 22183885) é só um xlsx de anotações; vídeo exige CAMMA → âncora de vídeo é o Endoscapes2023 (`s3.unistra.fr/camma_public/datasets/endoscapes/endoscapes.zip`, ~6 GB, aberto).
+- F0 é testado com pytest dando `source` no script shell e dublando `curl`/`wget`/`python` no PATH; harness (`run`/`stubbin`) fica em `backend/tests/conftest.py` (um só conftest, para não colidir com `from conftest import`).

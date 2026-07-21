@@ -9,7 +9,17 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/data-acquisition/design.md`
-**Status**: Draft
+**Status**: In Progress — 7/7 tarefas implementadas e commitadas; **Verifier pendente** (adiado a pedido do usuário)
+
+## Progresso
+
+| Fase | Tarefas | Status |
+| --- | --- | --- |
+| 1 — Helpers | T1–T3 | ✅ (`9045e32`, `b5b779c`, `b1ce73a`) |
+| 2 — Aquisições | T4–T6 | ✅ (`2a8a832`, `9622662`, `58dc9c1`) |
+| 3 — Orquestração | T7 | ✅ (`ee405af`) |
+
+Suíte: 197 testes verdes (25 de F0), lint limpo. Falta o Verifier independente (passo de fechamento).
 
 ---
 
