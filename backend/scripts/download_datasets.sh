@@ -119,6 +119,57 @@ fetch_ctu_uhb() {
     return 0
 }
 
+# _curl_zip url out [opts...] — baixa com retomada e só retorna 0 se for zip real.
+# Remove o arquivo em falha para não contaminar uma retomada seguinte (o HTML de
+# uma fonte não pode virar prefixo do download da próxima).
+_curl_zip() {
+    local url="$1" out="$2"
+    shift 2
+    if ! curl -sS -L -C - "$@" -o "$out" "$url"; then
+        err "download falhou: $url"
+        rm -f "$out"
+        return 1
+    fi
+    if ! verify_zip "$out"; then
+        rm -f "$out"
+        return 1
+    fi
+    return 0
+}
+
+# fetch_icbhi — Dataverse (primária) com fallback para a URL original via
+# --no-check-certificate (cert autoassinado) (DATA-02, DATA-06, DATA-13).
+fetch_icbhi() {
+    local dest="$DATA_DIR/icbhi" zip
+    if is_complete "$dest"; then
+        log "ICBHI: já completo — pulando"
+        FETCH_STATUS="pulado"
+        return 0
+    fi
+    mkdir -p "$dest"
+    zip="$dest/ICBHI_final_database.zip"
+
+    if _curl_zip "$ICBHI_DATAVERSE_URL" "$zip"; then
+        log "ICBHI: obtido do Harvard Dataverse"
+    elif _curl_zip "$ICBHI_ORIGINAL_URL" "$zip" --no-check-certificate; then
+        log "ICBHI: obtido da fonte original (TLS não verificado — conteúdo verificado)"
+    else
+        err "ICBHI: ambas as fontes falharam"
+        FETCH_STATUS="falhou"
+        return 1
+    fi
+
+    if ! unzip -o -q "$zip" -d "$dest"; then
+        err "ICBHI: unzip falhou"
+        FETCH_STATUS="falhou"
+        return 1
+    fi
+    mark_complete "$dest"
+    log "ICBHI: OK"
+    FETCH_STATUS="baixado"
+    return 0
+}
+
 main() {
     require_tools || return 1
     # fetch_ctu_uhb / fetch_icbhi / fetch_endoscapes e o resumo entram nas próximas tarefas.
