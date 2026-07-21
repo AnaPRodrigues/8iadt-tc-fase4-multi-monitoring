@@ -152,6 +152,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: conftest collision (tests)
 - last seen: 2026-07-21T16:03:28Z
 
+### L-024 — Teste de erro esperado deve verificar a MENSAGEM/mecanismo especifico (ex: log nomeia a variavel), nao so o codigo de retorno — um erro generico diferente pode produzir o mesmo rc por acidente e mascarar a checagem real sendo removida.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: aws-foundation
+- evidence: main() variavel ausente (tests)
+- last seen: 2026-07-21T16:49:51Z
+
+### L-025 — Logica de paginacao (list_topics, list_objects, etc.) so e exercitada de verdade com dado suficiente para forcar mais de uma pagina; testar com poucos itens deixa a segunda pagina sem cobertura, e o risco cresce silenciosamente conforme o ambiente real acumula recursos.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `tests` · harmful: 0
+- features: aws-foundation
+- evidence: ensure_topic paginacao (tests)
+- last seen: 2026-07-21T16:49:51Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

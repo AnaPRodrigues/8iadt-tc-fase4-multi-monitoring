@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 24,
+  "next_id": 26,
   "lessons": [
     {
       "id": "L-001",
@@ -418,6 +418,42 @@
       ],
       "created": "2026-07-21T16:03:28Z",
       "last_seen": "2026-07-21T16:03:28Z"
+    },
+    {
+      "id": "L-024",
+      "key": "surviving_mutant::teste de erro esperado deve verificar a mensagem mecanismo especifico ex log nomeia a variavel nao so o codigo de retorno um erro generico diferente pode produzir o mesmo rc por acidente e mascarar a checagem real sendo removida",
+      "text": "Teste de erro esperado deve verificar a MENSAGEM/mecanismo especifico (ex: log nomeia a variavel), nao so o codigo de retorno — um erro generico diferente pode produzir o mesmo rc por acidente e mascarar a checagem real sendo removida.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "aws-foundation"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "main() variavel ausente (tests)"
+      ],
+      "created": "2026-07-21T16:49:51Z",
+      "last_seen": "2026-07-21T16:49:51Z"
+    },
+    {
+      "id": "L-025",
+      "key": "surviving_mutant::logica de paginacao list topics list objects etc so e exercitada de verdade com dado suficiente para forcar mais de uma pagina testar com poucos itens deixa a segunda pagina sem cobertura e o risco cresce silenciosamente conforme o ambiente real acumula recursos",
+      "text": "Logica de paginacao (list_topics, list_objects, etc.) so e exercitada de verdade com dado suficiente para forcar mais de uma pagina; testar com poucos itens deixa a segunda pagina sem cobertura, e o risco cresce silenciosamente conforme o ambiente real acumula recursos.",
+      "signal": "surviving_mutant",
+      "scope": "tests",
+      "status": "candidate",
+      "features": [
+        "aws-foundation"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "ensure_topic paginacao (tests)"
+      ],
+      "created": "2026-07-21T16:49:51Z",
+      "last_seen": "2026-07-21T16:49:51Z"
     }
   ]
 }

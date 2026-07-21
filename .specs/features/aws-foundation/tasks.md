@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/aws-foundation/design.md`
-**Status**: 8/8 tarefas implementadas e commitadas. Verifier pendente.
+**Status**: Done — 8/8 tarefas, **Verifier PASS**. aws-foundation FECHADA.
 
 ## Progresso
 
@@ -20,8 +20,9 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 | 3 — Adapters cloud | T5–T6 | ✅ (`1e7936b`, `0f2d8a4`) |
 | 4 — IaC idempotente | T7–T8 | ✅ (`b303225`, `9d3ce5c`) |
 
-Suíte: 254 testes verdes (45 de aws-foundation: unitários com cliente boto3 fake por
-duck-typing + integração real contra LocalStack), lint limpo.
+Suíte: 254 testes verdes (**47 de aws-foundation** — contagem corrigida; 36 unit + 11 integração
+contra LocalStack real), lint limpo. Verifier: PASS (10/12 mutantes mortos; 2 sobreviventes
+aceitos como dívida de teste — ver validation.md).
 
 ---
 

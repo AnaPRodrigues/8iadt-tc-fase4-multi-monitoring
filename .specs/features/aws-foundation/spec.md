@@ -135,19 +135,19 @@ as implementações concretas vêm com as features, então aqui é a interface +
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| AWSF-01 | P1: Factory de cliente por `ENV` | Design | Pending |
-| AWSF-02 | P1: Config validada, sem segredo em código | Design | Pending |
-| AWSF-03 | P3/Edge: guarda "sem `boto3.client` direto" | Design | Pending |
-| AWSF-04 | P3: Interfaces `TextExtractor`/`ImageAnalyzer` | Design | Pending |
-| AWSF-05 | P3: Seleção de adapter por `ENV` | Design | Pending |
-| AWSF-06 | P2: IaC idempotente dos recursos compartilhados | Design | Pending |
-| AWSF-07 | P2/Edge: LocalStack via docker-compose + erro se fora do ar | Design | Pending |
+| AWSF-01 | P1: Factory de cliente por `ENV` | T1, T2 | Verified |
+| AWSF-02 | P1: Config validada, sem segredo em código | T1 | Verified |
+| AWSF-03 | P3/Edge: guarda "sem `boto3.client` direto" | T2 | Verified |
+| AWSF-04 | P3: Interfaces `TextExtractor`/`ImageAnalyzer` | T3, T5, T6 | Verified |
+| AWSF-05 | P3: Seleção de adapter por `ENV` | T4, T5, T6 | Verified |
+| AWSF-06 | P2: IaC idempotente dos recursos compartilhados | T7, T8 | Verified |
+| AWSF-07 | P2/Edge: LocalStack via docker-compose + erro se fora do ar | T2, T8 | Verified |
 
 **ID format:** `AWSF-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 7 requisitos, 0 mapeados para tarefas (aguardando Design/Tasks).
+**Coverage:** 7 de 7 requisitos Verified (Verifier PASS: 47 testes — 36 unit + 11 integração contra LocalStack real; 10/12 mutantes mortos). 2 sobreviventes aceitos como dívida de teste, não bugs (ver validation.md): teste de variável ausente passa por acidente (comportamento de produção correto); paginação de `ensure_topic` nunca forçada (risco latente, cresce com o tempo, não bloqueador). **aws-foundation FECHADA.**
 
 ---
 
