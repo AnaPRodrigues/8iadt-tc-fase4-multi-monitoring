@@ -6,6 +6,9 @@ Nenhum outro módulo em `backend/` deve chamar `boto3.client(...)` diretamente
 
 import os
 from dataclasses import dataclass
+from typing import Any
+
+import boto3
 
 from common.logging import get_logger
 
@@ -41,3 +44,26 @@ def load_aws_config() -> AwsConfig:
         endpoint_url = _require("LOCALSTACK_ENDPOINT")
 
     return AwsConfig(env=env, region=region, endpoint_url=endpoint_url)
+
+
+def get_client(service: str, config: AwsConfig | None = None) -> Any:
+    """Único ponto de criação de clientes boto3 do projeto (AD-034).
+
+    `ENV=local` injeta o endpoint do LocalStack e credenciais dummy; `ENV=cloud`
+    usa a cadeia de credenciais padrão da sessão (perfil/env do Learner Lab), sem
+    `endpoint_url`. Se o LocalStack não estiver de pé, a chamada de rede que o
+    cliente eventualmente fizer falha com o erro de conexão do próprio boto3 —
+    rode `make localstack-up` antes de usar `ENV=local`.
+    """
+    cfg = config or load_aws_config()
+    if cfg.env == "local":
+        log.info("cliente %s via LocalStack (%s)", service, cfg.endpoint_url)
+        return boto3.client(
+            service,
+            endpoint_url=cfg.endpoint_url,
+            region_name=cfg.region,
+            aws_access_key_id="test",
+            aws_secret_access_key="test",
+        )
+    log.info("cliente %s via AWS (%s)", service, cfg.region)
+    return boto3.client(service, region_name=cfg.region)
