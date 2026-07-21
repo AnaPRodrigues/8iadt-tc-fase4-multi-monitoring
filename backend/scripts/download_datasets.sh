@@ -203,10 +203,47 @@ fetch_endoscapes() {
     return 0
 }
 
+declare -A FETCH_RESULT
+FETCH_RC=0
+
+# _run_fetch nome função — executa um fetch sem deixar a falha derrubar os demais.
+_run_fetch() {
+    local name="$1" fn="$2"
+    FETCH_STATUS=""
+    if "$fn"; then
+        FETCH_RESULT["$name"]="${FETCH_STATUS:-baixado}"
+    else
+        FETCH_RESULT["$name"]="${FETCH_STATUS:-falhou}"
+        FETCH_RC=1
+    fi
+}
+
+# main — checagens globais, os três fetch, resumo e exit code (DATA-07, DATA-10).
 main() {
     require_tools || return 1
-    # fetch_ctu_uhb / fetch_icbhi / fetch_endoscapes e o resumo entram nas próximas tarefas.
-    return 0
+
+    # Espaço: soma das estimativas só dos datasets ainda não completos.
+    local need=0
+    is_complete "$DATA_DIR/ctu-uhb"    || need=$((need + CTU_EST_BYTES))
+    is_complete "$DATA_DIR/icbhi"      || need=$((need + ICBHI_EST_BYTES))
+    is_complete "$DATA_DIR/endoscapes" || need=$((need + ENDOSCAPES_EST_BYTES))
+    if [ "$need" -gt 0 ]; then
+        mkdir -p "$DATA_DIR"
+        check_disk_space "$need" || return 1
+    fi
+
+    FETCH_RESULT=()
+    FETCH_RC=0
+    _run_fetch "CTU-UHB" fetch_ctu_uhb
+    _run_fetch "ICBHI" fetch_icbhi
+    _run_fetch "Endoscapes" fetch_endoscapes
+
+    log "resumo:"
+    local k
+    for k in "CTU-UHB" "ICBHI" "Endoscapes"; do
+        log "  $k: ${FETCH_RESULT[$k]}"
+    done
+    return "$FETCH_RC"
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then

@@ -247,3 +247,57 @@ def test_endoscapes_ja_completo_pula_sem_baixar(run, tmp_path):
     assert rc == 0
     assert status == "pulado"
     assert not mark.exists()
+
+
+# ---------- main: orquestração (T7) ----------
+
+_PY_OK_MAIN = 'test -n "$CTU_DEST"\n: > "$CTU_DEST/1001.hea"\n: > "$CTU_DEST/1001.dat"\n'
+
+
+def _main_setup(tmp_path, dataverse, original, endo):
+    data = tmp_path / "data"
+    fixture = _zip_fixture(tmp_path / "fix.zip")
+    stubdir = tmp_path / "bin"
+    stubdir.mkdir()
+    _stub(stubdir, "curl", _CURL_STUB)
+    _stub(stubdir, "wget", _WGET_STUB)
+    py = _stub(tmp_path, "py_ok", _PY_OK_MAIN)
+    env = {
+        "DATA_DIR": str(data),
+        "PY": str(py),
+        "FIXTURE_ZIP": str(fixture),
+        "DATAVERSE_MODE": dataverse,
+        "ORIGINAL_MODE": original,
+        "ENDO_MODE": endo,
+    }
+    return data, env, _path_with(stubdir)
+
+
+def test_main_mistura_pula_completos_e_baixa_pendente(run, tmp_path):
+    data, env, path = _main_setup(tmp_path, "zip", "fail", "zip")
+    for ds in ("ctu-uhb", "icbhi"):
+        (data / ds).mkdir(parents=True)
+        (data / ds / ".complete").touch()
+
+    r = run('main; echo "RC=$?"', env=env, path=path)
+
+    assert "RC=0" in r.stdout
+    assert "CTU-UHB: pulado" in r.stderr
+    assert "ICBHI: pulado" in r.stderr
+    assert "Endoscapes: baixado" in r.stderr
+    assert (data / "endoscapes" / ".complete").is_file()
+
+
+def test_main_falha_de_um_nao_derruba_os_outros(run, tmp_path):
+    # ICBHI falha nas duas fontes; CTU e Endoscapes concluem.
+    data, env, path = _main_setup(tmp_path, "fail", "fail", "zip")
+
+    r = run('main; echo "RC=$?"', env=env, path=path)
+
+    assert "RC=1" in r.stdout  # exit != 0 porque algo falhou
+    assert "CTU-UHB: baixado" in r.stderr
+    assert "ICBHI: falhou" in r.stderr
+    assert "Endoscapes: baixado" in r.stderr
+    # Endoscapes rodou apesar de o ICBHI ter falhado antes
+    assert (data / "endoscapes" / ".complete").is_file()
+    assert not (data / "icbhi" / ".complete").exists()

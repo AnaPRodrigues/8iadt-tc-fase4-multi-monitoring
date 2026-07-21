@@ -64,3 +64,11 @@ def test_source_nao_dispara_main(run, stubbin):
 
     assert r.returncode == 0
     assert "sourced-ok" in r.stdout
+
+
+def test_make_data_invoca_o_script():
+    from pathlib import Path
+
+    mk = Path(__file__).resolve().parents[3] / "Makefile"
+    texto = mk.read_text(encoding="utf-8")
+    assert "backend/scripts/download_datasets.sh" in texto
