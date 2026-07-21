@@ -61,6 +61,31 @@ def test_env_ausente_nomeia_a_variavel(monkeypatch):
         load_aws_config()
 
 
+def test_env_local_sem_endpoint_explicito_usa_localstack_hostname(monkeypatch):
+    # Dentro de um container Lambda do próprio LocalStack, LOCALSTACK_ENDPOINT
+    # não existe -- mas LOCALSTACK_HOSTNAME/EDGE_PORT vêm injetadas (F4/infra.py).
+    monkeypatch.setenv("ENV", "local")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.delenv("LOCALSTACK_ENDPOINT", raising=False)
+    monkeypatch.setenv("LOCALSTACK_HOSTNAME", "172.18.0.2")
+    monkeypatch.setenv("EDGE_PORT", "4566")
+
+    cfg = load_aws_config()
+
+    assert cfg.endpoint_url == "http://172.18.0.2:4566"
+
+
+def test_env_local_endpoint_explicito_tem_prioridade_sobre_hostname(monkeypatch):
+    monkeypatch.setenv("ENV", "local")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("LOCALSTACK_ENDPOINT", "http://localhost:4566")
+    monkeypatch.setenv("LOCALSTACK_HOSTNAME", "172.18.0.2")
+
+    cfg = load_aws_config()
+
+    assert cfg.endpoint_url == "http://localhost:4566"
+
+
 def test_config_e_imutavel(monkeypatch):
     monkeypatch.setenv("ENV", "cloud")
     monkeypatch.setenv("AWS_REGION", "us-east-1")

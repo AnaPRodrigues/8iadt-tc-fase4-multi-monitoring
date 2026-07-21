@@ -31,6 +31,24 @@ def _require(name: str) -> str:
     return value
 
 
+def _local_endpoint() -> str:
+    """``LOCALSTACK_ENDPOINT`` explícita ou, dentro de um container Lambda do
+    próprio LocalStack, construída a partir de ``LOCALSTACK_HOSTNAME``/``EDGE_PORT``
+    (injetadas automaticamente pelo LocalStack no runtime do Lambda — confirmado
+    empiricamente durante a implementação de F4/infra.py: o container não recebe
+    nossa variável de projeto, só as suas próprias).
+    """
+    explicit = os.environ.get("LOCALSTACK_ENDPOINT")
+    if explicit:
+        return explicit
+
+    hostname = os.environ.get("LOCALSTACK_HOSTNAME")
+    if not hostname:
+        raise ValueError("variável de ambiente obrigatória ausente: LOCALSTACK_ENDPOINT")
+    port = os.environ.get("EDGE_PORT", "4566")
+    return f"http://{hostname}:{port}"
+
+
 def load_aws_config() -> AwsConfig:
     """Lê e valida a config do ambiente ativo. Não faz nenhuma chamada AWS."""
     env = _require("ENV")
@@ -41,7 +59,7 @@ def load_aws_config() -> AwsConfig:
 
     endpoint_url = None
     if env == "local":
-        endpoint_url = _require("LOCALSTACK_ENDPOINT")
+        endpoint_url = _local_endpoint()
 
     return AwsConfig(env=env, region=region, endpoint_url=endpoint_url)
 
