@@ -1,7 +1,90 @@
 # F0 — Data Acquisition Design
 
 **Spec**: `.specs/features/data-acquisition/spec.md`
-**Status**: Draft
+**Status**: Draft (núcleo Verified; emenda URFD/BIDMC em Design)
+
+---
+
+## ⚠️ EMENDA (2026-07-21) — DATA-14 (URFD) e DATA-15 (BIDMC)
+
+Estende o design abaixo com dois novos `fetch_*`, seguindo o mesmo contrato (pula se completo →
+baixa → verifica → `.complete`). Endoscapes confirmado pelo usuário como **mantido** no script
+(5 fontes no total).
+
+### Achados verificados (URFD/BIDMC)
+
+| Fonte | Fato verificado | Consequência no design |
+| --- | --- | --- |
+| URFD | Página `fenix.ur.edu.pl/~mkepski/ds/uf.html` responde HTTP 200. Zip de sequência (`fall-01-cam0-rgb.zip`) responde **HTTP 206**, `Content-Type: application/zip`, magic bytes `PK` | Um `wget --continue` por sequência, mesmo padrão de `verify_zip` já existente |
+| URFD (nomenclatura) | Convenção `{fall,adl}-NN-cam0-rgb.zip`, NN zero-padded 2 dígitos; fall vai de 01–30, adl de 01–40 (AD-039) | Loop de nomes gerado no script, não lista hardcoded de 70 URLs |
+| BIDMC | Página `physionet.org/content/bidmc/1.0.0/` responde HTTP 200 | Mesmo padrão do CTU-UHB: `wfdb.dl_database('bidmc', dest)` |
+
+### Architecture Overview (atualizado)
+
+```mermaid
+graph TD
+    M["make data"] --> S["download_datasets.sh"]
+    S --> V["verificações globais"]
+    V --> C["fetch_ctu_uhb"]
+    V --> I["fetch_icbhi"]
+    V --> E["fetch_endoscapes"]
+    V --> U["fetch_urfd (NOVO)<br/>70 zips: fall 01-30, adl 01-40"]
+    V --> B["fetch_bidmc (NOVO)<br/>python wfdb"]
+    C --> R["resumo final"]
+    I --> R
+    E --> R
+    U --> R
+    B --> R
+    R --> X["exit 0 se tudo ok, !=0 se algo falhou"]
+```
+
+### Componentes novos
+
+**`fetch_urfd()`**
+- Itera `fall-01`..`fall-30` e `adl-01`..`adl-40` (contagens de AD-039); para cada sequência, baixa
+  `${URFD_BASE_URL}/<seq>-cam0-rgb.zip` com `wget --continue`, roda `verify_zip`, `unzip -o -q` para
+  `data/urfd/<seq>/`.
+- **Idempotência por sequência, não só por dataset**: se `data/urfd/<seq>/.complete` existe, pula
+  aquela sequência individualmente (evita rebaixar 69 zips já prontos por causa de 1 que faltou).
+  `data/urfd/.complete` (nível dataset) só é escrito quando **todas** as sequências estão completas.
+- Uma sequência que falha é registrada e não impede as demais (mesmo princípio de "falha de um não
+  derruba os outros", agora dentro do próprio fetch).
+- **Variável nova**: `URFD_BASE_URL` (`https://fenix.ur.edu.pl/~mkepski/ds/data`), `URFD_N_FALL=30`,
+  `URFD_N_ADL=40`.
+
+**`fetch_bidmc()`**
+- Mesmo formato de `fetch_ctu_uhb`: `python -c "import wfdb; wfdb.dl_database('bidmc', dest)"`,
+  verifica presença mínima de arquivos (`.hea`/`.dat`, e a BIDMC também publica `*n.csv`/`*Numerics`
+  — a tarefa de implementação confirma o formato exato do BIDMC no `wfdb` antes de fixar a checagem,
+  mesma disciplina usada para o CTU-UHB) antes de `.complete`.
+- **Variável nova**: `BIDMC_DB` (`bidmc`).
+
+### Data Models (atualizado)
+
+```
+data/
+├── urfd/
+│   ├── fall-01/{*.png, .complete}     # .complete por sequência
+│   ├── ...
+│   ├── adl-40/{*.png, .complete}
+│   └── .complete                       # só quando TODAS as sequências completam
+└── bidmc/{*.hea,*.dat|*.csv, .complete}
+```
+
+### Risks & Concerns (adicionais)
+
+| Concern | Impacto | Mitigação |
+| --- | --- | --- |
+| **URFD é ~70 downloads pequenos**, não 1 grande | Mais superfície de falha parcial que Endoscapes/ICBHI | Sentinela por sequência (não só por dataset) evita retrabalho; falha de uma sequência não impede as outras |
+| **Formato exato do BIDMC via `wfdb` não verificado ainda** (ao contrário do CTU-UHB, que já foi confirmado empiricamente) | Checagem de completude pode presumir errado | Tarefa de implementação confirma a estrutura de arquivos do BIDMC no REPL antes de escrever a checagem — mesma disciplina da T6 de F3 |
+| **Tamanho total do URFD desconhecido** (não documentado na página) | `check_disk_space` pode subestimar | Estimativa conservadora inicial (a confirmar/ajustar após o primeiro download real) |
+
+### Tech Decisions (adicionais)
+
+| Decisão | Escolha | Rationale |
+| --- | --- | --- |
+| Granularidade da sentinela do URFD | Por sequência + por dataset | 70 downloads pequenos tornam retrabalho caro se só houvesse sentinela única; replica o padrão "falha de um não derruba os outros" dentro do fetch |
+| BIDMC | Mesmo padrão de `fetch_ctu_uhb` (wfdb) | Reuso direto; já validado que `wfdb.dl_database` funciona para bases do PhysioNet |
 
 ---
 

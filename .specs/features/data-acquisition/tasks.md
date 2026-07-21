@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `.specs/features/data-acquisition/design.md`
-**Status**: Done — 7/7 tarefas; **Verifier PASS** (validation.md). F0 FECHADA.
+**Status**: Núcleo (T1–T7) Done, **Verifier PASS**. **Emenda (T8–T10) em Execute.**
 
 ## Progresso
 
@@ -18,8 +18,9 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 | 1 — Helpers | T1–T3 | ✅ (`9045e32`, `b5b779c`, `b1ce73a`) |
 | 2 — Aquisições | T4–T6 | ✅ (`2a8a832`, `9622662`, `58dc9c1`) |
 | 3 — Orquestração | T7 | ✅ (`ee405af`) |
+| 4 — Emenda URFD/BIDMC | T8–T10 | ⏳ Em andamento |
 
-Suíte: 197 testes verdes (25 de F0), lint limpo. Falta o Verifier independente (passo de fechamento).
+Núcleo: 197 testes verdes (25 de F0), lint limpo, Verifier PASS. Emenda: em Execute.
 
 ---
 
@@ -212,15 +213,87 @@ T7
 
 ---
 
+## ⚠️ EMENDA (2026-07-21) — DATA-14 (URFD) e DATA-15 (BIDMC)
+
+### T8: `fetch_urfd` — 70 sequências com sentinela por sequência
+
+**What**: Baixar cada sequência do URFD (`fall-01`..`fall-30`, `adl-01`..`adl-40`) via `wget --continue`, `verify_zip`, `unzip` para `data/urfd/<seq>/`; sentinela **por sequência** (`.complete` dentro de cada `data/urfd/<seq>/`), e sentinela de dataset (`data/urfd/.complete`) só quando todas as sequências completam.
+**Where**: `backend/scripts/download_datasets.sh` (modificar), `backend/tests/integration/test_download_datasets.py` (modificar)
+**Depends on**: T7
+**Requirement**: DATA-14
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [ ] `URFD_BASE_URL`, `URFD_N_FALL` (default 30), `URFD_N_ADL` (default 40) como variáveis no topo (DATA-05)
+- [ ] Cada sequência é baixada, verificada e extraída para seu próprio diretório com sua própria sentinela
+- [ ] Sequência já completa (sentinela própria presente) é pulada individualmente, sem afetar as demais
+- [ ] Falha em uma sequência é registrada e não impede as demais (mesmo princípio de T7, agora intra-fetch)
+- [ ] `data/urfd/.complete` (nível dataset) só é escrito quando 100% das sequências (fall+adl) estão completas
+- [ ] Testes (integration, `wget` dublado, `URFD_N_FALL`/`URFD_N_ADL` reduzidos para 2/2 nos testes): todas as sequências baixam com sucesso → `.complete` de dataset presente; uma sequência falha → dataset SEM `.complete`, mas as demais sequências completam; sequência já completa não é rebaixada (verificado por ausência de marca do stub)
+- [ ] Gate: `pytest -q` · Test count: ≥ 4
+
+**Tests**: integration · **Gate**: full
+**Commit**: `feat(f0): aquisicao do URFD com sentinela por sequencia`
+
+---
+
+### T9: `fetch_bidmc`
+
+**What**: Baixar o BIDMC via `wfdb.dl_database('bidmc', dest)`; **primeiro confirmar no REPL a estrutura real de arquivos que o `wfdb` grava para essa base** (mesma disciplina da T6 de F3 — não presumir formato), depois codificar a checagem de completude sobre os arquivos confirmados; `.complete` só após a checagem passar.
+**Where**: `backend/scripts/download_datasets.sh` (modificar), `backend/tests/integration/test_download_datasets.py` (modificar)
+**Depends on**: T8
+**Requirement**: DATA-15
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [ ] Estrutura real de arquivos do BIDMC confirmada empiricamente (REPL) e documentada em comentário no script — não presumida
+- [ ] `BIDMC_DB` como variável no topo (DATA-05)
+- [ ] `fetch_bidmc` chama `wfdb.dl_database` e só marca `.complete` após confirmar a presença mínima dos arquivos esperados
+- [ ] Já completo → pula sem rebaixar
+- [ ] Download vazio/falho → não marca completo
+- [ ] Testes (integration, `python`/`wfdb` dublado, mesmo padrão de T4): sucesso marca completo; vazio não marca; skip quando já completo
+- [ ] Gate: `pytest -q` · Test count: ≥ 3
+
+**Tests**: integration · **Gate**: full
+**Commit**: `feat(f0): aquisicao do BIDMC com verificacao de completude`
+
+---
+
+### T10: Integrar URFD/BIDMC ao `main` e ao resumo
+
+**What**: `main` passa a chamar também `fetch_urfd` e `fetch_bidmc`, com o mesmo isolamento de falha (um não derruba os outros) e o resumo final listando as 5 fontes.
+**Where**: `backend/scripts/download_datasets.sh` (modificar), `backend/tests/integration/test_download_datasets.py` (modificar)
+**Depends on**: T9
+**Requirement**: DATA-07, DATA-10 (aplicados às 2 fontes novas)
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [ ] `main` chama as 5 fetch (`CTU-UHB`, `ICBHI`, `Endoscapes`, `URFD`, `BIDMC`); falha de qualquer uma não impede as demais
+- [ ] Resumo final cita as 5 fontes com seu status (baixado/pulado/falhou)
+- [ ] Checagem de espaço (`check_disk_space`) soma as estimativas só das fontes ainda não completas, incluindo URFD/BIDMC
+- [ ] Testes (integration): cenário com as 5 fontes, mistura skip/baixa/falha, resumo reflete todas
+- [ ] Gate: `pytest -q` · Test count: ≥ 2
+
+**Tests**: integration · **Gate**: full
+**Commit**: `feat(f0): integra URFD e BIDMC ao main e ao resumo`
+
+---
+
 ## Phase Execution Map
 
 ```
 Phase 1:  T1 → T2 → T3
 Phase 2:  T4 → T5 → T6
 Phase 3:  T7
+Phase 4 (emenda):  T8 → T9 → T10
 ```
 
-7 tarefas, um único batch → execução inline (sem oferta de sub-agentes). Verifier independente ao final.
+7 tarefas originais + 3 da emenda = 10, um único batch (≤ ~8 seria o limite, mas T8-T10 dependem
+sequencialmente de T7 já commitado — seguem inline, sem sub-agentes, como o resto de F0). Verifier
+independente ao final da emenda.
 
 ---
 
@@ -235,6 +308,9 @@ Phase 3:  T7
 | T5 | 1 função de aquisição | ✅ Granular |
 | T6 | 1 função de aquisição | ✅ Granular |
 | T7 | 1 função de orquestração + wiring | ✅ Granular |
+| T8 | 1 função de aquisição (loop + sentinela dupla) | ✅ Granular |
+| T9 | 1 função de aquisição | ✅ Granular |
+| T10 | 1 wiring de orquestração | ✅ Granular |
 
 ---
 
@@ -249,6 +325,9 @@ Phase 3:  T7
 | T5 | T4 | T4 → T5 | ✅ |
 | T6 | T5 | T5 → T6 | ✅ |
 | T7 | T6 | Phase 3 após Phase 2 | ✅ |
+| T8 | T7 | Phase 4 após Phase 3 | ✅ |
+| T9 | T8 | T8 → T9 | ✅ |
+| T10 | T9 | T9 → T10 | ✅ |
 
 ---
 
@@ -263,6 +342,9 @@ Phase 3:  T7
 | T5 | Aquisição | integration | integration | ✅ |
 | T6 | Aquisição | integration | integration | ✅ |
 | T7 | Orquestração | integration | integration | ✅ |
+| T8 | Aquisição | integration | integration | ✅ |
+| T9 | Aquisição | integration | integration | ✅ |
+| T10 | Orquestração | integration | integration | ✅ |
 
 Nenhuma violação.
 
@@ -277,12 +359,14 @@ Nenhuma violação.
 | DATA-03 | T6 | Mapeado |
 | DATA-05 | T1 | Mapeado |
 | DATA-06 | T5, T6 | Mapeado |
-| DATA-07 | T3, T7 | Mapeado |
+| DATA-07 | T3, T7, T10 | Mapeado |
 | DATA-08 | T3 | Mapeado |
 | DATA-09 | T2, T3, T4 | Mapeado |
-| DATA-10 | T7 | Mapeado |
+| DATA-10 | T7, T10 | Mapeado |
 | DATA-11 | T1 | Mapeado |
 | DATA-12 | — | **Diferido (P3 opcional)** — verificação de checksum; o Dataverse expõe md5 e pode ser usado numa iteração futura |
 | DATA-13 | T2, T5 | Mapeado |
+| DATA-14 | T8 | Mapeado |
+| DATA-15 | T9 | Mapeado |
 
-**Coverage:** 12 de 13 requisitos mapeados; DATA-12 diferido explicitamente (P3 opcional, não bloqueia a demo).
+**Coverage:** 14 de 15 requisitos mapeados; DATA-12 diferido explicitamente (P3 opcional, não bloqueia a demo).
