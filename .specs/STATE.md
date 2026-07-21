@@ -359,26 +359,27 @@ Lacunas obrigatórias remanescentes: **nenhuma** (PA e disartria são deferidas 
 
 ## Handoff
 
-- **Feature**: **F4 (prescription-analysis) FECHADA** (Verifier PASS em 2ª rodada, após corrigir 4 gaps da 1ª). Próxima construção: **F1 (video-analysis)** — precisa reconciliar a spec com AD-039 (URFD, raia pose) + AD-033 (Endoscapes, raia objeto).
-- **Phase / Task**: aws-foundation, F0 e F4 fechadas (Verifier PASS). 308 testes verdes no total, lint limpo. LocalStack de pé e saudável (`sg docker -c 'docker ps'`).
-- **Completed (F4 — todas as 8 tarefas T1-T8)**:
-  - `models.py`/`catalog.py`/`rules.py` (T1), `generator.py` (T2, + `generate_sequence_dataset`/`generate_dataset_to_disk` acrescentadas no fix pós-Verifier), `adapters.py` (T3), `parser.py` (T4), `history.py` (T5), `logic.py`/`handler.py` (T6), `infra.py` (T7 — deploy real do Lambda testado ponta a ponta no LocalStack), `evaluate.py` (T8, reescrito para cobrir os dois tipos de anomalia).
-  - Fix na fundação (`aws/clients.py`): fallback de `LOCALSTACK_HOSTNAME`/`EDGE_PORT` para quando o código roda **dentro** de um container Lambda do próprio LocalStack (a variável de projeto `LOCALSTACK_ENDPOINT` não existe lá — só as do LocalStack).
-  - `GroundTruthEntry` ganhou `timestamp` (SPEC_DEVIATION) para casar rótulo↔registro em sequências de mudança abrupta.
-  - Makefile: `infra-prescription-local`/`infra-prescription-cloud` (encadeia `aws.provision` + `pipelines.prescription.infra`).
-  - Verifier 1ª rodada achou 4 gaps (ground truth só em memória, métricas de mudança abrupta ausentes, mutante sobrevivente em `evaluate.py`, cobertura de log/lote faltando) — todos corrigidos e uma 2ª rodada confirmou PASS. Um achado residual novo (função `save_evaluation` sem teste próprio) também foi fechado na sequência.
-  - Testes: 308 no total do projeto (era 254 antes de F4). Commits principais: `7fe8216`..`c5c9f37` (T1-T8), `95d2c03` (fix da fundação), `a158ce0` (fix dos 4 gaps), `4f4df7a` (fecha achado residual). `validation.md` tem as duas rodadas do Verifier.
-- **In-progress**: nada. F4 encerrada.
-- **Next step**: **F1 (video-analysis)** — Specify existe mas precisa reconciliar com a arquitetura atual (dual-profile ENV, adapter pattern, AD-039 URFD/raia pose + AD-033 Endoscapes/raia objeto) antes de Design, seguindo o mesmo padrão de reconciliação usado no design.md de F4. Depois: F2 (audio-analysis), F5 (fusion-and-alerting).
-- **Blockers**: none.
+- **Feature**: **F1 (video-analysis) EM ANDAMENTO** — Batch 1 (T1-T7) do `tasks.md` sendo executado por um worker dedicado. Batch 2 (T8-T13) segue depois, por outro worker, na mesma sequência.
+- **Phase / Task**: Batch 1 — **T1 a T6 concluídas e commitadas** (gate verde + ruff limpo a cada uma). **T7 (`object_finetune.py`, fine-tuning leve do YOLOv8n) é a próxima a implementar** — ainda não iniciada nesta pausa.
+- **Completed (Batch 1, T1-T6)**:
+  - T1 `pose_loader.py` + `models.py` (`Sequence`/`PoseFrame`/`MovementWindow`/`SequenceVerdict`) — commit `c49be7f`.
+  - T2 `pose.py` (`ensure_pose_model`/`create_landmarker`/`extract_keypoints`, Task API real + download real do modelo) — commit `de572fe`.
+  - T3 `pose_features.py` (`windowed_features`: centro de massa via landmarks 23/24, amplitude/velocidade/assimetria) — commit `7c72a56`.
+  - T4 `pose_detector.py` (`classify_sequence` + `draw_keypoints`/`save_fall_evidence`) — commit `5f30611`.
+  - T5 `pose_evaluate.py` (`evaluate`, reaproveita `common.metrics.binary_metrics`) — commit `43be52f`.
+  - T6 `object_loader.py` + `models.py` ganhou `BoundingBox`/`AnnotatedFrame` (`load_annotated_frames` contra o COCO real do Endoscapes) — commit `c4eeed9`.
+  - Testes: 275 passando (`pytest -q -m "not integration"`), 0 falhas; `ruff check backend/` limpo em cada commit.
+- **In-progress**: nada em código não commitado. Working tree limpa.
+- **Next step**: retomar em **T7** (`backend/pipelines/video/object_finetune.py` + `backend/tests/video/test_object_finetune.py`) seguindo `tasks.md` (linha ~235): converter a anotação COCO real para formato YOLO (`ultralytics.data.converter.convert_coco`) e rodar um fine-tuning real (poucas imagens/épocas) do YOLOv8n sobre as 6 classes do Endoscapes, devolvendo o caminho de `best.pt`. **Cuidado confirmado**: `ultralytics.YOLO(...).train()` salva em `runs/detect/train/` relativo ao cwd por padrão — usar `project=`/`name=` explícitos apontando para `tmp_path`/diretório configurável, nunca o cwd do repo. Verificar `git status` limpo (sem `runs/`, sem `yolov8n.pt`) antes de commitar. Depois de T7: rodar a suíte completa uma vez, confirmar `git status` limpo, e então (novo worker) seguir para o Batch 2 (T8-T13), terminando com o Verifier independente.
+- **Blockers**: none. Rede disponível e testada (download real do modelo MediaPipe e leitura do dataset Endoscapes já confirmados nesta sessão).
 - **Residual aceito em aws-foundation**: 2 mutantes sobreviventes (dívida de teste, não bugs) — teste de variável ausente em `main()` passa por acidente (comportamento de produção correto, só o teste não discrimina o mecanismo); paginação de `ensure_topic` nunca forçada por teste (risco latente que cresce com o nº de tópicos no Learner Lab ao longo do tempo — não bloqueador agora). 3 follow-ups de baixa prioridade registrados em `validation.md`, não agendados.
-- **Ambiente**: grupo `docker` do usuário exige `sg docker -c '...'` até um logout/login completo aplicar a mudança de verdade.
+- **Ambiente**: grupo `docker` do usuário exige `sg docker -c '...'` até um logout/login completo aplicar a mudança de verdade. Ativar `.venv` (`source .venv/bin/activate`) antes de `pytest`/`ruff`/`python`; `PYTHONPATH=backend` necessário fora do pytest.
 - **Residual aceito na emenda F0**: 3 mutantes sobreviventes (não bloqueadores) — dupla chamada do BIDMC não verificável pelo harness de stub (limitação de teste, não do código); URFD sem teste de zip corrompido (paridade com lacuna já aceita no núcleo para ICBHI); overlap teórico de glob no BIDMC (`*.hea` vs `*n.hea`), não alcançável no fluxo sequencial atual.
 - **Fontes verificadas (não re-checar)**: URFD zips em `https://fenix.ur.edu.pl/~mkepski/ds/data/{fall,adl}-NN-cam0-rgb.zip` (fall 01–30, adl 01–40) — HTTP 206, `application/zip`, magic `PK`. BIDMC via `wfdb.dl_database('bidmc', ...)` — 53 registros contíguos `bidmc01`..`bidmc53` confirmados via `get_record_list`; numerics = mesmo nome + sufixo `n`, fora do `RECORDS`.
 - **Residual aceito em F0 (núcleo)**: 4 mutantes sobreviventes pré-existentes (dívida de teste P2, não bugs) — ver validation.md.
 - **Uncommitted files**: nenhum (tudo commitado, working tree limpa) — parada segura confirmada via `git status` antes de encerrar.
-- **Branch**: `feat/f3-vitals-anomaly` (contém F3 + reestruturação + F0 completa + aws-foundation + F4 completa; `main` só tem o commit inicial — estratégia de merge/rename a decidir).
-- **Aberto (decisões futuras)**: estratégia de branch/merge para `main`; framework do `frontend/`; DATA-12 (checksum) diferido P3.
+- **Branch**: `feat/f3-vitals-anomaly` (contém F3 + reestruturação + F0 completa + aws-foundation + F4 completa + F1 Batch 1 T1-T6; `main` só tem o commit inicial — estratégia de merge/rename a decidir).
+- **Aberto (decisões futuras)**: estratégia de branch/merge para `main`; framework do `frontend/`; DATA-12 (checksum) diferido P3; Batch 2 de F1 (T8-T13) e Verifier de F1 ainda não rodados.
 
 ### Achados verificados durante o Execute (não presumir de novo)
 
@@ -388,3 +389,7 @@ Lacunas obrigatórias remanescentes: **nenhuma** (PA e disartria são deferidas 
 - `pythonpath` do pytest não vale para `python -m`: o alvo `demo` do Makefile usa `PYTHONPATH=backend` (após a migração).
 - ICBHI: a URL `bhichallenge.med.auth.gr` tem cert SSL autoassinado E retorna HTTP 403 no site inteiro — usar Harvard Dataverse (DOI 10.7910/DVN/HT6PKI, datafile 7127117, ~1.9 GB). Cholec80-CVS aberto (figshare 22183885) é só um xlsx de anotações; vídeo exige CAMMA → âncora de vídeo é o Endoscapes2023 (`s3.unistra.fr/camma_public/datasets/endoscapes/endoscapes.zip`, ~6 GB, aberto).
 - F0 é testado com pytest dando `source` no script shell e dublando `curl`/`wget`/`python` no PATH; harness (`run`/`stubbin`) fica em `backend/tests/conftest.py` (um só conftest, para não colidir com `from conftest import`).
+- **MediaPipe 0.10.35 não tem mais `mp.solutions.pose`** — só a Task API (`mediapipe.tasks.python.vision.PoseLandmarker` + `mediapipe.tasks.python.BaseOptions`). Modelo `.task` baixado sob demanda de `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task` (~5.7MB, testado real nesta sessão, idempotente via `ensure_pose_model`).
+- URFD real: `data/urfd/<fall-NN|adl-NN>/<mesmo-nome>-cam0-rgb/<mesmo-nome>-cam0-rgb-NNN.png` (numeração zero-padded — não expõe o bug alfabético-vs-numérico sozinha; testado explicitamente com nomes sem padding em teste sintético). `fall-01` tem 160 frames.
+- Endoscapes real (`data/endoscapes/endoscapes/train/annotation_coco.json`): 1212 imagens no COCO, 5566 anotações, 6 categorias (`cystic_plate`, `calot_triangle`, `cystic_artery`, `cystic_duct`, `gallbladder`, `tool`), `bbox` no formato COCO `[x, y, width, height]`. 26 imagens do JSON não têm nenhuma anotação (frame legitimamente sem estrutura). Diretório `train/` tem 36694 `.jpg` no total (COCO só referencia o subconjunto anotado/keyframes).
+- Modelo de dataclasses da F1 fica centralizado em `pipelines/video/models.py` (T1 criou `Sequence`/`PoseFrame`/`MovementWindow`/`SequenceVerdict`; T6 estendeu com `BoundingBox`/`AnnotatedFrame` — `Detection` fica para T8/Batch 2, quando `object_detector.py` for implementado).
