@@ -12,10 +12,20 @@ dependencies = [
     "boto3>=1.34",
     "reportlab>=4.0",
     "pdfplumber>=0.11",
+    "mediapipe>=0.10",
+    "ultralytics>=8.0",
+    "opencv-python>=4.9",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[tool.setuptools]
+# Projeto usa PYTHONPATH=backend em vez de importar um pacote instalado --
+# `pip install -e .` existe só para instalar as dependências. Sem isso, o
+# setuptools recusa o build por ver múltiplos diretórios top-level
+# (data/, infra/, output/, backend/, frontend/) num layout "flat".
+packages = []
 
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
