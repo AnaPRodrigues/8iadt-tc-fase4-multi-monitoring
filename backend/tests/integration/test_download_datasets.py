@@ -178,3 +178,72 @@ def test_icbhi_ambas_falham_nao_marca_completo(run, tmp_path):
     assert rc != 0
     assert status == "falhou"
     assert not (data / "icbhi" / ".complete").exists()
+
+
+# ---------- Endoscapes (T6) ----------
+
+_WGET_STUB = r"""
+out=""; prev=""
+for a in "$@"; do
+  [ "$prev" = "-O" ] && out="$a"
+  prev="$a"
+done
+case "$ENDO_MODE" in
+  zip)     cp "$FIXTURE_ZIP" "$out";;
+  invalid) printf 'not a zip' > "$out";;
+  marca)   : > "$STUB_MARK";;
+  fail)    exit 5;;
+  *)       exit 6;;
+esac
+"""
+
+
+def _endo_env(tmp_path, mode, extra=None):
+    data = tmp_path / "data"
+    fixture = _zip_fixture(tmp_path / "endo_fix.zip")
+    stubdir = tmp_path / "bin"
+    stubdir.mkdir()
+    _stub(stubdir, "wget", _WGET_STUB)
+    env = {"DATA_DIR": str(data), "FIXTURE_ZIP": str(fixture), "ENDO_MODE": mode}
+    if extra:
+        env.update(extra)
+    return data, env, _path_with(stubdir)
+
+
+def test_endoscapes_sucesso_marca_completo(run, tmp_path):
+    data, env, path = _endo_env(tmp_path, "zip")
+
+    rc, status, _ = _call(run, "fetch_endoscapes", env, path)
+
+    assert rc == 0
+    assert status == "baixado"
+    assert (data / "endoscapes" / ".complete").is_file()
+    assert (data / "endoscapes" / "registro.wav").is_file()  # unzip real
+
+
+def test_endoscapes_zip_invalido_nao_marca_completo(run, tmp_path):
+    data, env, path = _endo_env(tmp_path, "invalid")
+
+    rc, status, _ = _call(run, "fetch_endoscapes", env, path)
+
+    assert rc != 0
+    assert status == "falhou"
+    assert not (data / "endoscapes" / ".complete").exists()
+
+
+def test_endoscapes_ja_completo_pula_sem_baixar(run, tmp_path):
+    data = tmp_path / "data"
+    dest = data / "endoscapes"
+    dest.mkdir(parents=True)
+    (dest / ".complete").touch()
+    mark = tmp_path / "STUB_RAN"
+    stubdir = tmp_path / "bin"
+    stubdir.mkdir()
+    _stub(stubdir, "wget", _WGET_STUB)
+    env = {"DATA_DIR": str(data), "ENDO_MODE": "marca", "STUB_MARK": str(mark)}
+
+    rc, status, _ = _call(run, "fetch_endoscapes", env, _path_with(stubdir))
+
+    assert rc == 0
+    assert status == "pulado"
+    assert not mark.exists()

@@ -170,6 +170,39 @@ fetch_icbhi() {
     return 0
 }
 
+# fetch_endoscapes — Endoscapes2023 via wget --continue (DATA-03, DATA-06).
+fetch_endoscapes() {
+    local dest="$DATA_DIR/endoscapes" zip
+    if is_complete "$dest"; then
+        log "Endoscapes: já completo — pulando"
+        FETCH_STATUS="pulado"
+        return 0
+    fi
+    mkdir -p "$dest"
+    zip="$dest/endoscapes.zip"
+    log "Endoscapes: baixando (~6 GB) com retomada"
+    if ! wget --continue -q -O "$zip" "$ENDOSCAPES_URL"; then
+        err "Endoscapes: download falhou"
+        rm -f "$zip"
+        FETCH_STATUS="falhou"
+        return 1
+    fi
+    if ! verify_zip "$zip"; then
+        rm -f "$zip"
+        FETCH_STATUS="falhou"
+        return 1
+    fi
+    if ! unzip -o -q "$zip" -d "$dest"; then
+        err "Endoscapes: unzip falhou"
+        FETCH_STATUS="falhou"
+        return 1
+    fi
+    mark_complete "$dest"
+    log "Endoscapes: OK"
+    FETCH_STATUS="baixado"
+    return 0
+}
+
 main() {
     require_tools || return 1
     # fetch_ctu_uhb / fetch_icbhi / fetch_endoscapes e o resumo entram nas próximas tarefas.
