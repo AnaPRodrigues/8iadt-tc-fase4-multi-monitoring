@@ -25,11 +25,15 @@ URFD_BASE_URL="${URFD_BASE_URL:-https://fenix.ur.edu.pl/~mkepski/ds/data}"
 URFD_N_FALL="${URFD_N_FALL:-30}"
 URFD_N_ADL="${URFD_N_ADL:-40}"
 
+# BIDMC (AD-040): mesmo padrão de aquisição do CTU-UHB via wfdb.
+BIDMC_DB="${BIDMC_DB:-bidmc}"
+
 # Estimativas de tamanho (bytes) para a checagem de espaço.
 CTU_EST_BYTES="${CTU_EST_BYTES:-600000000}"          # ~0.6 GB
 ICBHI_EST_BYTES="${ICBHI_EST_BYTES:-2100000000}"     # ~2.0 GB
 ENDOSCAPES_EST_BYTES="${ENDOSCAPES_EST_BYTES:-6500000000}"  # ~6.3 GB
 URFD_EST_BYTES="${URFD_EST_BYTES:-3000000000}"       # ~3 GB (estimativa; tamanho não documentado)
+BIDMC_EST_BYTES="${BIDMC_EST_BYTES:-300000000}"       # ~0.3 GB
 MIN_ZIP_BYTES="${MIN_ZIP_BYTES:-1000}"               # abaixo disso não é um dataset
 
 log() { printf '[data] %s\n' "$*" >&2; }
@@ -267,6 +271,48 @@ fetch_urfd() {
     fi
     mark_complete "$dataset_dest"
     log "URFD: OK (todas as sequências completas)"
+    FETCH_STATUS="baixado"
+    return 0
+}
+
+# fetch_bidmc — BIDMC via wfdb (DATA-15).
+#
+# Achado verificado (não presumir de novo): os arquivos de "numerics" (HR,
+# PULSE, RESP, SpO2 a 1 Hz — o sinal que AD-040 realmente quer) são
+# REGISTROS SEPARADOS com sufixo 'n' (ex. bidmc01n) que NÃO aparecem no
+# RECORDS do dataset. `dl_database(records='all')` baixa só as 53 formas de
+# onda (125 Hz); os numerics exigem uma segunda chamada explícita com os
+# nomes derivados de get_record_list(...) + 'n' (nunca hardcoded).
+fetch_bidmc() {
+    local dest="$DATA_DIR/bidmc"
+    if is_complete "$dest"; then
+        log "BIDMC: já completo — pulando"
+        FETCH_STATUS="pulado"
+        return 0
+    fi
+    mkdir -p "$dest"
+    log "BIDMC: baixando via wfdb.dl_database (formas de onda + numerics)"
+    if ! BIDMC_DEST="$dest" "$PY" -c "
+import wfdb
+records = wfdb.get_record_list('$BIDMC_DB')
+wfdb.dl_database('$BIDMC_DB', '$dest', records=records)
+numerics = [r + 'n' for r in records]
+wfdb.dl_database('$BIDMC_DB', '$dest', records=numerics)
+"; then
+        err "BIDMC: falha no wfdb.dl_database"
+        FETCH_STATUS="falhou"
+        return 1
+    fi
+    local n_hea n_numerics
+    n_hea=$(find "$dest" -maxdepth 1 -name '*.hea' | wc -l)
+    n_numerics=$(find "$dest" -maxdepth 1 -name '*n.hea' | wc -l)
+    if [ "$n_hea" -lt 1 ] || [ "$n_numerics" -lt 1 ]; then
+        err "BIDMC: download incompleto (hea=$n_hea, numerics=$n_numerics) — não marcando completo"
+        FETCH_STATUS="falhou"
+        return 1
+    fi
+    mark_complete "$dest"
+    log "BIDMC: OK ($n_hea registros, $n_numerics numerics)"
     FETCH_STATUS="baixado"
     return 0
 }

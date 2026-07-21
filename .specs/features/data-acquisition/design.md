@@ -17,7 +17,8 @@ baixa → verifica → `.complete`). Endoscapes confirmado pelo usuário como **
 | --- | --- | --- |
 | URFD | Página `fenix.ur.edu.pl/~mkepski/ds/uf.html` responde HTTP 200. Zip de sequência (`fall-01-cam0-rgb.zip`) responde **HTTP 206**, `Content-Type: application/zip`, magic bytes `PK` | Um `wget --continue` por sequência, mesmo padrão de `verify_zip` já existente |
 | URFD (nomenclatura) | Convenção `{fall,adl}-NN-cam0-rgb.zip`, NN zero-padded 2 dígitos; fall vai de 01–30, adl de 01–40 (AD-039) | Loop de nomes gerado no script, não lista hardcoded de 70 URLs |
-| BIDMC | Página `physionet.org/content/bidmc/1.0.0/` responde HTTP 200 | Mesmo padrão do CTU-UHB: `wfdb.dl_database('bidmc', dest)` |
+| BIDMC | Página `physionet.org/content/bidmc/1.0.0/` responde HTTP 200; `wfdb.get_record_list('bidmc')` retorna 53 registros contíguos `bidmc01`..`bidmc53` | Mesmo padrão do CTU-UHB: `wfdb.dl_database('bidmc', dest)` para as formas de onda |
+| **BIDMC — achado crítico** | Os arquivos de **numerics** (HR/PULSE/RESP/SpO2 a 1 Hz — o que AD-040 realmente quer) são **registros separados com sufixo `n`** (ex. `bidmc01n`) que **NÃO aparecem no arquivo `RECORDS`** do dataset. Confirmado baixando `bidmc01` isoladamente (só vieram `.hea`/`.dat` de forma de onda, 125 Hz, sig_name `RESP,PLETH,V,AVR,II`) e depois `bidmc01n` explicitamente (sig_name `HR,PULSE,RESP,SpO2`, 1 Hz). `dl_database(records='all')` **nunca baixa os numerics** sozinho. | `fetch_bidmc` precisa de **duas chamadas**: uma para as formas de onda (`records='all'`) e outra para os numerics, com a lista de nomes derivada de `get_record_list` + sufixo `'n'` (não hardcoded), e a checagem de completude exige a presença de **ambos** os grupos |
 
 ### Architecture Overview (atualizado)
 
@@ -53,10 +54,11 @@ graph TD
   `URFD_N_ADL=40`.
 
 **`fetch_bidmc()`**
-- Mesmo formato de `fetch_ctu_uhb`: `python -c "import wfdb; wfdb.dl_database('bidmc', dest)"`,
-  verifica presença mínima de arquivos (`.hea`/`.dat`, e a BIDMC também publica `*n.csv`/`*Numerics`
-  — a tarefa de implementação confirma o formato exato do BIDMC no `wfdb` antes de fixar a checagem,
-  mesma disciplina usada para o CTU-UHB) antes de `.complete`.
+- **Duas chamadas** de `wfdb.dl_database`: (1) `records='all'` para as 53 formas de onda; (2) uma
+  lista explícita `[r + 'n' for r in get_record_list('bidmc')]` para os numerics (HR/SpO2/PULSE/
+  RESP), que não estão no `RECORDS` e por isso não vêm com a chamada (1) sozinha.
+- Completude exige **ambos os grupos**: ao menos 1 `*.hea` (forma de onda) e ao menos 1 `*n.hea`
+  (numerics) antes de `mark_complete`.
 - **Variável nova**: `BIDMC_DB` (`bidmc`).
 
 ### Data Models (atualizado)

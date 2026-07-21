@@ -391,3 +391,68 @@ def test_urfd_sequencia_ja_completa_nao_e_rebaixada(run, tmp_path):
     assert status == "baixado"
     assert "fall-01" not in call_log.read_text(encoding="utf-8").split()
     assert (data / "urfd" / "fall-02" / ".complete").is_file()
+
+
+# ---------- BIDMC (T9): formas de onda + numerics (achado crítico) ----------
+
+_PY_BIDMC_OK = (
+    'test -n "$BIDMC_DEST"\n'
+    ': > "$BIDMC_DEST/bidmc01.hea"\n'
+    ': > "$BIDMC_DEST/bidmc01.dat"\n'
+    ': > "$BIDMC_DEST/bidmc01n.hea"\n'
+    ': > "$BIDMC_DEST/bidmc01n.dat"\n'
+)
+_PY_BIDMC_SO_ONDA = (
+    'test -n "$BIDMC_DEST"\n'
+    ': > "$BIDMC_DEST/bidmc01.hea"\n'
+    ': > "$BIDMC_DEST/bidmc01.dat"\n'
+)  # simula o bug real: numerics não veio porque não está no RECORDS
+_PY_BIDMC_FALHA = "exit 1\n"
+
+
+def test_bidmc_sucesso_com_numerics_marca_completo(run, tmp_path):
+    data = tmp_path / "data"
+    py = _stub(tmp_path, "py_bidmc_ok", _PY_BIDMC_OK)
+
+    rc, status, _ = _call(run, "fetch_bidmc", {"DATA_DIR": str(data), "PY": str(py)})
+
+    assert rc == 0
+    assert status == "baixado"
+    assert (data / "bidmc" / ".complete").is_file()
+
+
+def test_bidmc_sem_numerics_nao_marca_completo(run, tmp_path):
+    """O achado crítico: só a forma de onda (sem 'n.hea') não é uma aquisição completa —
+    é exatamente o que aconteceria se a segunda chamada a dl_database fosse esquecida."""
+    data = tmp_path / "data"
+    py = _stub(tmp_path, "py_bidmc_so_onda", _PY_BIDMC_SO_ONDA)
+
+    rc, status, _ = _call(run, "fetch_bidmc", {"DATA_DIR": str(data), "PY": str(py)})
+
+    assert rc != 0
+    assert status == "falhou"
+    assert not (data / "bidmc" / ".complete").exists()
+
+
+def test_bidmc_python_falha_nao_marca_completo(run, tmp_path):
+    data = tmp_path / "data"
+    py = _stub(tmp_path, "py_bidmc_falha", _PY_BIDMC_FALHA)
+
+    rc, status, _ = _call(run, "fetch_bidmc", {"DATA_DIR": str(data), "PY": str(py)})
+
+    assert rc != 0
+    assert not (data / "bidmc" / ".complete").exists()
+
+
+def test_bidmc_ja_completo_pula_sem_rodar_python(run, tmp_path):
+    data = tmp_path / "data"
+    dest = data / "bidmc"
+    dest.mkdir(parents=True)
+    (dest / ".complete").touch()
+    py = _stub(tmp_path, "py_bidmc_marca", ': > "$BIDMC_DEST/STUB_RAN"\n')
+
+    rc, status, _ = _call(run, "fetch_bidmc", {"DATA_DIR": str(data), "PY": str(py)})
+
+    assert rc == 0
+    assert status == "pulado"
+    assert not (dest / "STUB_RAN").exists()
