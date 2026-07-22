@@ -12,6 +12,13 @@ output/
 data/*
 !data/README.md
 
+# Pesos treinados (AD-043) — mantém só o README, peso publicado como GitHub Release
+models/*
+!models/README.md
+
+# Subconjunto de imagens preparado localmente para subir ao Drive (AD-042)
+training/staging/
+
 # Frontend
 node_modules/
 frontend/dist/

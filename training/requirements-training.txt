@@ -1,0 +1,4 @@
+# Deps do ambiente de treino (Colab) -- separadas do backend (AD-042).
+# O backend só precisa do necessário para INFERÊNCIA em CPU; o Colab começa
+# de um ambiente vazio e precisa instalar tudo que object_finetune.py usa.
+ultralytics>=8.0

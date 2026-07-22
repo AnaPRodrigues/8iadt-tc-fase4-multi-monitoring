@@ -1,6 +1,10 @@
 PY := .venv/bin/python
 
-.PHONY: install data demo test test-unit lint fmt clean localstack-up localstack-down infra-local infra-cloud infra-prescription-local infra-prescription-cloud infra-video-local infra-video-cloud
+# URL do asset `best.pt` no GitHub Release (AD-043) -- a definir quando o primeiro
+# Release for publicado (ver training/README.md § Passo 3).
+MODEL_RELEASE_URL :=
+
+.PHONY: install data demo test test-unit lint fmt clean localstack-up localstack-down infra-local infra-cloud infra-prescription-local infra-prescription-cloud infra-video-local infra-video-cloud models-fetch
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -8,6 +12,17 @@ install:
 # F0 — aquisição de dados. O script é criado na feature data-acquisition (AD-031).
 data:
 	./backend/scripts/download_datasets.sh
+
+# Baixa os pesos treinados (AD-043) -- treino real roda em training/ (Colab/GPU),
+# não aqui. Sem MODEL_RELEASE_URL configurada (nenhum Release publicado ainda),
+# falha com uma mensagem clara em vez de um erro obscuro do curl.
+models-fetch:
+	@if [ -z "$(MODEL_RELEASE_URL)" ]; then \
+	  echo "MODEL_RELEASE_URL não configurada -- publique um Release (ver training/README.md) e defina a variável no Makefile."; \
+	  exit 1; \
+	fi
+	mkdir -p models
+	curl -L -o models/best.pt "$(MODEL_RELEASE_URL)"
 
 demo:
 	PYTHONPATH=backend $(PY) -m pipelines.vitals.cli --config backend/pipelines/vitals/configs/demo.yaml
