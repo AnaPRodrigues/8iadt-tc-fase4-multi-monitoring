@@ -116,6 +116,34 @@ def test_p3_com_2_audios_reais_grava_evidencia_de_fadiga_vocal(tmp_path):
     assert sidecar["metadata"]["fatigue_score"] == resumo_fatigado["fatigue_score"]
 
 
+def test_consult_audio_corrompido_e_pulado_e_reportado_sem_derrubar_o_lote(tmp_path, caplog):
+    """AUDIO-12, lado consult-audio (cli.py `try/except Exception` em torno de `transcribe()`):
+    um áudio de consulta corrompido não derruba o lote — é logado e o áudio válido seguinte
+    continua sendo processado normalmente (validation.md § Fix 4)."""
+    _skip_se_dataset_ausente()
+    audio_corrompido = tmp_path / "corrompido.wav"
+    audio_corrompido.write_bytes(b"nao e um wav valido")
+    audio_valido = sorted(_ICBHI_DIR.glob("*.wav"))[0]
+
+    cfg = _config(
+        tmp_path,
+        _ICBHI_DIR,
+        icbhi_max_patients=5,
+        consult_audio_paths=[str(audio_corrompido), str(audio_valido)],
+        whisper_model_size="tiny",
+    )
+
+    with caplog.at_level(logging.WARNING):
+        codigo = run(cfg, run_id="teste-consult-corrompido")
+
+    assert codigo == 0
+    assert "corrompido.wav" in caplog.text
+
+    saida = tmp_path / "out" / "audio" / "teste-consult-corrompido"
+    assert (saida / f"{audio_valido.stem}-summary.json").is_file()
+    assert not (saida / "corrompido-summary.json").is_file()
+
+
 def test_consult_audio_paths_vazio_roda_so_p1_ate_o_fim(tmp_path):
     _skip_se_dataset_ausente()
     cfg = _config(tmp_path, _ICBHI_DIR, icbhi_max_patients=5, consult_audio_paths=[])
