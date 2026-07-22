@@ -148,8 +148,8 @@ exigência central de "dificuldade respiratória" já está coberta pelo P1 com 
 | AUDIO-08 | P2: Sentimento local (sem nuvem) | Tasks | ✅ Verified |
 | AUDIO-09 | P2: Evidência de termo crítico | Tasks | ✅ Verified |
 | AUDIO-10 | Edge: transcrição vazia/não confiável | Tasks | ✅ Verified |
-| AUDIO-11 | P3: Features acústicas + score de fadiga vocal | Tasks | ❌ Needs Fix (ver validation.md — evidência de fadiga sem teste e inalcançável com 1 áudio) |
-| AUDIO-12 | Edge: arquivo corrompido/formato não suportado | Tasks | ❌ Needs Fix (ver validation.md — lado ICBHI verificado, lado consult_audio_paths sem teste) |
+| AUDIO-11 | P3: Features acústicas + score de fadiga vocal | Tasks | ✅ Verified (iteração 2 — Fix 3: evidência testada com 2 áudios reais; limitação de baseline com 1 áudio documentada em design.md como aceita) |
+| AUDIO-12 | Edge: arquivo corrompido/formato não suportado | Tasks | ✅ Verified (iteração 2 — Fix 4: lado consult_audio_paths agora testado em integração) |
 | AUDIO-13 | Edge: ciclo ICBHI sem anotação excluído das métricas | Tasks | ✅ Verified |
 | AUDIO-14 | Edge: determinismo de reprocessamento | Tasks | ✅ Verified |
 
@@ -157,7 +157,7 @@ exigência central de "dificuldade respiratória" já está coberta pelo P1 com 
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 14 total, 14 mapped to tasks (T1–T13, ver `tasks.md`), 0 unmapped — pronto para Execute mediante aprovação do usuário
+**Coverage:** 14 total, 14 mapped to tasks (T1–T13, ver `tasks.md`), 0 unmapped — 14/14 Verified (validation.md, iteração 2, PASS)
 
 ---
 
