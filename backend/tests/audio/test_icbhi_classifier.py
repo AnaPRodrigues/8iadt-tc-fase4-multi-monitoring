@@ -41,6 +41,16 @@ def _ciclo_sintetico(tmp_path: Path, patient_id: str, idx: int, label: str) -> R
     return _ciclo(wav, patient_id, idx, label)
 
 
+def _wav_tom_com_jitter(path: Path, seconds: float, freq: float, ruido: float,
+                         rng: np.random.Generator) -> None:
+    """Como ``_wav_tom``, mas com ``rng`` externo — permite jitter de freq/ruído por amostra,
+    necessário para produzir classes com sobreposição parcial (não perfeitamente separáveis)."""
+    t = np.linspace(0, seconds, int(seconds * SR), endpoint=False)
+    y = 0.6 * np.sin(2 * np.pi * freq * t)
+    y = y + ruido * rng.normal(size=y.shape)
+    sf.write(str(path), y, SR)
+
+
 def test_split_by_patient_nunca_mistura_o_mesmo_paciente_nos_dois_lados(tmp_path):
     cycles = []
     for p in range(10):
@@ -100,3 +110,33 @@ def test_classificador_acerta_a_classe_majoritaria_em_conjunto_separavel(tmp_pat
 
     assert predict(modelo, alvo_normal).predicted_label == "normal"
     assert predict(modelo, alvo_crackle).predicted_label == "crackle"
+
+
+def test_class_weight_balanced_recupera_a_classe_minoritaria_em_conjunto_9_para_1(tmp_path):
+    """Prova que `class_weight="balanced"` muda o comportamento do modelo (não só o parâmetro
+    setado): num conjunto desbalanceado 9:1 (18 normal / 2 crackle) com classes parcialmente
+    sobrepostas (frequências próximas + ruído), a classe minoritária só é predita corretamente
+    com o balanceamento ligado (validation.md § Fix 2 — mutante sobrevivente)."""
+    rng = np.random.default_rng(42)
+    cycles = []
+    for i in range(18):
+        freq = 300.0 + rng.normal(scale=20)
+        wav = tmp_path / f"patn{i}_1b1_Al_sc_Meditron.wav"
+        _wav_tom_com_jitter(wav, seconds=1.0, freq=freq, ruido=0.45, rng=rng)
+        cycles.append(_ciclo(wav, f"patn{i}", i, "normal"))
+    for i in range(2):
+        freq = 380.0 + rng.normal(scale=20)
+        wav = tmp_path / f"patc{i}_1b1_Al_sc_Meditron.wav"
+        _wav_tom_com_jitter(wav, seconds=1.0, freq=freq, ruido=0.45, rng=rng)
+        cycles.append(_ciclo(wav, f"patc{i}", i, "crackle"))
+
+    alvo_wav = tmp_path / "pat_alvo_1b1_Al_sc_Meditron.wav"
+    _wav_tom_com_jitter(
+        alvo_wav, seconds=1.0, freq=380.0, ruido=0.45, rng=np.random.default_rng(43)
+    )
+    alvo = _ciclo(alvo_wav, "pat_alvo", 99, "crackle")
+
+    modelo = train(cycles, seed=42)
+    pred = predict(modelo, alvo)
+
+    assert pred.predicted_label == "crackle"
