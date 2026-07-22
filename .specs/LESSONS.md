@@ -194,6 +194,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: backend/pipelines/prescription/evaluate.py:65-69 (save_evaluation, no direct test — no-op mutant survived full suite) (test-coverage)
 - last seen: 2026-07-21T20:51:09Z
 
+### L-031 — When a spec requires an error/limit to be logged to an observable sink (CloudWatch, audit log), assert the log actually reaches that sink for the failure path, not just that the pipeline continues without propagating the exception.
+- signal: `spec_precision_gap` · recurrence: 1 feature(s) · scope: `observability` · harmful: 0
+- features: video-analysis
+- evidence: VIDEO-10 — backend/tests/integration/test_video_handler.py:102-122 (observability)
+- last seen: 2026-07-22T15:32:16Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

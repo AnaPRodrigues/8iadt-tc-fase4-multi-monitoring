@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 31,
+  "next_id": 32,
   "lessons": [
     {
       "id": "L-001",
@@ -544,6 +544,24 @@
       ],
       "created": "2026-07-21T20:51:09Z",
       "last_seen": "2026-07-21T20:51:09Z"
+    },
+    {
+      "id": "L-031",
+      "key": "spec_precision_gap::when a spec requires an error limit to be logged to an observable sink cloudwatch audit log assert the log actually reaches that sink for the failure path not just that the pipeline continues without propagating the exception",
+      "text": "When a spec requires an error/limit to be logged to an observable sink (CloudWatch, audit log), assert the log actually reaches that sink for the failure path, not just that the pipeline continues without propagating the exception.",
+      "signal": "spec_precision_gap",
+      "scope": "observability",
+      "status": "candidate",
+      "features": [
+        "video-analysis"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "VIDEO-10 — backend/tests/integration/test_video_handler.py:102-122 (observability)"
+      ],
+      "created": "2026-07-22T15:32:16Z",
+      "last_seen": "2026-07-22T15:32:16Z"
     }
   ]
 }
