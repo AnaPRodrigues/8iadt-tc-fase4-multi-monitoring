@@ -6,7 +6,7 @@ services:
     ports:
       - "4566:4566"          # edge endpoint único (S3, Lambda, SNS, SQS, DynamoDB, ...)
     environment:
-      - SERVICES=s3,lambda,sns,sqs,dynamodb,events,stepfunctions,cloudwatch,secretsmanager,apigateway
+      - SERVICES=s3,lambda,sns,sqs,dynamodb,events,stepfunctions,cloudwatch,secretsmanager,apigateway,logs
       - DEBUG=0
       # Textract e Rekognition NÃO estão no Community — resolvidos por adapter local (AD-035).
     volumes:

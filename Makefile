@@ -1,6 +1,6 @@
 PY := .venv/bin/python
 
-.PHONY: install data demo test test-unit lint fmt clean localstack-up localstack-down infra-local infra-cloud infra-prescription-local infra-prescription-cloud
+.PHONY: install data demo test test-unit lint fmt clean localstack-up localstack-down infra-local infra-cloud infra-prescription-local infra-prescription-cloud infra-video-local infra-video-cloud
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -52,6 +52,17 @@ infra-prescription-cloud:
 	bash -c 'set -a; [ -f .env.cloud ] && source .env.cloud; set +a; \
 	  PYTHONPATH=backend ENV=cloud $(PY) -m aws.provision && \
 	  PYTHONPATH=backend ENV=cloud $(PY) -m pipelines.prescription.infra'
+
+# --- F1: Lambda do complemento cloud de vídeo + gatilho S3 (sobre a IaC acima) ---
+infra-video-local:
+	bash -c 'set -a; [ -f .env.local ] && source .env.local; set +a; \
+	  PYTHONPATH=backend ENV=local $(PY) -m aws.provision && \
+	  PYTHONPATH=backend ENV=local $(PY) -m pipelines.video.infra'
+
+infra-video-cloud:
+	bash -c 'set -a; [ -f .env.cloud ] && source .env.cloud; set +a; \
+	  PYTHONPATH=backend ENV=cloud $(PY) -m aws.provision && \
+	  PYTHONPATH=backend ENV=cloud $(PY) -m pipelines.video.infra'
 
 clean:
 	rm -rf output/* .pytest_cache
