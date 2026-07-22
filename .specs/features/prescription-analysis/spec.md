@@ -142,27 +142,27 @@ demonstrável inteiramente com dado sintético via P1/P2.
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| PRESC-01 | P1: Gerador sintético de prescrições com ground truth | Design | Pending |
-| PRESC-02 | P1: Trigger S3 → Lambda | Design | Pending |
-| PRESC-03 | P1: Extração via Textract | Design | Pending |
-| PRESC-04 | P1: Parser de campos estruturados | Design | Pending |
-| PRESC-05 | P1: Regra de dose fora de faixa terapêutica | Design | Pending |
-| PRESC-06 | P1: Evidência reproduzível + log CloudWatch | Design | Pending |
-| PRESC-07 | P1: Tratamento de falha do Textract | Design | Pending |
-| PRESC-08 | P1: Infraestrutura provisionada por script idempotente | Design | Pending |
-| PRESC-09 | P1: Credenciais via env/profile, sem segredos no código | Design | Pending |
-| PRESC-10 | P1: Métricas precision/recall vs. ground truth | Design | Pending |
-| PRESC-11 | P2: Histórico DynamoDB + deduplicação de evento | Design | Pending |
-| PRESC-12 | P2: Detecção de mudança abrupta vs. histórico | Design | Pending |
-| PRESC-13 | P2: Primeiro registro sem baseline (sem falso positivo) | Design | Pending |
-| PRESC-14 | Edge case: medicamento fora do catálogo de referência | Design | Pending |
-| PRESC-15 | P3: Adaptador opcional MIMIC-IV (não bloqueante) | Design | Pending |
+| PRESC-01 | P1: Gerador sintético de prescrições com ground truth | Tasks | ✅ Verified |
+| PRESC-02 | P1: Trigger S3 → Lambda | Tasks | ✅ Verified |
+| PRESC-03 | P1: Extração via Textract | Tasks | ✅ Verified |
+| PRESC-04 | P1: Parser de campos estruturados | Tasks | ✅ Verified |
+| PRESC-05 | P1: Regra de dose fora de faixa terapêutica | Tasks | ✅ Verified |
+| PRESC-06 | P1: Evidência reproduzível + log CloudWatch | Tasks | ✅ Verified |
+| PRESC-07 | P1: Tratamento de falha do Textract | Tasks | ✅ Verified |
+| PRESC-08 | P1: Infraestrutura provisionada por script idempotente | Tasks | ✅ Verified |
+| PRESC-09 | P1: Credenciais via env/profile, sem segredos no código | Tasks | ✅ Verified |
+| PRESC-10 | P1: Métricas precision/recall vs. ground truth | Tasks | ✅ Verified (cálculo); ⚠️ persistência sem teste direto (minor, não bloqueador) |
+| PRESC-11 | P2: Histórico DynamoDB + deduplicação de evento | Tasks | ✅ Verified |
+| PRESC-12 | P2: Detecção de mudança abrupta vs. histórico | Tasks | ✅ Verified |
+| PRESC-13 | P2: Primeiro registro sem baseline (sem falso positivo) | Tasks | ✅ Verified |
+| PRESC-14 | Edge case: medicamento fora do catálogo de referência | Tasks | ✅ Verified |
+| PRESC-15 | P3: Adaptador opcional MIMIC-IV (não bloqueante) | Tasks | ✅ Verified |
 
 **ID format:** `PRESC-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 15 total, 0 mapped to tasks, 15 unmapped ⚠️ (aguardando fase Design/Tasks)
+**Coverage:** 15 total, 15 mapped to tasks, 0 unmapped — 15/15 Verified (PRESC-10 com dívida de teste minor, não bloqueadora; ver validation.md, 2ª rodada)
 
 ---
 

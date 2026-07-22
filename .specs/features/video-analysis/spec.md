@@ -158,28 +158,28 @@ procedimento"; é uma camada de apresentação sobre os eventos já produzidos p
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| VIDEO-01 | P1: Carga de sequência URFD + extração de keypoints (MediaPipe Pose) | Design | Pending |
-| VIDEO-02 | P1: Métricas de movimento por janela (centro de massa, assimetria) | Design | Pending |
-| VIDEO-03 | P1: Classificação da sequência como queda ou ADL | Design | Pending |
-| VIDEO-04 | P1: Métricas precision/recall/F1 da raia pose contra o rótulo real | Design | Pending |
-| VIDEO-05 | P1: Evidência da raia pose (frame anotado + metadados) | Design | Pending |
-| VIDEO-06 | P2: Carga de frame Endoscapes-BBox201 + anotação COCO real | Design | Pending |
-| VIDEO-07 | P2: Detecção via `ImageAnalyzer` (YOLOv8 local / Rekognition cloud) | Design | Pending |
-| VIDEO-08 | P2: Métricas precision/recall/F1 por classe contra anotação COCO | Design | Pending |
-| VIDEO-09 | P2: Evidência da raia objeto (frame anotado + metadados) | Design | Pending |
-| VIDEO-10 | P2: Tratamento de falha/limite do Rekognition | Design | Pending |
-| VIDEO-11 | P3: Relatório automático consolidado (ambas as raias) | Design | Pending |
-| VIDEO-12 | P3: Relatório mesmo sem eventos detectados | Design | Pending |
-| VIDEO-13 | Edge: frame sem pessoa detectável descartado da janela (raia pose) | Design | Pending |
-| VIDEO-14 | Edge: sequência curta demais para uma janela ("dados insuficientes") | Design | Pending |
-| VIDEO-15 | Edge: isolamento de eventos entre sequências/vídeos no mesmo lote | Design | Pending |
-| VIDEO-16 | Dimensão: dedupe de keyframe reenviado ao S3 | Design | Pending |
+| VIDEO-01 | P1: Carga de sequência URFD + extração de keypoints (MediaPipe Pose) | Tasks | ✅ Verified |
+| VIDEO-02 | P1: Métricas de movimento por janela (centro de massa, assimetria) | Tasks | ✅ Verified |
+| VIDEO-03 | P1: Classificação da sequência como queda ou ADL | Tasks | ✅ Verified |
+| VIDEO-04 | P1: Métricas precision/recall/F1 da raia pose contra o rótulo real | Tasks | ✅ Verified |
+| VIDEO-05 | P1: Evidência da raia pose (frame anotado + metadados) | Tasks | ✅ Verified |
+| VIDEO-06 | P2: Carga de frame Endoscapes-BBox201 + anotação COCO real | Tasks | ✅ Verified |
+| VIDEO-07 | P2: Detecção via `ImageAnalyzer` (YOLOv8 local / Rekognition cloud) | Tasks | ✅ Verified |
+| VIDEO-08 | P2: Métricas precision/recall/F1 por classe contra anotação COCO | Tasks | ✅ Verified |
+| VIDEO-09 | P2: Evidência da raia objeto (frame anotado + metadados) | Tasks | ✅ Verified |
+| VIDEO-10 | P2: Tratamento de falha/limite do Rekognition | Tasks | ⚠️ Verified with gap (CloudWatch-observability assertion missing) |
+| VIDEO-11 | P3: Relatório automático consolidado (ambas as raias) | Tasks | ✅ Verified |
+| VIDEO-12 | P3: Relatório mesmo sem eventos detectados | Tasks | ✅ Verified |
+| VIDEO-13 | Edge: frame sem pessoa detectável descartado da janela (raia pose) | Tasks | ✅ Verified |
+| VIDEO-14 | Edge: sequência curta demais para uma janela ("dados insuficientes") | Tasks | ✅ Verified |
+| VIDEO-15 | Edge: isolamento de eventos entre sequências/vídeos no mesmo lote | Tasks | ✅ Verified |
+| VIDEO-16 | Dimensão: dedupe de keyframe reenviado ao S3 | Tasks | ✅ Verified |
 
 **ID format:** `VIDEO-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 16 total, 0 mapped to tasks, 16 unmapped ⚠️ (aguardando fase Design/Tasks)
+**Coverage:** 16 total, 16 mapped to tasks, 0 unmapped — 15/16 Verified, 1 Verified with gap (VIDEO-10, minor, non-blocking; ver validation.md)
 
 ---
 
