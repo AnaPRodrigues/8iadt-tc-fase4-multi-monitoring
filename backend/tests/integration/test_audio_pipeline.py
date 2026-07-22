@@ -77,6 +77,45 @@ def test_p2_p3_com_audio_icbhi_real_sem_fala_grava_resumo_reliable_false(tmp_pat
     assert evidencias_de_termo == []  # sem falso positivo de termo crítico
 
 
+def test_p3_com_2_audios_reais_grava_evidencia_de_fadiga_vocal(tmp_path):
+    """AC3 de P3: score de fadiga ultrapassa o limiar -> evidência "possível fadiga vocal"
+    marcada como heurística não validada clinicamente. Com só 1 áudio o baseline degenera
+    (design.md § Risks & Concerns), então o teste precisa de 2 áudios de consulta reais do
+    ICBHI para exercitar `fatigued=True` de fato (validation.md § Fix 3)."""
+    _skip_se_dataset_ausente()
+    audio_a = _ICBHI_DIR / "104_1b1_Ar_sc_Litt3200.wav"
+    audio_b = _ICBHI_DIR / "105_1b1_Tc_sc_Meditron.wav"
+    assert audio_a.is_file() and audio_b.is_file()
+
+    cfg = _config(
+        tmp_path,
+        _ICBHI_DIR,
+        icbhi_max_patients=5,  # foco do teste é P3, não a métrica de P1
+        consult_audio_paths=[str(audio_a), str(audio_b)],
+        whisper_model_size="tiny",
+        fatigue_threshold=0.5,
+    )
+
+    assert run(cfg, run_id="teste-p3-fadiga") == 0
+
+    saida = tmp_path / "out" / "audio" / "teste-p3-fadiga"
+    resumo_fatigado = json.loads(
+        (saida / f"{audio_b.stem}-summary.json").read_text(encoding="utf-8")
+    )
+    assert resumo_fatigado["fatigued"] is True
+    resumo_normal = json.loads(
+        (saida / f"{audio_a.stem}-summary.json").read_text(encoding="utf-8")
+    )
+    assert resumo_normal["fatigued"] is False
+
+    artefato = (saida / f"{audio_b.stem}-fatigue.txt").read_text(encoding="utf-8")
+    assert "possível fadiga vocal" in artefato
+    assert "heurística não validada clinicamente" in artefato
+
+    sidecar = json.loads((saida / f"{audio_b.stem}-fatigue.json").read_text(encoding="utf-8"))
+    assert sidecar["metadata"]["fatigue_score"] == resumo_fatigado["fatigue_score"]
+
+
 def test_consult_audio_paths_vazio_roda_so_p1_ate_o_fim(tmp_path):
     _skip_se_dataset_ausente()
     cfg = _config(tmp_path, _ICBHI_DIR, icbhi_max_patients=5, consult_audio_paths=[])
