@@ -138,26 +138,26 @@ exigência central de "dificuldade respiratória" já está coberta pelo P1 com 
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| AUDIO-01 | P1: Carga de ciclo ICBHI + extração de features | Design | Pending |
-| AUDIO-02 | P1: Classificador respiratório leve (CPU) | Design | Pending |
-| AUDIO-03 | P1: Predição de classe + score de confiança | Design | Pending |
-| AUDIO-04 | P1: Métricas precision/recall/F1 por classe | Design | Pending |
-| AUDIO-05 | P1: Evidência de classe anômala (espectrograma) | Design | Pending |
-| AUDIO-06 | P2: Transcrição faster-whisper (pt-BR) | Design | Pending |
-| AUDIO-07 | P2: Busca de termos críticos configuráveis | Design | Pending |
-| AUDIO-08 | P2: Sentimento local (sem nuvem) | Design | Pending |
-| AUDIO-09 | P2: Evidência de termo crítico | Design | Pending |
-| AUDIO-10 | Edge: transcrição vazia/não confiável | Design | Pending |
-| AUDIO-11 | P3: Features acústicas + score de fadiga vocal | Design | Pending |
-| AUDIO-12 | Edge: arquivo corrompido/formato não suportado | Design | Pending |
-| AUDIO-13 | Edge: ciclo ICBHI sem anotação excluído das métricas | Design | Pending |
-| AUDIO-14 | Edge: determinismo de reprocessamento | Design | Pending |
+| AUDIO-01 | P1: Carga de ciclo ICBHI + extração de features | Design | In Design |
+| AUDIO-02 | P1: Classificador respiratório leve (CPU) | Design | In Design |
+| AUDIO-03 | P1: Predição de classe + score de confiança | Design | In Design |
+| AUDIO-04 | P1: Métricas precision/recall/F1 por classe | Design | In Design |
+| AUDIO-05 | P1: Evidência de classe anômala (espectrograma) | Design | In Design |
+| AUDIO-06 | P2: Transcrição faster-whisper (pt-BR) | Design | In Design |
+| AUDIO-07 | P2: Busca de termos críticos configuráveis | Design | In Design |
+| AUDIO-08 | P2: Sentimento local (sem nuvem) | Design | In Design |
+| AUDIO-09 | P2: Evidência de termo crítico | Design | In Design |
+| AUDIO-10 | Edge: transcrição vazia/não confiável | Design | In Design |
+| AUDIO-11 | P3: Features acústicas + score de fadiga vocal | Design | In Design |
+| AUDIO-12 | Edge: arquivo corrompido/formato não suportado | Design | In Design |
+| AUDIO-13 | Edge: ciclo ICBHI sem anotação excluído das métricas | Design | In Design |
+| AUDIO-14 | Edge: determinismo de reprocessamento | Design | In Design |
 
 **ID format:** `AUDIO-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 14 total, 0 mapped to tasks, 14 unmapped ⚠️ (aguardando fase Design/Tasks)
+**Coverage:** 14 total, 0 mapped to tasks, 14 unmapped ⚠️ (design escrito — ver `design.md`; próxima fase é Tasks)
 
 ---
 

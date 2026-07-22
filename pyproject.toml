@@ -15,6 +15,9 @@ dependencies = [
     "mediapipe>=0.10",
     "ultralytics>=8.0",
     "opencv-python>=4.9",
+    "librosa>=0.11",
+    "faster-whisper>=1.2",
+    "praat-parselmouth>=0.4",
 ]
 
 [project.optional-dependencies]
