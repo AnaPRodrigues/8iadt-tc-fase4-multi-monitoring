@@ -200,6 +200,30 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: VIDEO-10 — backend/tests/integration/test_video_handler.py:102-122 (observability)
 - last seen: 2026-07-22T15:32:16Z
 
+### L-032 — When a training call sets a class-imbalance-handling parameter (e.g. class_weight="balanced"), add a test with an imbalanced dataset or that introspects the fitted estimator's params — a balanced synthetic fixture alone cannot detect its removal.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `backend/pipelines` · harmful: 0
+- features: audio-analysis
+- evidence: backend/pipelines/audio/icbhi_classifier.py:40-42 (mutant 2 in validation.md) (backend/pipelines)
+- last seen: 2026-07-22T22:07:03Z
+
+### L-033 — When an acceptance criterion requires writing an evidence artifact on a threshold-crossing condition computed inside the CLI orchestrator (not the pure domain function), add a test that drives the orchestrator itself past the threshold — unit-testing only the pure scoring function leaves the actual evidence-write branch uncovered.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `backend/pipelines` · harmful: 0
+- features: audio-analysis
+- evidence: P3 AC3 (spec.md) — cli.py:111-131 _salva_evidencia_fadiga, no file:line test citation (backend/pipelines)
+- last seen: 2026-07-22T22:07:08Z
+
+### L-034 — Before naming a new test file, check for an existing test file with the same basename anywhere under backend/tests/ — pytest's default import mode has no package markers there, so a duplicate basename breaks full-suite collection even when the narrower per-feature test command passes.
+- signal: `gate_fail` · recurrence: 1 feature(s) · scope: `backend/tests` · harmful: 0
+- features: audio-analysis
+- evidence: make test / pytest -q at repo root — import file mismatch on backend/tests/audio/test_config.py vs backend/tests/common/test_config.py (backend/tests)
+- last seen: 2026-07-22T22:07:12Z
+
+### L-035 — When an error-handling pattern (try/except around a batch item) is copied to a second call site by analogy with an already-tested one, add a test for the new call site too — proximity to tested code is not evidence of coverage.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `backend/pipelines` · harmful: 0
+- features: audio-analysis
+- evidence: Edge case AUDIO-12 (spec.md) — cli.py:143-148 consult_audio_paths try/except, no file:line test citation (backend/pipelines)
+- last seen: 2026-07-22T22:07:28Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

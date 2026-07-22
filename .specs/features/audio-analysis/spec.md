@@ -138,20 +138,20 @@ exigência central de "dificuldade respiratória" já está coberta pelo P1 com 
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| AUDIO-01 | P1: Carga de ciclo ICBHI + extração de features | Tasks | In Tasks |
-| AUDIO-02 | P1: Classificador respiratório leve (CPU) | Tasks | In Tasks |
-| AUDIO-03 | P1: Predição de classe + score de confiança | Tasks | In Tasks |
-| AUDIO-04 | P1: Métricas precision/recall/F1 por classe | Tasks | In Tasks |
-| AUDIO-05 | P1: Evidência de classe anômala (espectrograma) | Tasks | In Tasks |
-| AUDIO-06 | P2: Transcrição faster-whisper (pt-BR) | Tasks | In Tasks |
-| AUDIO-07 | P2: Busca de termos críticos configuráveis | Tasks | In Tasks |
-| AUDIO-08 | P2: Sentimento local (sem nuvem) | Tasks | In Tasks |
-| AUDIO-09 | P2: Evidência de termo crítico | Tasks | In Tasks |
-| AUDIO-10 | Edge: transcrição vazia/não confiável | Tasks | In Tasks |
-| AUDIO-11 | P3: Features acústicas + score de fadiga vocal | Tasks | In Tasks |
-| AUDIO-12 | Edge: arquivo corrompido/formato não suportado | Tasks | In Tasks |
-| AUDIO-13 | Edge: ciclo ICBHI sem anotação excluído das métricas | Tasks | In Tasks |
-| AUDIO-14 | Edge: determinismo de reprocessamento | Tasks | In Tasks |
+| AUDIO-01 | P1: Carga de ciclo ICBHI + extração de features | Tasks | ✅ Verified |
+| AUDIO-02 | P1: Classificador respiratório leve (CPU) | Tasks | ✅ Verified |
+| AUDIO-03 | P1: Predição de classe + score de confiança | Tasks | ✅ Verified |
+| AUDIO-04 | P1: Métricas precision/recall/F1 por classe | Tasks | ✅ Verified |
+| AUDIO-05 | P1: Evidência de classe anômala (espectrograma) | Tasks | ✅ Verified |
+| AUDIO-06 | P2: Transcrição faster-whisper (pt-BR) | Tasks | ✅ Verified |
+| AUDIO-07 | P2: Busca de termos críticos configuráveis | Tasks | ✅ Verified |
+| AUDIO-08 | P2: Sentimento local (sem nuvem) | Tasks | ✅ Verified |
+| AUDIO-09 | P2: Evidência de termo crítico | Tasks | ✅ Verified |
+| AUDIO-10 | Edge: transcrição vazia/não confiável | Tasks | ✅ Verified |
+| AUDIO-11 | P3: Features acústicas + score de fadiga vocal | Tasks | ❌ Needs Fix (ver validation.md — evidência de fadiga sem teste e inalcançável com 1 áudio) |
+| AUDIO-12 | Edge: arquivo corrompido/formato não suportado | Tasks | ❌ Needs Fix (ver validation.md — lado ICBHI verificado, lado consult_audio_paths sem teste) |
+| AUDIO-13 | Edge: ciclo ICBHI sem anotação excluído das métricas | Tasks | ✅ Verified |
+| AUDIO-14 | Edge: determinismo de reprocessamento | Tasks | ✅ Verified |
 
 **ID format:** `AUDIO-NN`
 

@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 32,
+  "next_id": 36,
   "lessons": [
     {
       "id": "L-001",
@@ -562,6 +562,78 @@
       ],
       "created": "2026-07-22T15:32:16Z",
       "last_seen": "2026-07-22T15:32:16Z"
+    },
+    {
+      "id": "L-032",
+      "key": "surviving_mutant::when a training call sets a class imbalance handling parameter e g class weight balanced add a test with an imbalanced dataset or that introspects the fitted estimator s params a balanced synthetic fixture alone cannot detect its removal",
+      "text": "When a training call sets a class-imbalance-handling parameter (e.g. class_weight=\"balanced\"), add a test with an imbalanced dataset or that introspects the fitted estimator's params — a balanced synthetic fixture alone cannot detect its removal.",
+      "signal": "surviving_mutant",
+      "scope": "backend/pipelines",
+      "status": "candidate",
+      "features": [
+        "audio-analysis"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "backend/pipelines/audio/icbhi_classifier.py:40-42 (mutant 2 in validation.md) (backend/pipelines)"
+      ],
+      "created": "2026-07-22T22:07:03Z",
+      "last_seen": "2026-07-22T22:07:03Z"
+    },
+    {
+      "id": "L-033",
+      "key": "ac_gap::when an acceptance criterion requires writing an evidence artifact on a threshold crossing condition computed inside the cli orchestrator not the pure domain function add a test that drives the orchestrator itself past the threshold unit testing only the pure scoring function leaves the actual evidence write branch uncovered",
+      "text": "When an acceptance criterion requires writing an evidence artifact on a threshold-crossing condition computed inside the CLI orchestrator (not the pure domain function), add a test that drives the orchestrator itself past the threshold — unit-testing only the pure scoring function leaves the actual evidence-write branch uncovered.",
+      "signal": "ac_gap",
+      "scope": "backend/pipelines",
+      "status": "candidate",
+      "features": [
+        "audio-analysis"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "P3 AC3 (spec.md) — cli.py:111-131 _salva_evidencia_fadiga, no file:line test citation (backend/pipelines)"
+      ],
+      "created": "2026-07-22T22:07:08Z",
+      "last_seen": "2026-07-22T22:07:08Z"
+    },
+    {
+      "id": "L-034",
+      "key": "gate_fail::before naming a new test file check for an existing test file with the same basename anywhere under backend tests pytest s default import mode has no package markers there so a duplicate basename breaks full suite collection even when the narrower per feature test command passes",
+      "text": "Before naming a new test file, check for an existing test file with the same basename anywhere under backend/tests/ — pytest's default import mode has no package markers there, so a duplicate basename breaks full-suite collection even when the narrower per-feature test command passes.",
+      "signal": "gate_fail",
+      "scope": "backend/tests",
+      "status": "candidate",
+      "features": [
+        "audio-analysis"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "make test / pytest -q at repo root — import file mismatch on backend/tests/audio/test_config.py vs backend/tests/common/test_config.py (backend/tests)"
+      ],
+      "created": "2026-07-22T22:07:12Z",
+      "last_seen": "2026-07-22T22:07:12Z"
+    },
+    {
+      "id": "L-035",
+      "key": "ac_gap::when an error handling pattern try except around a batch item is copied to a second call site by analogy with an already tested one add a test for the new call site too proximity to tested code is not evidence of coverage",
+      "text": "When an error-handling pattern (try/except around a batch item) is copied to a second call site by analogy with an already-tested one, add a test for the new call site too — proximity to tested code is not evidence of coverage.",
+      "signal": "ac_gap",
+      "scope": "backend/pipelines",
+      "status": "candidate",
+      "features": [
+        "audio-analysis"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "Edge case AUDIO-12 (spec.md) — cli.py:143-148 consult_audio_paths try/except, no file:line test citation (backend/pipelines)"
+      ],
+      "created": "2026-07-22T22:07:28Z",
+      "last_seen": "2026-07-22T22:07:28Z"
     }
   ]
 }
