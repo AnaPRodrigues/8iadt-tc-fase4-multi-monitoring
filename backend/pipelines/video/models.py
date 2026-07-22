@@ -49,3 +49,10 @@ class BoundingBox:
 class AnnotatedFrame:
     image_path: Path
     boxes: list[BoundingBox]
+
+
+@dataclass(frozen=True)
+class Detection:
+    class_name: str
+    confidence: float
+    bbox: tuple[float, float, float, float]  # x, y, width, height (formato COCO)

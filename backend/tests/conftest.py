@@ -126,3 +126,29 @@ def registro_valido(tmp_path):
 @pytest.fixture
 def registro_patologico(tmp_path):
     return escreve_registro(tmp_path, "0002", ph=7.01)
+
+
+# ---- Pesos fine-tuned reais do YOLOv8n (F1, T7) — compartilhados por T8-T10 ----
+_ENDOSCAPES_TRAIN = _REPO_ROOT / "data" / "endoscapes" / "endoscapes" / "train"
+_ENDOSCAPES_COCO_JSON = _ENDOSCAPES_TRAIN / "annotation_coco.json"
+
+
+@pytest.fixture(scope="session")
+def finetuned_weights(tmp_path_factory):
+    """Treina uma vez (escopo `session`) e reaproveita entre os testes de detecção."""
+    import json
+
+    from pipelines.video.object_finetune import finetune
+
+    data = json.loads(_ENDOSCAPES_COCO_JSON.read_text(encoding="utf-8"))
+    annotated_ids = {a["image_id"] for a in data["annotations"]}
+    chosen = [im for im in data["images"] if im["id"] in annotated_ids][:20]
+    chosen_ids = {im["id"] for im in chosen}
+    chosen_anns = [a for a in data["annotations"] if a["image_id"] in chosen_ids]
+    reduced = {"images": chosen, "annotations": chosen_anns, "categories": data["categories"]}
+
+    work = tmp_path_factory.mktemp("object_finetune_session")
+    coco_path = work / "annotation_coco_reduzido.json"
+    coco_path.write_text(json.dumps(reduced), encoding="utf-8")
+
+    return finetune(coco_path, _ENDOSCAPES_TRAIN, work / "out", epochs=1, imgsz=320)
