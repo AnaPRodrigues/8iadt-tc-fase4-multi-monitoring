@@ -224,6 +224,18 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: Edge case AUDIO-12 (spec.md) — cli.py:143-148 consult_audio_paths try/except, no file:line test citation (backend/pipelines)
 - last seen: 2026-07-22T22:07:28Z
 
+### L-036 — When testing a hysteresis/threshold state machine, add a dedicated test pinning each exact boundary value (threshold ± band) from each starting state — tests only using far-from-boundary values (e.g. 0.36, 0.9) miss a relaxed-boundary mutation entirely.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `backend/pipelines/fusion/` · harmful: 0
+- features: fusion-and-alerting
+- evidence: backend/pipelines/fusion/hysteresis.py:41 (mutant #1) (backend/pipelines/fusion/)
+- last seen: 2026-07-23T22:33:38Z
+
+### L-037 — When a route test monkeypatches a helper function entirely to isolate the route logic, also add a separate integration test exercising the real helper against real infra (LocalStack/DB) — otherwise the helper's actual read/query logic has zero coverage even though the route looks fully tested.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `backend/app/` · harmful: 0
+- features: fusion-and-alerting
+- evidence: backend/app/routes.py:132 (mutant #4, _is_confirmed) (backend/app/)
+- last seen: 2026-07-23T22:33:39Z
+
 ## Quarantined (failed when applied — ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

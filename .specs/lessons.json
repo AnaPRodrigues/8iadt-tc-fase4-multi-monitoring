@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 36,
+  "next_id": 38,
   "lessons": [
     {
       "id": "L-001",
@@ -634,6 +634,42 @@
       ],
       "created": "2026-07-22T22:07:28Z",
       "last_seen": "2026-07-22T22:07:28Z"
+    },
+    {
+      "id": "L-036",
+      "key": "surviving_mutant::when testing a hysteresis threshold state machine add a dedicated test pinning each exact boundary value threshold band from each starting state tests only using far from boundary values e g 0 36 0 9 miss a relaxed boundary mutation entirely",
+      "text": "When testing a hysteresis/threshold state machine, add a dedicated test pinning each exact boundary value (threshold ± band) from each starting state — tests only using far-from-boundary values (e.g. 0.36, 0.9) miss a relaxed-boundary mutation entirely.",
+      "signal": "surviving_mutant",
+      "scope": "backend/pipelines/fusion/",
+      "status": "candidate",
+      "features": [
+        "fusion-and-alerting"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "backend/pipelines/fusion/hysteresis.py:41 (mutant #1) (backend/pipelines/fusion/)"
+      ],
+      "created": "2026-07-23T22:33:38Z",
+      "last_seen": "2026-07-23T22:33:38Z"
+    },
+    {
+      "id": "L-037",
+      "key": "surviving_mutant::when a route test monkeypatches a helper function entirely to isolate the route logic also add a separate integration test exercising the real helper against real infra localstack db otherwise the helper s actual read query logic has zero coverage even though the route looks fully tested",
+      "text": "When a route test monkeypatches a helper function entirely to isolate the route logic, also add a separate integration test exercising the real helper against real infra (LocalStack/DB) — otherwise the helper's actual read/query logic has zero coverage even though the route looks fully tested.",
+      "signal": "surviving_mutant",
+      "scope": "backend/app/",
+      "status": "candidate",
+      "features": [
+        "fusion-and-alerting"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "backend/app/routes.py:132 (mutant #4, _is_confirmed) (backend/app/)"
+      ],
+      "created": "2026-07-23T22:33:39Z",
+      "last_seen": "2026-07-23T22:33:39Z"
     }
   ]
 }
