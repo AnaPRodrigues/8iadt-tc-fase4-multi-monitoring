@@ -128,17 +128,91 @@ def registro_patologico(tmp_path):
     return escreve_registro(tmp_path, "0002", ph=7.01)
 
 
-# ---- Pesos fine-tuned reais do YOLOv8n (F1, T7) — compartilhados por T8-T10 ----
+# ---- Pesos reais de um detector de objetos (compartilhados entre os testes de detecção) ----
+#
+# O treino de produção desse detector vive inteiramente em `training/`, fora do
+# backend (o backend só faz inferência). Esta função é infraestrutura de teste,
+# não o treino do sistema: ela existe só para dar aos testes de inferência um
+# modelo de verdade e rápido de treinar, sem depender de `training/` (que, por
+# sua vez, também não pode depender do backend — nenhum dos dois lados importa
+# o outro). Por isso ela duplica, de forma mínima e deliberada, os mesmos
+# passos de conversão/treino que `training/finetune.py` faz de verdade.
 _ENDOSCAPES_TRAIN = _REPO_ROOT / "data" / "endoscapes" / "endoscapes" / "train"
 _ENDOSCAPES_COCO_JSON = _ENDOSCAPES_TRAIN / "annotation_coco.json"
+_YOLO_BASE_WEIGHTS_URL = "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8n.pt"
+
+
+def _smoke_train_detector(coco_json: Path, images_dir: Path, output_dir: Path) -> Path:
+    """Treina um detector de objetos por 1 época sobre poucas imagens reais.
+
+    Suficiente para produzir um peso carregável com as classes corretas —
+    não é uma validação de metodologia de treino (isso é papel do notebook em
+    `training/`), só uma forma rápida e real (não mockada) de exercitar o
+    código de inferência do backend contra um modelo de verdade.
+    """
+    import json
+    import urllib.request
+
+    from ultralytics import YOLO
+    from ultralytics.data.converter import convert_coco
+
+    data = json.loads(coco_json.read_text(encoding="utf-8"))
+    category_names = {cat["id"] - 1: cat["name"] for cat in data["categories"]}
+
+    coco_src = output_dir / "coco_src"
+    coco_src.mkdir(parents=True, exist_ok=True)
+    shutil.copy(coco_json, coco_src / coco_json.name)
+
+    yolo_dir = output_dir / "yolo"
+    convert_coco(
+        labels_dir=str(coco_src),
+        save_dir=str(yolo_dir),
+        use_segments=False,
+        use_keypoints=False,
+        cls91to80=False,
+    )
+    (yolo_dir / "labels" / coco_json.stem).rename(yolo_dir / "labels" / "train")
+
+    images_train = yolo_dir / "images" / "train"
+    images_train.mkdir(parents=True, exist_ok=True)
+    for image in data["images"]:
+        src = images_dir / image["file_name"]
+        dst = images_train / image["file_name"]
+        if not dst.exists():
+            dst.symlink_to(src)
+
+    names_yaml = "".join(f"  {idx}: {name}\n" for idx, name in sorted(category_names.items()))
+    dataset_yaml = yolo_dir / "dataset.yaml"
+    dataset_yaml.write_text(
+        f"path: {yolo_dir}\ntrain: images/train\nval: images/train\nnames:\n{names_yaml}",
+        encoding="utf-8",
+    )
+
+    base_weights_dir = output_dir / "base_weights"
+    base_weights_dir.mkdir(parents=True, exist_ok=True)
+    base_weights = base_weights_dir / "yolov8n.pt"
+    if not base_weights.is_file():
+        urllib.request.urlretrieve(_YOLO_BASE_WEIGHTS_URL, base_weights)
+
+    model = YOLO(str(base_weights))
+    results = model.train(
+        data=str(dataset_yaml),
+        epochs=1,
+        imgsz=320,
+        project=str(output_dir / "runs"),
+        name="smoke",
+        exist_ok=True,
+        verbose=False,
+        plots=False,
+        workers=1,
+    )
+    return Path(results.save_dir) / "weights" / "best.pt"
 
 
 @pytest.fixture(scope="session")
 def finetuned_weights(tmp_path_factory):
     """Treina uma vez (escopo `session`) e reaproveita entre os testes de detecção."""
     import json
-
-    from pipelines.video.object_finetune import finetune
 
     data = json.loads(_ENDOSCAPES_COCO_JSON.read_text(encoding="utf-8"))
     annotated_ids = {a["image_id"] for a in data["annotations"]}
@@ -147,8 +221,8 @@ def finetuned_weights(tmp_path_factory):
     chosen_anns = [a for a in data["annotations"] if a["image_id"] in chosen_ids]
     reduced = {"images": chosen, "annotations": chosen_anns, "categories": data["categories"]}
 
-    work = tmp_path_factory.mktemp("object_finetune_session")
+    work = tmp_path_factory.mktemp("smoke_train_session")
     coco_path = work / "annotation_coco_reduzido.json"
     coco_path.write_text(json.dumps(reduced), encoding="utf-8")
 
-    return finetune(coco_path, _ENDOSCAPES_TRAIN, work / "out", epochs=1, imgsz=320)
+    return _smoke_train_detector(coco_path, _ENDOSCAPES_TRAIN, work / "out")
