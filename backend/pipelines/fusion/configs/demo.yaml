@@ -1,0 +1,51 @@
+# Config curada do paciente-demo de F5 (fusion-and-alerting) -- AD-045a.
+#
+# Composição didática (AD-024): 1 evento real de cada uma das 4 modalidades (F1-F4),
+# curado manualmente (evidence_id + demo_timestamp_s) -- NÃO é uma correlação clínica
+# real entre registros de um mesmo paciente de verdade (ver spec.md § Out of Scope).
+#
+# Caso de sinais vitais (F3) usado: CTU-UHB (cardiotocografia fetal / FHR), via
+# `pipelines/vitals/configs/demo.yaml` -- decisão confirmada com o usuário, não BIDMC
+# (HR/SpO2 de UTI adulta). `pipelines/vitals/{loader,features,detectors}.py` são
+# inteiramente específicos do CTU-UHB (rótulo por pH fetal); processar HR/SpO2/PULSE
+# do BIDMC exigiria um segundo caso de F3 inteiro, fora do escopo desta config.
+#
+# Consequência aceita conscientemente: o desencaixe narrativo entre "monitoramento
+# fetal" (CTU-UHB) e "queda de paciente adulto" (URFD) não é um erro de curadoria --
+# é o mesmo princípio já aceito pela AD-024 (o paciente-demo demonstra o MECANISMO de
+# fusão multimodal -- peso, decaimento, histerese, explicabilidade -- não uma
+# correlação clínica real entre as 4 fontes).
+#
+# Narrativa (demo_timestamp_s em segundos, evidência real de cada feature):
+#   t=0    video (F1, URFD fall-01): queda detectada (pose_detector, score 0.31)
+#   t=300  vitals (F3, CTU-UHB registro 1001): janela anômala do IsolationForest
+#          (pH real do registro = 7.14, indicativo de acidose fetal -- deterioração)
+#   t=600  prescription (F4, paciente p3): mudança abrupta de dose de losartana
+#          (50mg -> 100mg, +100%) -- prescrição ajustada após a deterioração
+#   t=900  audio (F2, ICBHI): sibilo (wheeze) detectado em ciclo respiratório real
+patient_demo_id: demo
+events:
+  - modality: video
+    feature: video_pose
+    run_id: demo
+    evidence_id: fall-01-fall
+    demo_timestamp_s: 0.0
+    severity: 1.0
+  - modality: vitals
+    feature: vitals
+    run_id: "20260723-220709"
+    evidence_id: 1001-isolation_forest-3900s
+    demo_timestamp_s: 300.0
+    severity: 1.0
+  - modality: prescription
+    feature: prescription
+    run_id: "20260721"
+    evidence_id: p3-losartana-2026-01-01T00-00-11
+    demo_timestamp_s: 600.0
+    severity: 1.0
+  - modality: audio
+    feature: audio
+    run_id: demo
+    evidence_id: 114_1b4_Al_mc_AKGC417L-cycle1-wheeze
+    demo_timestamp_s: 900.0
+    severity: 1.0
