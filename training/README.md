@@ -1,91 +1,90 @@
-# training/
+# Treino do detector de estruturas cirúrgicas
 
-Pasta de topo, irmã de `backend/` e `frontend/`, para a etapa de treino que precisa de
-GPU (AD-042). O sistema em operação (`backend/`) continua 100% CPU (AD-012) — só este
-treino offline do YOLOv8 usa GPU, via Google Colab.
+Esta pasta contém tudo que é preciso para treinar, do zero, o modelo que reconhece
+estruturas anatômicas e instrumentos em imagens de cirurgia laparoscópica. É um mundo
+totalmente separado do resto do sistema: nada aqui depende do código de `backend/` ou
+`frontend/`, e nada em `backend/`/`frontend/` depende do código daqui — a única coisa
+que os conecta é o arquivo de peso treinado (`models/best.pt`), que o sistema carrega
+para fazer a detecção.
 
-**Não reimplementa nada de F1.** O notebook importa e chama o código já testado de
-`backend/pipelines/video/object_finetune.py`, `object_loader.py`, `object_detector.py` e
-`object_evaluate.py` (362 testes verdes, Verifier PASS) — F1 não é modificada por esta
-pasta.
+## Por que treinar separado
 
-## Por que isto existe
+O treino de uma rede neural é muito mais rápido numa GPU do que num processador comum
+(CPU) — pode ser a diferença entre minutos e horas. O restante do sistema (a parte que
+roda a demonstração, analisa vídeo/áudio/sinais vitais/prescrições) foi propositalmente
+desenhado para rodar inteiro em CPU, sem depender de GPU nem de custo de nuvem. Por
+isso o treino do modelo de detecção fica isolado aqui, pensado para rodar no
+[Google Colab](https://colab.research.google.com/), que oferece uma GPU gratuita — o
+sistema em produção só carrega o resultado (o arquivo de pesos), nunca treina nada
+sozinho.
 
-`object_finetune.finetune()` (F1) já treina o YOLOv8n sobre o Endoscapes-BBox201 real,
-mas foi validado com um treino curto (`epochs=1`) em CPU — suficiente para provar o
-pipeline (AC de F1), insuficiente para produzir pesos com boa precisão. Rodar mais
-épocas em CPU é inviável no prazo; a GPU gratuita do Colab resolve isso sem violar
-AD-012 (a inferência do sistema em produção continua CPU-only — só o treino usa GPU).
+## Passo 1 — preparar as imagens (na sua máquina, antes do Colab)
 
-## Passo 1 — preparar o subconjunto de dados (local, antes do Colab)
-
-O diretório `data/endoscapes/endoscapes/train/` tem 36694 `.jpg`, mas cada
-`annotation_coco.json` (train/val/test) só referencia um subconjunto anotado (1212 +
-409 + 312 = 1933 imagens, ~207 MB). Subir os 36694 arquivos brutos (~6 GB) ao Drive
-violaria o requisito de não subir o dataset inteiro. Em vez disso:
+O dataset de imagens cirúrgicas usado aqui (Endoscapes2023, aberto e gratuito) tem
+dezenas de milhares de imagens no total, mas só um subconjunto delas tem anotação
+(rótulo de onde está cada estrutura anatômica) — é só esse subconjunto que serve para
+treinar. Baixe o dataset completo e depois separe só o que interessa:
 
 ```bash
-make data                                    # se ainda não baixou data/endoscapes/
-PYTHONPATH=backend .venv/bin/python training/prepare_dataset_subset.py
+make data                                   # baixa os datasets, se ainda não baixou
+python3 training/prepare_dataset_subset.py
 ```
 
-Isso reusa `pipelines.video.object_loader.load_annotated_frames` (mesmo parser de F1,
-não reimplementado) para copiar só as imagens referenciadas em cada split para
-`training/staging/{train,val,test}/`, junto com o `annotation_coco.json` de cada um.
+Isso copia só as ~1900 imagens anotadas (cerca de 200 MB) para
+`training/staging/{train,val,test}/`, junto com o arquivo de anotação de cada grupo —
+bem menor que subir o dataset inteiro (vários gigabytes) para o Google Drive.
 
-Depois, zipe e suba ao Google Drive:
+Depois, compacte e suba ao Google Drive:
 
 ```bash
 cd training && zip -r endoscapes_staging.zip staging/ && cd ..
 ```
 
-Suba `endoscapes_staging.zip` para o seu Google Drive (qualquer pasta — o notebook pede
-o caminho).
+Suba `endoscapes_staging.zip` para o seu Google Drive (qualquer pasta — o notebook vai
+pedir o caminho).
 
 ## Passo 2 — rodar o notebook no Colab
 
-Abra `train_yolo_endoscapes.ipynb` no [Google Colab](https://colab.research.google.com/),
-selecione **Ambiente de execução → Alterar tipo de ambiente de execução → GPU**, e rode
-as células em ordem. O notebook:
+1. Abra `train_yolo_endoscapes.ipynb` em [colab.research.google.com](https://colab.research.google.com/).
+2. No menu, escolha **Ambiente de execução → Alterar tipo de ambiente de execução → GPU**.
+3. Envie também o arquivo `finetune.py` (desta mesma pasta) para o Colab — arraste-o
+   para o painel de arquivos à esquerda, na raiz de `/content/`.
+4. Rode as células em ordem. O notebook:
+   - monta o seu Google Drive e descompacta o zip preparado no passo 1;
+   - instala a biblioteca de treino (`ultralytics`);
+   - treina o modelo com as imagens de treino e validação, salvando o resultado
+     **direto no Drive** (a sessão do Colab pode cair a qualquer momento — nunca
+     conte com o que fica só no disco temporário do Colab);
+   - avalia o modelo treinado contra as imagens de teste, que ele nunca viu durante o
+     treino — essa é a métrica de qualidade que importa de verdade, não o desempenho
+     durante o treino em si.
 
-1. Monta o Drive e descompacta `endoscapes_staging.zip`.
-2. Clona o repositório (só para importar o código de F1 — nenhum dado vem daqui).
-3. Instala `requirements-training.txt`.
-4. Chama `object_finetune.finetune()` real, com épocas/tamanho de imagem completos
-   (seed fixa, `epochs=50`, `imgsz=640` — ajustável no notebook), salvando `best.pt` e
-   `results.csv` **diretamente no Drive** (a sessão do Colab cai por inatividade — nunca
-   depender do disco efêmero `/content`).
-5. Avalia o `best.pt` recém-treinado contra o split `test/` oficial do Endoscapes — que o
-   treino **nunca viu** — usando `object_loader` + `object_detector.YoloDetector` +
-   `object_evaluate.evaluate` (todos já existentes em F1). Essa é a métrica honesta
-   reportada, não a validação interna do treino.
+O treino usa por padrão 50 repetições sobre os dados (épocas) e imagens em 640x640
+pixels — ajustável nas primeiras linhas da célula de treino do notebook.
 
-**Nota de metodologia**: `object_finetune.finetune()` (código de F1, não alterado aqui)
-usa o próprio split de treino como validação interna durante o treino — F1 não foi
-desenhada com um split de validação separado. Como não modificamos F1, a métrica que de
-fato importa (e que vai para o relatório técnico) é a avaliação pós-treino contra
-`test/`, no passo 5, nunca a validação interna do `finetune()`.
+## Passo 3 — publicar o peso treinado
 
-## Passo 3 — publicar o peso
+1. Baixe do seu Google Drive os arquivos `best.pt` (o peso treinado),
+   `results.csv` (histórico do treino) e `metrics_test.json` (métricas finais) para a
+   pasta `models/` deste repositório, na sua máquina.
+2. Preencha `models/README.md` com a data do treino, os parâmetros usados e as métricas
+   obtidas.
+3. Publique `best.pt` como anexo de uma nova versão ("Release") deste repositório no
+   GitHub.
+4. Atualize a variável `MODEL_RELEASE_URL` no `Makefile` com o link do arquivo
+   publicado.
+5. A partir daí, qualquer pessoa que só queira usar o modelo (sem retreinar) roda
+   `make models-fetch` e baixa o peso pronto automaticamente.
 
-```bash
-# baixe do Drive: best.pt, results.csv, metrics_test.json → coloque em models/
-```
+## Sobre os dados
 
-1. Preencha `models/README.md` com proveniência (notebook, hiperparâmetros, seed, data,
-   métricas de `metrics_test.json`).
-2. Publique `best.pt` como asset de um [GitHub Release](https://github.com/AnaPRodrigues/8iadt-tc-fase4-multi-monitoring/releases)
-   do repositório.
-3. Atualize `MODEL_RELEASE_URL` no `Makefile` com a URL do asset publicado.
-4. Quem só quer rodar a demo (sem retreinar) roda `make models-fetch`.
+O dataset já vem oficialmente dividido em três grupos — treino, validação e teste — e
+essa divisão nunca deve ser embaralhada: imagens vizinhas de um mesmo vídeo cirúrgico
+são quase idênticas entre si, então misturar imagens dos três grupos faria o modelo
+"decorar" em vez de aprender, e a métrica final pareceria melhor do que realmente é.
 
-## Splits oficiais do Endoscapes (medido nesta sessão)
-
-| Split | Imagens | Anotações |
+| Grupo | Imagens | Estruturas anotadas |
 | --- | --- | --- |
-| `train/` | 1212 | 5566 |
-| `val/` | 409 | 1733 |
-| `test/` | 312 | 1485 |
-
-Nunca embaralhar frames soltos entre splits — frames vizinhos de um mesmo vídeo
-cirúrgico são quase idênticos; misturar treino/teste vazaria a métrica.
+| Treino | 1212 | 5566 |
+| Validação | 409 | 1733 |
+| Teste | 312 | 1485 |

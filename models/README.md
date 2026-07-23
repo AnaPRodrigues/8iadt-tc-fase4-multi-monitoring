@@ -1,43 +1,46 @@
 # models/
 
-Diretório para pesos treinados — **não versionado** (só este README entra no Git,
-mesmo padrão de `data/`, AD-043). Pesos grandes não pertencem ao Git; ficam publicados
-como asset de um GitHub Release e são baixados sob demanda com `make models-fetch`.
+Pasta para os modelos já treinados. **Não é versionada no Git** — só este README fica
+no repositório; o arquivo de peso em si é grande demais para um repositório de código
+e fica publicado como anexo de uma versão ("Release") do projeto no GitHub.
 
-## Como obter os pesos
+## Como obter o modelo treinado
 
 ```bash
 make models-fetch
 ```
 
-Baixa `best.pt` (YOLOv8, F1) do GitHub Release configurado em `MODEL_RELEASE_URL` no
-`Makefile`, para `models/best.pt` — o caminho que `object_detector.py`/`adapters.py`
-esperam.
+Baixa o peso do detector de estruturas cirúrgicas para `models/best.pt` — o caminho
+que o sistema espera encontrar ao carregar o modelo para fazer detecções.
 
-## Como (re)treinar
+## Como treinar do zero
 
-Ver `training/README.md` — o YOLOv8 treina no Google Colab (GPU); o classificador de
-áudio de F2 treina em CPU, em memória, a cada execução do CLI (`icbhi_classifier.py`,
-sem artefato persistido — AD-008, ver `.specs/STATE.md` § Decisões).
+O detector de estruturas cirúrgicas é treinado separadamente, numa GPU (ver
+`training/README.md`) — o sistema em si nunca treina, só carrega o resultado.
+
+O classificador que identifica dificuldade respiratória em áudio é diferente: ele é
+rápido o bastante para treinar em segundos, num processador comum, então é treinado
+automaticamente toda vez que a análise de áudio roda — não existe um arquivo de peso
+salvo para ele.
 
 ---
 
-## Proveniência dos pesos
+## Proveniência do modelo publicado
 
-> ⚠️ **Ainda não preenchido** — nenhum treino real (fora do smoke test de F1) rodou
-> ainda. Preencher esta seção depois de rodar `training/train_yolo_endoscapes.ipynb` e
-> antes de publicar o Release.
+> ⚠️ **Ainda não preenchido** — nenhum treino completo rodou ainda. Preencher esta
+> seção depois de rodar `training/train_yolo_endoscapes.ipynb` e antes de publicar o
+> Release.
 
-### `best.pt` (YOLOv8n, detecção de objeto/área crítica — Endoscapes-BBox201)
+### `best.pt` — detector de estruturas cirúrgicas
 
 | Campo | Valor |
 | --- | --- |
-| Notebook | `training/train_yolo_endoscapes.ipynb` |
+| Como foi gerado | `training/train_yolo_endoscapes.ipynb` |
 | Data do treino | _pendente_ |
-| Épocas | _pendente_ |
-| `imgsz` | _pendente_ |
-| Seed | _pendente_ |
-| Split de treino | `data/endoscapes/endoscapes/train/` (1212 imagens, 5566 anotações) |
-| Split de avaliação (nunca visto no treino) | `data/endoscapes/endoscapes/test/` (312 imagens, 1485 anotações) |
-| Precision/recall/F1 por classe (IoU ≥ 0.5) | _pendente — ver `metrics_test.json` gerado pelo notebook_ |
-| GitHub Release | _pendente_ |
+| Número de repetições sobre os dados (épocas) | _pendente_ |
+| Resolução de imagem usada no treino | _pendente_ |
+| Semente aleatória (para reprodutibilidade) | _pendente_ |
+| Imagens de treino | 1212, com 5566 estruturas anotadas |
+| Imagens de avaliação (nunca vistas no treino) | 312, com 1485 estruturas anotadas |
+| Precisão/revocação por estrutura | _pendente — ver `metrics_test.json` gerado pelo notebook de treino_ |
+| Versão publicada no GitHub | _pendente_ |

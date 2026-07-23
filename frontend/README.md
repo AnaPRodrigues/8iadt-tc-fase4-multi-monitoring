@@ -1,14 +1,14 @@
-# Frontend
+# frontend/
 
-App separado que consome a API do `backend/` (AD-029). Sem lógica de
-processamento — só apresentação:
+Painel de visualização (Streamlit) que consome a API do `backend/` — sem nenhuma
+lógica de processamento própria, só apresentação:
 
-- timeline unificada do paciente (verde/amarelo/vermelho);
-- replay do cenário de demo;
-- visualização de evidências (frame anotado, transcript, gráfico da janela anômala, prescrição anotada).
+- linha do tempo unificada do paciente, com o nível de risco (verde/amarelo/vermelho)
+  ao longo do tempo;
+- reprodução controlada de um cenário de demonstração;
+- visualização da evidência de cada evento (frame de vídeo anotado, transcrição com o
+  termo destacado, gráfico do sinal vital anômalo, prescrição anotada — conforme a
+  origem do evento).
 
-Consome o contrato REST versionado: `/patients/{id}/timeline`, `/analyze`,
-`/alerts`, `/evidence/{id}`.
-
-**Framework: Streamlit** (AD-044) — cliente fino consumindo `backend/app/`
-(FastAPI), sem lógica de processamento própria.
+Fala com o backend só por HTTP, consumindo as rotas: linha do tempo do paciente,
+análise, alertas e evidência de um evento.

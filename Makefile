@@ -1,7 +1,7 @@
 PY := .venv/bin/python
 
-# URL do asset `best.pt` no GitHub Release (AD-043) -- a definir quando o primeiro
-# Release for publicado (ver training/README.md § Passo 3).
+# URL do peso treinado publicado como Release no GitHub -- preencha depois de
+# treinar o modelo em training/ e publicar o arquivo (ver training/README.md).
 MODEL_RELEASE_URL :=
 
 .PHONY: install data demo test test-unit lint fmt clean localstack-up localstack-down infra-local infra-cloud infra-prescription-local infra-prescription-cloud infra-video-local infra-video-cloud models-fetch
@@ -9,13 +9,13 @@ MODEL_RELEASE_URL :=
 install:
 	$(PY) -m pip install -e ".[dev]"
 
-# F0 — aquisição de dados. O script é criado na feature data-acquisition (AD-031).
+# Baixa os datasets públicos usados pelo sistema.
 data:
 	./backend/scripts/download_datasets.sh
 
-# Baixa os pesos treinados (AD-043) -- treino real roda em training/ (Colab/GPU),
-# não aqui. Sem MODEL_RELEASE_URL configurada (nenhum Release publicado ainda),
-# falha com uma mensagem clara em vez de um erro obscuro do curl.
+# Baixa o peso já treinado do detector de objetos (o treino em si roda em
+# training/, com GPU). Sem MODEL_RELEASE_URL configurada (nenhuma versão
+# publicada ainda), falha com uma mensagem clara em vez de um erro obscuro do curl.
 models-fetch:
 	@if [ -z "$(MODEL_RELEASE_URL)" ]; then \
 	  echo "MODEL_RELEASE_URL não configurada -- publique um Release (ver training/README.md) e defina a variável no Makefile."; \
@@ -39,14 +39,14 @@ lint:
 fmt:
 	$(PY) -m ruff format backend
 
-# --- LocalStack (profile local, AD-034) ---
+# --- Simulador local da nuvem (LocalStack) -- roda tudo sem precisar de uma conta AWS ---
 localstack-up:
 	docker compose up -d localstack
 
 localstack-down:
 	docker compose down
 
-# --- IaC idempotente (mesmos recursos nos dois ambientes, AD-034) ---
+# --- Provisiona os recursos de nuvem compartilhados (bucket, tópico de alerta, tabela) ---
 # Sourcing do .env.* é opcional: se ausente, usa o que já estiver no ambiente
 # (útil em testes que exportam as variáveis diretamente).
 infra-local:
@@ -57,7 +57,7 @@ infra-cloud:
 	bash -c 'set -a; [ -f .env.cloud ] && source .env.cloud; set +a; \
 	  PYTHONPATH=backend ENV=cloud $(PY) -m aws.provision'
 
-# --- F4: Lambda de prescrições + gatilho S3 (específico da feature, sobre a IaC acima) ---
+# --- Função de nuvem da análise de prescrições + gatilho de upload (sobre a infra acima) ---
 infra-prescription-local:
 	bash -c 'set -a; [ -f .env.local ] && source .env.local; set +a; \
 	  PYTHONPATH=backend ENV=local $(PY) -m aws.provision && \
@@ -68,7 +68,7 @@ infra-prescription-cloud:
 	  PYTHONPATH=backend ENV=cloud $(PY) -m aws.provision && \
 	  PYTHONPATH=backend ENV=cloud $(PY) -m pipelines.prescription.infra'
 
-# --- F1: Lambda do complemento cloud de vídeo + gatilho S3 (sobre a IaC acima) ---
+# --- Função de nuvem complementar da análise de vídeo + gatilho de upload (sobre a infra acima) ---
 infra-video-local:
 	bash -c 'set -a; [ -f .env.local ] && source .env.local; set +a; \
 	  PYTHONPATH=backend ENV=local $(PY) -m aws.provision && \

@@ -1,24 +1,28 @@
-# Backend
+# backend/
 
-Python — FastAPI + pipelines + fusão + integração AWS. Fonte única de lógica de
-processamento; o `frontend/` apenas consome a API (AD-029).
+Código em Python — API, pipelines de análise, motor de fusão de risco e integração com
+serviços de nuvem. É a única parte do sistema que processa dados; o `frontend/` apenas
+consome a API e não tem lógica própria.
 
-## Layout
+## Estrutura
 
-| Pasta | Papel |
+| Pasta | Conteúdo |
 | --- | --- |
-| `app/` | FastAPI: rotas, schemas, `main`. Contrato REST versionado: `/patients/{id}/timeline`, `/analyze`, `/alerts`, `/evidence/{id}` |
-| `common/` | Código compartilhado por todos os pipelines: formato de evidência, métricas, config, logging (o antigo `src/core/`). **Nome a confirmar** (AD-030) |
-| `pipelines/vitals/` | F3 — CTU-UHB/MIT-BIH + detectores. **A migrar de `src/vitals/`** (AD-032) |
-| `pipelines/audio/` | F2 — faster-whisper + librosa + termos críticos |
-| `pipelines/video/` | F1 — YOLOv8 + cliente Rekognition |
-| `pipelines/prescription/` | F4 — cliente Textract + parser + regras |
-| `fusion/` | F5 — late fusion, score de risco, níveis |
-| `aws/` | `clients.py` (factory boto3 por `ENV`, AD-034), `adapters/` (`TextExtractor`/`ImageAnalyzer` cloud+local, AD-035), `lambdas/` (handlers). Perfis local (LocalStack) / cloud (Learner Lab) |
-| `scripts/` | `download_datasets` (F0) e outros utilitários |
-| `tests/` | Testes do backend (os 165 de F3 migram para cá) |
+| `app/` | API (FastAPI): rotas, contratos de entrada/saída, ponto de entrada do servidor. Rotas: timeline do paciente, análise, alertas, evidência de um evento |
+| `common/` | Código compartilhado por todas as análises: formato de evidência (como cada anomalia detectada é registrada com seu artefato visual), métricas, configuração, log |
+| `pipelines/vitals/` | Análise de sinais vitais (frequência cardíaca, oxigenação, batimentos) e detecção de anomalias |
+| `pipelines/audio/` | Análise de áudio: dificuldade respiratória, transcrição, termos clínicos críticos, sinais de fadiga vocal |
+| `pipelines/video/` | Análise de vídeo: postura e padrões de movimentação (quedas), detecção de estruturas críticas em cirurgia |
+| `pipelines/prescription/` | Leitura de prescrições médicas (PDF) e checagem de dose/variação anômala |
+| `fusion/` | Combinação dos sinais das quatro análises acima num único indicador de risco, com alerta automático |
+| `aws/` | Integração com serviços de nuvem (armazenamento, mensageria, banco de dados) — funciona tanto contra a nuvem real quanto contra um simulador local, sem precisar de conta na nuvem para desenvolver/testar |
+| `scripts/` | Utilitários, incluindo o download dos conjuntos de dados públicos |
+| `tests/` | Testes automatizados de tudo acima |
 
-## Estado atual
+## Como rodar os testes
 
-F3 ainda vive em `src/` na raiz do repositório (165 testes passando). A migração
-para esta estrutura é a primeira etapa de execução após aprovação do STATE.md.
+```bash
+make test         # suíte completa
+make test-unit    # só os testes rápidos (sem tocar em serviços externos)
+make lint         # checagem de estilo
+```

@@ -1,32 +1,36 @@
 # data/
 
-Diretório populado pelo script de aquisição (F0) — **não versionado** (só este
-README e o script entram no Git). Datasets grandes ficam fora do repositório.
+Pasta onde ficam os conjuntos de dados públicos usados pelo sistema. **Não é
+versionada no Git** — só este README fica no repositório; os dados em si são baixados
+sob demanda, pois são grandes demais para viver num repositório de código.
 
-## Como reproduzir
+## Como baixar
 
-```
+```bash
 make data
 ```
 
-Executa `backend/scripts/download_datasets`, que baixa apenas as fontes abertas,
-sem credenciamento (AD-016, AD-031):
+Baixa todos os conjuntos de dados abaixo, de fontes públicas e sem necessidade de
+cadastro/aprovação prévia. O download é retomável (se cair no meio, `make data` de
+novo continua de onde parou) e não baixa de novo o que já existe.
 
-| Dataset | Destino | Método | Papel |
-| --- | --- | --- | --- |
-| CTU-UHB Intrapartum CTG | `data/ctu-uhb/` | `wfdb.dl_database('ctu-uhb-ctgdb', ...)` | F3 — FHR + contração + pH do cordão (rótulo real) |
-| ICBHI 2017 Respiratory Sound | `data/icbhi/` | Harvard Dataverse (`curl -C -`) + `unzip` | F2 — ciclos respiratórios anotados (crackle/wheeze/normal) |
-| Endoscapes2023 | `data/endoscapes/` | `wget --continue` (~6 GB) + `unzip` | F1 — frames cirúrgicos reais + bounding boxes COCO (5 anatomias + 1 instrumento) |
+| Dataset | Onde fica | Para que serve |
+| --- | --- | --- |
+| CTU-UHB (cardiotocografia) | `data/ctu-uhb/` | Frequência cardíaca fetal e contrações uterinas de partos reais, com o desfecho clínico real (pH do cordão umbilical) — usado para detectar sinais de sofrimento fetal |
+| ICBHI 2017 (sons respiratórios) | `data/icbhi/` | Gravações reais de ausculta pulmonar, anotadas por especialistas (respiração normal, com estalidos ou com sibilos) — usado para detectar dificuldade respiratória |
+| Endoscapes2023 (cirurgia) | `data/endoscapes/` | Imagens reais de cirurgia laparoscópica, com as estruturas anatômicas e instrumentos marcados — usado para treinar e avaliar o detector de estruturas críticas em vídeo |
+| UR Fall Detection (postura) | `data/urfd/` | Sequências de imagens reais de pessoas caindo ou realizando atividades do dia a dia — usado para detectar quedas e padrões de movimentação |
+| BIDMC (monitor de UTI) | `data/bidmc/` | Sinais reais de monitor de internação (batimentos, oxigenação no sangue, respiração) de pacientes de UTI — usado para detectar alterações nesses sinais vitais |
 
-O script é idempotente: se o dataset já existe, pula. Downloads interrompidos são
-retomados (`--continue`).
+Nenhum desses conjuntos de dados contém informação identificável de paciente — são
+todos anonimizados e de acesso público para pesquisa.
 
-## Fontes confirmadas
+## Fontes exatas
 
-- ICBHI 2017: Harvard Dataverse DOI `10.7910/DVN/HT6PKI` (`https://dataverse.harvard.edu/api/access/datafile/7127117`, ~1.9 GB). A URL original `bhichallenge.med.auth.gr` retorna HTTP 403 (site bloqueado); o Dataverse serve o mesmo `ICBHI_final_database.zip`.
-- Endoscapes2023: `https://s3.unistra.fr/camma_public/datasets/endoscapes/endoscapes.zip` (~6 GB, aberto, sem formulário). Substitui o Cholec80-CVS, cujos vídeos exigem CAMMA (AD-033).
-
-## Datasets NÃO usados
-
-MIMIC-III/IV e derivados exigem credenciamento (CITI + DUA) e estão fora do
-caminho crítico do prazo (AD-017). Nenhum dado real identificável de paciente.
+- **CTU-UHB**: PhysioNet, banco `ctu-uhb-ctgdb`, baixado via biblioteca `wfdb`.
+- **ICBHI 2017**: espelhado no Harvard Dataverse (`10.7910/DVN/HT6PKI`) — o site
+  original da competição está fora do ar.
+- **Endoscapes2023**: `s3.unistra.fr/camma_public/datasets/endoscapes` (acesso aberto,
+  sem formulário).
+- **UR Fall Detection**: `fenix.ur.edu.pl/~mkepski/ds` (Universidade de Rzeszów).
+- **BIDMC**: PhysioNet, banco `bidmc`.
