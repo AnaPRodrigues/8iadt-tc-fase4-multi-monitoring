@@ -17,6 +17,14 @@ scratch state, reverted via `git checkout --`, never touching the working tree p
 This is weaker than a truly separate author-blind agent for T16–T18 specifically; flagged
 explicitly rather than presented as an equivalent guarantee.
 
+**Re-verification addendum (2026-07-23, orchestrator session, commit `6466e46`)**: the 2
+surviving mutants below were routed as fix tasks and closed by the orchestrating session (not a
+fresh sub-agent — same transparency caveat as above applies). Both fixes were confirmed with
+real evidence, not assumed: each original mutation was **reapplied** to the working tree, the
+now-added test was run and observed to fail against the mutated code, then the mutation was
+reverted via `git checkout --` (working tree confirmed clean via `git status --short` before and
+after). See the updated Discrimination Sensor rows below for the exact failure output.
+
 ---
 
 ## Task Completion
@@ -92,13 +100,13 @@ All 18 tasks committed. No blocked/partial tasks.
 
 | # | File:line | Description | Killed? |
 | --- | --- | --- | --- |
-| 1 | `backend/pipelines/fusion/hysteresis.py:41` | Fronteira VERDE→VERMELHO relaxada: `score > threshold_vermelho + hysteresis` → `score > threshold_vermelho - hysteresis` (0.75 → 0.65) | ❌ **Survived** — `test_hysteresis.py` (9 testes) passou inalterado. Nenhum teste usa um score no intervalo `(0.65, 0.75]` partindo do nível VERDE — os testes existentes só cobrem 0.36 (abaixo de ambos), 0.9 (acima de ambos) e a sequência conhecida (que nunca visita esse intervalo específico a partir de VERDE). |
+| 1 | `backend/pipelines/fusion/hysteresis.py:41` | Fronteira VERDE→VERMELHO relaxada: `score > threshold_vermelho + hysteresis` → `score > threshold_vermelho - hysteresis` (0.75 → 0.65) | ✅ **Killed (re-teste 2026-07-23, commit `6466e46`)** — novo teste `test_verde_para_vermelho_respeita_a_fronteira_exata_da_banda_do_limiar_vermelho` (`test_hysteresis.py`) falha com a mutação reaplicada (`assert 'vermelho' == 'amarelo'`); mutação revertida via `git checkout --` logo em seguida, árvore confirmada limpa. |
 | 2 | `backend/pipelines/fusion/risk_engine.py:58` | Decaimento removido: `weight * event.severity * decay(elapsed, half_life_s)` → `weight * event.severity * 1.0` | ✅ Killed — `test_score_at_soma_peso_severidade_decay...` e `test_score_at_usa_o_evento_mais_recente...` falharam (2/14 testes de `test_risk_engine.py`) |
 | 3 | `backend/pipelines/fusion/alert.py:16` | Ordenação removida do `dedup_key`: `sorted(...)` → `[...]` (lista não ordenada) | ✅ Killed — `test_dedup_key_mesmo_conjunto_em_ordem_diferente_gera_a_mesma_chave` falhou (1/6 testes de `test_alert.py`) |
-| 4 | `backend/app/routes.py:132` | `_is_confirmed` sempre devolve `True` após a consulta real ao DynamoDB (ignora a resposta) | ❌ **Survived** — os 11 testes de `test_routes.py` passaram inalterados. Todos os testes que exercitam `GET /alerts` com `confirmed` fazem `monkeypatch.setattr(routes, "_is_confirmed", lambda dedup_key: True/False)`, substituindo a função inteira — nenhum teste chega a exercitar a leitura real do DynamoDB (`client.get_item` + `"Item" in response`) dentro de `_is_confirmed`. O único teste que não faz mock (`test_get_alerts_sem_dynamodb_table_configurada...`) sai pelo guard `if not table_name: return False` antes de alcançar a linha mutada. |
+| 4 | `backend/app/routes.py:132` | `_is_confirmed` sempre devolve `True` após a consulta real ao DynamoDB (ignora a resposta) | ✅ **Killed (re-teste 2026-07-23, commit `6466e46`)** — novo teste de integração `test_is_confirmed_le_o_item_real_do_dynamodb_gravado_pelo_handler` (`test_fusion_handler.py`, LocalStack real) falha com a mutação reaplicada (`assert _is_confirmed(dedup_key) is False` antes do handler gravar o item falha, pois a mutação devolve `True` mesmo sem item); mutação revertida via `git checkout --`, árvore confirmada limpa. |
 
 **Sensor depth**: lightweight (4 mutations, dentro da faixa 1-3 recomendada para o tier default — estendida em 1 para cobrir a camada de API além do domínio puro)
-**Result**: 2/4 killed, **2 survived** → ❌ **FAIL** (por regra do processo: mutante sobrevivente = gap de teste real, feature não pode ser marcada "done" sem virar fix task)
+**Result**: 4/4 killed (2 originalmente, 2 no re-teste após fix) → ✅ **PASS**
 
 All mutations applied and reverted via `git checkout --` in the same session; `git status --short backend/` confirmed clean before and after each mutation. The real working tree was never left in a mutated state.
 
@@ -131,9 +139,9 @@ All mutations applied and reverted via `git checkout --` in the same session; `g
 ## Gate Check
 
 - **Gate command**: `make test-unit` (T18's own Done-when) + `make localstack-up && make test && make lint` (fechamento de feature, Phase 6/última tarefa)
-- **Result**: `make test-unit` → 395 passed, 0 failed. `make test` (suite completa, incl. `-m integration` contra LocalStack real) → 487 passed, 0 failed. `make lint` → clean.
+- **Result (após fix, commit `6466e46`)**: `make test-unit` → 396 passed, 0 failed. `make test` (suite completa, incl. `-m integration` contra LocalStack real) → 489 passed, 0 failed. `make lint` → clean.
 - **Test count before feature** (baseline, pre-`9dd7d1d`): not independently re-measured (out of scope of this diff range) — the diff range itself adds 27 files, ~2946 insertions, including 12 new/expanded test files.
-- **Test count after feature**: 487 (full suite)
+- **Test count after feature**: 489 (full suite, includes the 2 fix-task tests)
 - **Skipped tests**: none observed in either run (all fixtures/datasets present locally: URFD, ICBHI, CTU-UHB, `output/prescription/2026072*`)
 - **Failures**: none
 
@@ -163,11 +171,11 @@ All mutations applied and reverted via `git checkout --` in the same session; `g
 | FUSION-02 | Implementing | ✅ Verified |
 | FUSION-03 | Implementing | ✅ Verified |
 | FUSION-04 | Implementing | ✅ Verified |
-| FUSION-05 | Implementing | ⚠️ Needs Fix (Fix 1 — boundary test gap) |
+| FUSION-05 | Implementing | ✅ Verified (Fix 1 aplicado e re-testado, commit `6466e46`) |
 | FUSION-06 | Implementing | ✅ Verified |
 | FUSION-07 | Implementing | ✅ Verified |
 | FUSION-08 | Implementing | ✅ Verified |
-| FUSION-09 | Implementing | ⚠️ Needs Fix (Fix 2 — `_is_confirmed` real-path gap) |
+| FUSION-09 | Implementing | ✅ Verified (Fix 2 aplicado e re-testado, commit `6466e46`) |
 | FUSION-10 | Implementing | ⚠️ Verified (manual/AppTest only — visual inspection pending) |
 | FUSION-11 | Implementing | ⚠️ Verified (manual/AppTest only — visual inspection pending) |
 | FUSION-12 | Implementing | ⚠️ Verified (manual/AppTest only — visual inspection pending) |
@@ -178,17 +186,17 @@ All mutations applied and reverted via `git checkout --` in the same session; `g
 
 ## Summary
 
-**Overall**: ⚠️ Issues (not a hard blocker to demo-readiness — both gaps are test-coverage precision issues in already-correct production code, not live bugs — but per process, surviving mutants must become fix tasks before the feature is marked cleanly "done")
+**Overall**: ✅ PASS (após fix — ambos os gaps do sensor de discriminação corrigidos e re-verificados com evidência real de mutação morta, commit `6466e46`)
 
 **Spec-anchored check**: 16/16 criteria (P1×6, P2×3, P3×3, edge cases×4) traced to evidence, 0 spec-precision gaps (spec.md defines precise outcomes throughout; all matched)
-**Sensor**: 2/4 mutations killed, **2 survived**
-**Gate**: 487 passed, 0 failed (`make test`); `make lint` clean
+**Sensor**: 4/4 mutations killed (2 on first pass, 2 more after the fix)
+**Gate**: 489 passed, 0 failed (`make test`); `make lint` clean
 
 **What works**: The entire fusion engine (loader → risk_engine → hysteresis → transitions → alert → handler), the AWS integration (SNS/DynamoDB via LocalStack, real publish+dedupe+failure-handling verified), the API (4 routes, happy+edge+404 paths), and the dashboard (real end-to-end run against the curated `demo.yaml` with real evidence from all 4 modalities: URFD fall, CTU-UHB FHR anomaly, prescription dose-change, ICBHI wheeze) — all verified against real data, not fixtures, per AD-045a.
 
-**Issues found**:
-1. `hysteresis.py` VERDE→VERMELHO exact boundary (0.75) has no dedicated test — Fix 1 above.
-2. `app/routes.py::_is_confirmed` real DynamoDB read path has zero coverage (only the mocked substitute is exercised) — Fix 2 above.
-3. (Not a sensor finding, but a persistent limitation) Dashboard (T16/T17) has no automated visual verification available in this environment — `AppTest` headless execution + real-process `curl` checks confirm zero Python exceptions across the full narrative (all 4 drill-down evidence types, replay to the end, empty-state message), but true browser-rendered visual correctness (layout, colors, chart legibility) was not and could not be inspected in this session.
+**Issues found (both fixed)**:
+1. ~~`hysteresis.py` VERDE→VERMELHO exact boundary (0.75) has no dedicated test~~ — **Fixed**: `test_verde_para_vermelho_respeita_a_fronteira_exata_da_banda_do_limiar_vermelho` added, confirmed to kill the original mutation on re-test.
+2. ~~`app/routes.py::_is_confirmed` real DynamoDB read path has zero coverage~~ — **Fixed**: `test_is_confirmed_le_o_item_real_do_dynamodb_gravado_pelo_handler` added (LocalStack real), confirmed to kill the original mutation on re-test.
+3. (Not a sensor finding, still open) Dashboard (T16/T17) has no automated visual verification available in this environment — `AppTest` headless execution + real-process `curl` checks confirm zero Python exceptions across the full narrative (all 4 drill-down evidence types, replay to the end, empty-state message), but true browser-rendered visual correctness (layout, colors, chart legibility) was not and could not be inspected in any session so far.
 
-**Next steps**: Route Fix 1 and Fix 2 as fix tasks to an implementer (bounded to 3 fix→re-verify iterations per protocol); re-run this validation after both are addressed. A human reviewer should also do a real-browser pass of `frontend/app.py` before the demo video recording, given the tooling limitation noted above.
+**Next steps**: Fix→re-verify loop closed in 1 iteration (both gaps resolved together, commit `6466e46`) — feature is done per process. Remaining open item, not a blocker: a human reviewer should do a real-browser pass of `frontend/app.py` before the demo video recording, given the tooling limitation noted above (issue 3).

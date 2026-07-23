@@ -2,7 +2,8 @@
 
 Pasta para os modelos já treinados. **Não é versionada no Git** — só este README fica
 no repositório; o arquivo de peso em si é grande demais para um repositório de código
-e fica publicado como anexo de uma versão ("Release") do projeto no GitHub.
+e fica publicado num repositório de modelo público no
+[Hugging Face Hub](https://huggingface.co/AnaPRodrigues/endoscapes-surgical-detector).
 
 ## Como obter o modelo treinado
 
@@ -27,20 +28,45 @@ salvo para ele.
 
 ## Proveniência do modelo publicado
 
-> ⚠️ **Ainda não preenchido** — nenhum treino completo rodou ainda. Preencher esta
-> seção depois de rodar `training/train_yolo_endoscapes.ipynb` e antes de publicar o
-> Release.
+Preenchido a partir do treino real rodado em `training/train_yolo_endoscapes.ipynb`
+(saída completa arquivada em `training/endoscapes_training_output/` — `metrics_test.json`,
+`results_yolov8n.csv`, `results_yolov8s.csv`).
 
-### `best.pt` — detector de estruturas cirúrgicas
+### Detector de estruturas cirúrgicas — dois modelos treinados e validados, `yolov8s` publicado
+
+O notebook treina **duas variantes completas** (YOLOv8n e YOLOv8s, mesmo dataset,
+mesmos hiperparâmetros) e escolhe a vencedora pelo desempenho real contra o split de
+teste — nenhuma das duas é descartada sem avaliação, e ambas ficam documentadas aqui
+para rastreabilidade, mesmo só a vencedora sendo publicada.
+
+**Hiperparâmetros e dados (idênticos para as duas variantes)**
 
 | Campo | Valor |
 | --- | --- |
 | Como foi gerado | `training/train_yolo_endoscapes.ipynb` |
-| Data do treino | _pendente_ |
-| Número de repetições sobre os dados (épocas) | _pendente_ |
-| Resolução de imagem usada no treino | _pendente_ |
-| Semente aleatória (para reprodutibilidade) | _pendente_ |
+| Data do treino | 2026-07-23 |
+| Número de repetições sobre os dados (épocas) | 100 |
+| Resolução de imagem usada no treino | 640×640 |
+| Semente aleatória (para reprodutibilidade) | 42 |
 | Imagens de treino | 1212, com 5566 estruturas anotadas |
 | Imagens de avaliação (nunca vistas no treino) | 312, com 1485 estruturas anotadas |
-| Precisão/revocação por estrutura | _pendente — ver `metrics_test.json` gerado pelo notebook de treino_ |
-| Versão publicada no GitHub | _pendente_ |
+
+**Comparação entre as duas variantes validadas contra o split de teste** (de `metrics_test.json`):
+
+| Variante | Precisão média | Recall médio | mAP50 | mAP50-95 | Histórico completo (por época) |
+| --- | --- | --- | --- | --- | --- |
+| `yolov8n` | 0.7010 | 0.5787 | 0.5820 | 0.3622 | `training/endoscapes_training_output/results_yolov8n.csv` |
+| **`yolov8s`** — **vencedora, publicada** | **0.7147** | **0.5982** | **0.6046** | **0.3837** | `training/endoscapes_training_output/results_yolov8s.csv` |
+
+`yolov8s` venceu nas 4 métricas — margem modesta (~2 p.p. de mAP50-95), mas
+consistente. O critério de desempate foi o mAP50-95 (mAP médio sobre vários limiares
+de IoU — mais rigoroso que o mAP50 porque também pune caixas mal localizadas, não só
+classificação errada), conforme documentado em `training/README.md`. Só o peso da
+`yolov8s` foi publicado (é o que `make models-fetch` baixa como `models/best.pt`); o
+peso da `yolov8n` fica arquivado em
+`training/endoscapes_training_output/runs/finetune_yolov8n/weights/best.pt` (não
+versionado, mesma regra de `models/` — só existe localmente).
+
+| Campo | Valor |
+| --- | --- |
+| Versão publicada no Hugging Face | [AnaPRodrigues/endoscapes-surgical-detector](https://huggingface.co/AnaPRodrigues/endoscapes-surgical-detector) — `best.pt` (pesos da `yolov8s`), 22,5 MB (verificado publicado) |

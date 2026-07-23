@@ -12,13 +12,17 @@ output/
 data/*
 !data/README.md
 
-# Pesos treinados (AD-043) — mantém só o README, peso publicado como GitHub Release
+# Pesos treinados (AD-047) — mantém só o README, peso publicado no Hugging Face Hub
 models/*
 !models/README.md
 
 # Subconjunto de imagens preparado localmente para subir ao Drive (AD-042)
 training/staging/
 training/*.zip
+
+# Saída completa do treino no Colab baixada do Drive (pesos, runs, csvs) --
+# mesmo princípio de models/: binário grande, não pertence ao histórico do Git.
+training/endoscapes_training_output/
 
 # Frontend
 node_modules/

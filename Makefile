@@ -1,8 +1,9 @@
 PY := .venv/bin/python
 
-# URL do peso treinado publicado como Release no GitHub -- preencha depois de
-# treinar o modelo em training/ e publicar o arquivo (ver training/README.md).
-MODEL_RELEASE_URL :=
+# Repositório de modelo público no Hugging Face Hub onde o peso treinado é
+# publicado (ver training/README.md). Repo público -- não precisa de token.
+MODEL_HF_REPO := AnaPRodrigues/endoscapes-surgical-detector
+MODEL_HF_FILE := best.pt
 
 .PHONY: install data demo test test-unit lint fmt clean localstack-up localstack-down infra-local infra-cloud infra-prescription-local infra-prescription-cloud infra-video-local infra-video-cloud models-fetch
 
@@ -14,15 +15,11 @@ data:
 	./backend/scripts/download_datasets.sh
 
 # Baixa o peso já treinado do detector de objetos (o treino em si roda em
-# training/, com GPU). Sem MODEL_RELEASE_URL configurada (nenhuma versão
-# publicada ainda), falha com uma mensagem clara em vez de um erro obscuro do curl.
+# training/, com GPU) direto do Hugging Face Hub. Antes do primeiro upload, o
+# curl abaixo falha com 404 -- ver training/README.md para publicar o peso.
 models-fetch:
-	@if [ -z "$(MODEL_RELEASE_URL)" ]; then \
-	  echo "MODEL_RELEASE_URL não configurada -- publique um Release (ver training/README.md) e defina a variável no Makefile."; \
-	  exit 1; \
-	fi
 	mkdir -p models
-	curl -L -o models/best.pt "$(MODEL_RELEASE_URL)"
+	curl -fL -o models/best.pt "https://huggingface.co/$(MODEL_HF_REPO)/resolve/main/$(MODEL_HF_FILE)"
 
 demo:
 	PYTHONPATH=backend $(PY) -m pipelines.vitals.cli --config backend/pipelines/vitals/configs/demo.yaml

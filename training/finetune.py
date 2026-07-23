@@ -20,24 +20,25 @@ from ultralytics.data.converter import convert_coco
 
 log = logging.getLogger("training.finetune")
 
-_WEIGHTS_URL = "https://github.com/ultralytics/assets/releases/download/v8.4.0/yolov8n.pt"
-_WEIGHTS_FILENAME = "yolov8n.pt"
+_WEIGHTS_BASE_URL = "https://github.com/ultralytics/assets/releases/download/v8.4.0"
 
 
-def ensure_base_weights(cache_dir: Path) -> Path:
-    """Baixa o peso pré-treinado do YOLOv8n sob demanda; não baixa de novo se já existir."""
+def ensure_base_weights(cache_dir: Path, model_variant: str = "yolov8n") -> Path:
+    """Baixa o peso pré-treinado do `model_variant` sob demanda; não baixa de novo se já existir."""
     cache_dir = Path(cache_dir)
-    weights_path = cache_dir / _WEIGHTS_FILENAME
+    weights_filename = f"{model_variant}.pt"
+    weights_path = cache_dir / weights_filename
     if weights_path.is_file():
         log.info("pesos base já em cache: %s", weights_path)
         return weights_path
 
     cache_dir.mkdir(parents=True, exist_ok=True)
-    log.info("baixando pesos base de %s", _WEIGHTS_URL)
+    weights_url = f"{_WEIGHTS_BASE_URL}/{weights_filename}"
+    log.info("baixando pesos base de %s", weights_url)
     try:
-        urllib.request.urlretrieve(_WEIGHTS_URL, weights_path)
+        urllib.request.urlretrieve(weights_url, weights_path)
     except Exception as exc:
-        raise RuntimeError(f"falha ao baixar os pesos base de {_WEIGHTS_URL}: {exc}") from exc
+        raise RuntimeError(f"falha ao baixar os pesos base de {weights_url}: {exc}") from exc
 
     return weights_path
 
@@ -94,6 +95,7 @@ def finetune(
     val_coco: Path,
     val_images: Path,
     output_dir: Path,
+    model_variant: str = "yolov8n",
     epochs: int = 50,
     imgsz: int = 640,
     seed: int = 42,
@@ -105,6 +107,12 @@ def finetune(
     terceiro split (teste), nunca visto aqui, fica por conta de quem chama
     este módulo (ver `train_yolo_endoscapes.ipynb`, que usa `model.val(...,
     split="test")` depois de treinar).
+
+    `model_variant` seleciona o tamanho do modelo base pré-treinado (ex.:
+    `"yolov8n"`, `"yolov8s"`) -- quem chama pode treinar mais de um variante
+    sobre o mesmo `output_dir` e comparar depois; cada treino grava em
+    `runs/finetune_<model_variant>/`, então variantes diferentes não se
+    sobrescrevem.
 
     `output_dir` concentra todo o resultado (dataset convertido, cache de
     pesos base, saída do treino) -- nunca escreve no diretório de trabalho
@@ -127,7 +135,7 @@ def finetune(
         encoding="utf-8",
     )
 
-    base_weights = ensure_base_weights(output_dir / "base_weights")
+    base_weights = ensure_base_weights(output_dir / "base_weights", model_variant)
     model = YOLO(str(base_weights))
     results = model.train(
         data=str(dataset_yaml),
@@ -135,7 +143,7 @@ def finetune(
         imgsz=imgsz,
         seed=seed,
         project=str(output_dir / "runs"),
-        name="finetune",
+        name=f"finetune_{model_variant}",
         exist_ok=True,
         verbose=False,
         plots=False,
