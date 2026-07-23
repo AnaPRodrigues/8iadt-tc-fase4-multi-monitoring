@@ -75,6 +75,21 @@ def ensure_table(name: str) -> ProvisionResult:
     return ProvisionResult(resource=name, created=True)
 
 
+def ensure_subscription(topic_arn: str, email: str) -> None:
+    """Inscreve `email` no tópico SNS `topic_arn`, sem reenviar confirmação se já
+    inscrito (pendente ou confirmada) — a confirmação de inscrição do SNS é um
+    clique manual no e-mail, reenviar o convite a cada execução seria ruído."""
+    client = get_client("sns")
+    paginator = client.get_paginator("list_subscriptions_by_topic")
+    for page in paginator.paginate(TopicArn=topic_arn):
+        for sub in page.get("Subscriptions", []):
+            if sub.get("Protocol") == "email" and sub.get("Endpoint") == email:
+                log.info("e-mail %s já inscrito no tópico %s", email, topic_arn)
+                return
+    client.subscribe(TopicArn=topic_arn, Protocol="email", Endpoint=email)
+    log.info("e-mail %s inscrito no tópico %s (confirmação manual pendente)", email, topic_arn)
+
+
 def main() -> int:
     """Provisiona os três recursos compartilhados (`make infra-local`/`infra-cloud`)."""
     required = {
