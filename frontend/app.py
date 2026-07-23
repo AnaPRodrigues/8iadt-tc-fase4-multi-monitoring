@@ -1,5 +1,5 @@
-"""Dashboard Streamlit de F5 (fusion-and-alerting) -- timeline unificada e replay
-controlado do paciente-demo (FUSION-10, FUSION-11).
+"""Dashboard Streamlit de F5 (fusion-and-alerting) -- timeline unificada, replay
+controlado e drill-down de evidência do paciente-demo (FUSION-10, FUSION-11, FUSION-12).
 
 Consome só a API fina do backend (`backend/app/`) via HTTP (`requests`) -- nenhum
 import direto de `backend/pipelines/fusion/` ou `backend/common/` (AD-044,
@@ -68,6 +68,61 @@ def _render_score_chart(timeline: list[dict]) -> None:
     st.line_chart(df.set_index("t (s)"))
 
 
+def _fetch_evidence(evidence_id: str) -> requests.Response | None:
+    """Busca `GET /evidence/{id}` para o drill-down do evento selecionado (FUSION-12).
+
+    `None` sinaliza falha de rede ou `evidence_id` inexistente (404) -- o chamador já
+    mostra a mensagem de erro correspondente, não há tela em branco nesse caso.
+    """
+    try:
+        response = requests.get(f"{API_BASE_URL}/evidence/{evidence_id}", timeout=10)
+    except requests.exceptions.RequestException as exc:
+        st.error(f"Não foi possível buscar a evidência '{evidence_id}': {exc}")
+        return None
+    if response.status_code == 404:
+        st.error(f"Evidência inexistente: {evidence_id}")
+        return None
+    response.raise_for_status()
+    return response
+
+
+def _render_evidence(response: requests.Response, evidence_id: str) -> None:
+    """Renderiza o artefato conforme o `content-type` devolvido pela API -- imagem
+    (frame anotado/gráfico da janela anômala) ou texto (transcript/prescrição
+    anotada), com os metadados do sidecar (headers `X-Evidence-*`) como legenda."""
+    content_type = response.headers.get("content-type", "")
+    st.caption(
+        f"feature={response.headers.get('x-evidence-feature', '?')} · "
+        f"run_id={response.headers.get('x-evidence-run-id', '?')} · "
+        f"source_record_id={response.headers.get('x-evidence-source-record-id', '?')}"
+    )
+    if content_type.startswith("image/"):
+        st.image(response.content)
+    elif content_type.startswith("text/"):
+        st.text(response.text)
+    else:
+        st.write(f"Artefato do tipo `{content_type or 'desconhecido'}` ({len(response.content)} bytes).")
+        st.download_button(
+            "Baixar artefato", data=response.content, file_name=evidence_id, key=f"dl-{evidence_id}"
+        )
+
+
+def _render_drilldown(timeline: list[dict]) -> None:
+    """Seleção de evento -> evidência correspondente renderizada pelo tipo (FUSION-12)."""
+    eventos = _unique_events(timeline)
+    opcoes = {
+        f"t={e['demo_timestamp_s']:.0f}s · {e['modality']} · {e['summary'][:60]}": e["evidence_id"]
+        for e in eventos
+    }
+    escolha = st.selectbox("Evento", list(opcoes))
+    if escolha is None:
+        return
+    evidence_id = opcoes[escolha]
+    response = _fetch_evidence(evidence_id)
+    if response is not None:
+        _render_evidence(response, evidence_id)
+
+
 def _render_events_table(events: list[dict]) -> None:
     st.dataframe(
         pd.DataFrame(
@@ -132,7 +187,12 @@ def main() -> None:
     timeline = st.session_state.get("timeline")
 
     if timeline is None:
-        st.warning(f"Nenhum paciente-demo configurado para '{patient_demo_id}'.")
+        st.info(
+            f"**Nenhum paciente-demo configurado para '{patient_demo_id}'.**\n\n"
+            f"Crie `backend/pipelines/fusion/configs/{patient_demo_id}.yaml` "
+            "(ver `pipelines/fusion/config.py` para o formato) e clique em "
+            "'Carregar' na barra lateral."
+        )
         return
 
     if not timeline:
@@ -154,6 +214,9 @@ def main() -> None:
 
     st.subheader("Eventos das 4 modalidades")
     _render_events_table(_unique_events(timeline))
+
+    st.subheader("Drill-down de evidência")
+    _render_drilldown(timeline)
 
 
 if __name__ == "__main__":
