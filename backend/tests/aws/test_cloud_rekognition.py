@@ -1,4 +1,4 @@
-"""Testes de RekognitionAnalyzer e do registro dos adapters cloud (AWSF-04, AWSF-05)."""
+"""Testes de RekognitionAnalyzer e do registro dos adapters cloud."""
 
 from aws.adapters import get_image_analyzer, get_text_extractor
 from aws.adapters.cloud import RekognitionAnalyzer, TextractExtractor, register_cloud_adapters

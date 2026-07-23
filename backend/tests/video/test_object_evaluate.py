@@ -1,4 +1,4 @@
-"""Testes de `object_evaluate.evaluate` -- casamento IoU e métricas por classe (T9)."""
+"""Testes de `object_evaluate.evaluate` -- casamento IoU e métricas por classe."""
 
 from pathlib import Path
 

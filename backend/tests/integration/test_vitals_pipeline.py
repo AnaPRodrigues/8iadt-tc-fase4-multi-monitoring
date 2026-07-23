@@ -1,4 +1,4 @@
-"""Testes de integração do pipeline ponta a ponta de F3 (VITALS-06, VITALS-08)."""
+"""Testes de integração do pipeline ponta a ponta de monitoramento de sinais vitais."""
 
 import json
 
@@ -171,7 +171,7 @@ def test_dataset_vazio_retorna_codigo_de_erro(tmp_path):
 
 
 def test_registro_corrompido_no_lote_nao_impede_o_restante(tmp_path, escritor):
-    """VITALS-08: um header ilegível no meio do lote não pode custar a execução."""
+    """Um header ilegível no meio do lote não pode custar a execução."""
     dados = tmp_path / "dados"
     dados.mkdir()
     escritor(dados, "0001", ph=7.30, n_amostras=N_AMOSTRAS)

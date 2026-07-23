@@ -1,8 +1,9 @@
-"""Configuração declarativa de F2 (YAML → dataclass validada).
+"""Configuração declarativa do pipeline de áudio (YAML → dataclass validada).
 
 Reaplica o *padrão* de validação de ``common/config.py`` (campo desconhecido é
 erro, obrigatórios explícitos) sem importar a classe: ``common/config.py`` é, na
-prática, específica de ``vitals`` (ver design.md § Tech Decisions e § Risks).
+prática, específica da análise de sinais vitais, apesar do nome sugerir algo
+genérico.
 """
 
 from dataclasses import dataclass

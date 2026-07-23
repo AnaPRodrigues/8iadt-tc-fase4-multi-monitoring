@@ -1,4 +1,4 @@
-"""Testes do score heurístico de fadiga vocal (AUDIO-11)."""
+"""Testes do score heurístico de fadiga vocal."""
 
 from pipelines.audio.fatigue_score import is_fatigued, score
 from pipelines.audio.models import AcousticFeatures
@@ -22,7 +22,7 @@ _BASELINE = [
 
 
 def test_audio_fala_lenta_e_pausada_produz_score_maior_que_audio_normal():
-    """Independent Test de P3 (spec.md): fala mais lenta/pausada -> score de fadiga maior."""
+    """Fala mais lenta/pausada produz score de fadiga maior que fala normal."""
     normal = _features(0.006, 0.025, 19.0, 0.12, 2.9)  # próximo da média do baseline
     lento_e_pausado = _features(0.020, 0.060, 10.0, 0.30, 1.5)  # jitter/shimmer/pausa maiores,
     # HNR/velocidade de fala menores -- exatamente o padrão de fadiga

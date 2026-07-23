@@ -2,7 +2,7 @@
 
 Split feito por ``GroupShuffleSplit`` agrupado por ``patient_id`` — nunca por ciclo
 solto — para não deixar o mesmo paciente aparecer em treino e teste, o que inflaria
-precision/recall artificialmente (ver design.md § Risks & Concerns).
+precision/recall artificialmente.
 """
 
 import numpy as np
@@ -33,7 +33,7 @@ def train(cycles: list[RespiratoryCycle], seed: int) -> IcbhiClassifier:
     """Treina o RandomForest sobre os vetores de features dos ciclos fornecidos.
 
     ``class_weight="balanced"`` absorve o desbalanceamento natural das classes do
-    ICBHI sem reamostragem manual (design.md § Tech Decisions).
+    ICBHI sem reamostragem manual.
     """
     x = np.array([extract(c) for c in cycles])
     y = [c.label for c in cycles]

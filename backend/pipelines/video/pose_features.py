@@ -1,11 +1,11 @@
-"""Métricas de movimento por janela, derivadas do centro de massa (VIDEO-02).
+"""Métricas de movimento por janela, derivadas do centro de massa.
 
-SPEC_DEVIATION: nem a spec nem o design fixam a fórmula exata de assimetria
-postural ("assimetria postural" é descrito só qualitativamente). Adotada a
+A fórmula exata de assimetria postural não é fixada a priori
+("assimetria postural" é descrito só qualitativamente). Adotada a
 diferença absoluta entre a altura (y) dos dois landmarks de quadril (23/24) --
 mesmos landmarks usados para o centro de massa, sem introduzir um terceiro par
 de pontos não mencionado no design. Calibrável na prática, mesmo princípio de
-threshold de F3 (ver `pose_detector.py`).
+threshold usado para detecção de queda (ver `pose_detector.py`).
 """
 
 import math
@@ -31,7 +31,7 @@ def _asymmetry(frame: PoseFrame) -> float:
 def windowed_features(frames: list[PoseFrame | None], window_size: int) -> list[MovementWindow]:
     """Calcula amplitude/velocidade do centro de massa e assimetria por janela.
 
-    Frames `None` (sem pessoa detectada, VIDEO-13) são excluídos do cálculo da
+    Frames `None` (sem pessoa detectada) são excluídos do cálculo da
     janela em que caem, sem quebrar as demais. Uma janela sem nenhum frame
     válido não é gerada -- não existe `MovementWindow` com valores inventados.
     `end_frame` é inclusivo (último índice de frame coberto pela janela).

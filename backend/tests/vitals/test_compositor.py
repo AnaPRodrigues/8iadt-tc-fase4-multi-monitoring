@@ -1,4 +1,4 @@
-"""Testes do compositor de timeline (VITALS-07, AD-021)."""
+"""Testes do compositor de timeline."""
 
 import numpy as np
 import pytest

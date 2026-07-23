@@ -1,4 +1,4 @@
-"""Testes de janelamento deslizante (VITALS-09, ordem cronológica)."""
+"""Testes de janelamento deslizante (ordem cronológica)."""
 
 import numpy as np
 
@@ -80,7 +80,8 @@ def test_janela_com_invalidos_abaixo_do_limite_permanece_valida():
 
 
 def test_fracao_invalida_exatamente_no_limite_permanece_valida():
-    """Comparação estrita `> max_invalid_fraction`, coerente com a fronteira de AD-027."""
+    """Comparação estrita `> max_invalid_fraction`, coerente com a fronteira da
+    fração inválida usada na agregação."""
     r = _registro(8)
     mask = np.zeros(8, dtype=bool)
     mask[:4] = True  # exatamente 50%

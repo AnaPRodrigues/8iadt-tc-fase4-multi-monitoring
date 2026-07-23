@@ -1,5 +1,5 @@
-"""Testes de `pose_loader.load_sequence` -- derivados de VIDEO-01 (carga) e do
-edge case de ordenação numérica descrito no `tasks.md` (T1).
+"""Testes de `pose_loader.load_sequence` -- carga da sequência e do
+edge case de ordenação numérica.
 """
 
 from pathlib import Path

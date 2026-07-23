@@ -44,7 +44,7 @@ def test_config_minima_aplica_defaults_documentados(tmp_path):
 
     cfg = load_config(p)
 
-    assert cfg.tau == 0.15  # AD-027
+    assert cfg.tau == 0.15
     assert cfg.window_size_s == DEFAULTS["window_size_s"]
     assert cfg.window_stride_s == DEFAULTS["window_stride_s"]
     assert cfg.zscore_threshold == DEFAULTS["zscore_threshold"]

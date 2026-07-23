@@ -1,4 +1,4 @@
-"""Extração de keypoints de pose via MediaPipe (VIDEO-01, extração; VIDEO-13).
+"""Extração de keypoints de pose via MediaPipe.
 
 A versão instalada (`mediapipe==0.10.35`) não tem mais a API antiga
 (`mp.solutions.pose`) -- só a Task API nova (`mediapipe.tasks.python.vision`),
@@ -63,7 +63,7 @@ def extract_keypoints(frame_path: Path, landmarker: vision.PoseLandmarker) -> Po
     """Roda o `PoseLandmarker` num frame real; `None` se nenhuma pessoa detectada.
 
     Nunca lança exceção nem inventa landmarks para um frame sem pessoa
-    detectável (VIDEO-13) -- o chamador decide o que fazer com a ausência.
+    detectável -- o chamador decide o que fazer com a ausência.
     """
     frame = cv2.imread(str(frame_path))
     if frame is None:

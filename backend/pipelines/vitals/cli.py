@@ -1,4 +1,4 @@
-"""Pipeline ponta a ponta de F3 — o que ``make demo`` executa.
+"""Pipeline ponta a ponta de monitoramento de sinais vitais — o que ``make demo`` executa.
 
 Encadeia: carga → preprocess → janelamento → features → detectores → agregação →
 avaliação, gravando métricas e evidências sob ``output/vitals/<run_id>/``.

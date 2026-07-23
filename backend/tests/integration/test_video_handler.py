@@ -1,4 +1,4 @@
-"""Testes de integração de `handler.py` contra LocalStack real (T11).
+"""Testes de integração de `handler.py` contra LocalStack real.
 
 Requer `make localstack-up`. Pula com mensagem clara se o LocalStack não
 responder em :4566. Nomeado `test_video_handler.py` (não `test_handler.py`)

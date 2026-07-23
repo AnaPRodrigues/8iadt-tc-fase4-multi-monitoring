@@ -1,4 +1,4 @@
-"""Factory único de cliente boto3, selecionado por `ENV` (AD-034).
+"""Factory único de cliente boto3, selecionado por `ENV`.
 
 Nenhum outro módulo em `backend/` deve chamar `boto3.client(...)` diretamente
 — um teste de guarda (`test_no_direct_boto3_client.py`) torna isso executável.
@@ -35,8 +35,8 @@ def _local_endpoint() -> str:
     """``LOCALSTACK_ENDPOINT`` explícita ou, dentro de um container Lambda do
     próprio LocalStack, construída a partir de ``LOCALSTACK_HOSTNAME``/``EDGE_PORT``
     (injetadas automaticamente pelo LocalStack no runtime do Lambda — confirmado
-    empiricamente durante a implementação de F4/infra.py: o container não recebe
-    nossa variável de projeto, só as suas próprias).
+    empiricamente durante a implementação do provisionamento de infraestrutura:
+    o container não recebe nossa variável de projeto, só as suas próprias).
     """
     explicit = os.environ.get("LOCALSTACK_ENDPOINT")
     if explicit:
@@ -65,7 +65,7 @@ def load_aws_config() -> AwsConfig:
 
 
 def get_client(service: str, config: AwsConfig | None = None) -> Any:
-    """Único ponto de criação de clientes boto3 do projeto (AD-034).
+    """Único ponto de criação de clientes boto3 do projeto.
 
     `ENV=local` injeta o endpoint do LocalStack e credenciais dummy; `ENV=cloud`
     usa a cadeia de credenciais padrão da sessão (perfil/env do Learner Lab), sem

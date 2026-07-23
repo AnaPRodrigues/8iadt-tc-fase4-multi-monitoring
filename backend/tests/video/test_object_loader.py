@@ -1,4 +1,4 @@
-"""Testes de `object_loader.load_annotated_frames` -- derivados de VIDEO-06."""
+"""Testes de `object_loader.load_annotated_frames`."""
 
 import json
 from pathlib import Path

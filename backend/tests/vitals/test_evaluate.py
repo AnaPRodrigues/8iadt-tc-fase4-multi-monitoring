@@ -1,4 +1,4 @@
-"""Testes da avaliação contra o rótulo pH real (VITALS-06, VITALS-10)."""
+"""Testes da avaliação contra o rótulo pH real."""
 
 import numpy as np
 import pytest
@@ -60,7 +60,7 @@ def test_prevalencia_real_e_reportada():
 
 
 def test_conjunto_sem_patologico_avisa_que_recall_e_indefinido(caplog):
-    """VITALS-10: avisar explicitamente em vez de reportar recall zero sem contexto."""
+    """Avisar explicitamente em vez de reportar recall zero sem contexto."""
     registros = [_registro("a", 7.30), _registro("b", 7.40)]
     verdicts = {"zscore": [_veredicto("a", False), _veredicto("b", True)]}
 

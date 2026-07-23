@@ -1,10 +1,10 @@
-"""Provisiona os recursos específicos de F1 que a fundação não cobre: a função
-Lambda do complemento cloud e o gatilho S3→Lambda (VIDEO-07, VIDEO-10).
+"""Provisiona os recursos específicos do pipeline de vídeo que a fundação não cobre: a função
+Lambda do complemento cloud e o gatilho S3→Lambda.
 
 Mesmo padrão idempotente já validado em `pipelines/prescription/infra.py`
-(F4) -- "checar antes de criar". `handler.py` só depende de `boto3` (já
+-- "checar antes de criar". `handler.py` só depende de `boto3` (já
 embutido no runtime do Lambda) além dos módulos próprios do projeto, então,
-ao contrário de F4, não há dependência externa para instalar no zip; e só
+diferente do pipeline de prescrições, não há dependência externa para instalar no zip; e só
 `handler.py` (não o resto de `pipelines/video/`, que arrasta
 ultralytics/opencv) precisa ir no pacote -- o handler não importa os módulos
 locais de detecção, só `aws.adapters.get_image_analyzer`.
@@ -63,7 +63,7 @@ def package_lambda() -> bytes:
 
 
 def role_arn() -> str:
-    """`LAB_ROLE_ARN` no cloud (AD-007); ARN dummy aceito pelo LocalStack no local."""
+    """`LAB_ROLE_ARN` no cloud; ARN dummy aceito pelo LocalStack no local."""
     return os.environ.get("LAB_ROLE_ARN") or _DEFAULT_LOCAL_ROLE_ARN
 
 
@@ -72,8 +72,8 @@ def function_arn(name: str) -> str:
 
 
 def _env_vars() -> dict[str, str]:
-    """Mesmo fallback de `LOCALSTACK_HOSTNAME` da fundação (achado de F4/infra.py):
-    o container Lambda do LocalStack não herda o shell do host."""
+    """Mesmo fallback de `LOCALSTACK_HOSTNAME` da fundação (achado do pipeline
+    de prescrições, infra.py): o container Lambda do LocalStack não herda o shell do host."""
     env_vars = {"ENV": os.environ.get("ENV", "local")}
     if region := os.environ.get("AWS_REGION"):
         env_vars["AWS_REGION"] = region
@@ -146,7 +146,8 @@ def ensure_s3_trigger(bucket: str, lambda_function_arn: str) -> ProvisionResult:
 
 
 def main() -> int:
-    """Provisiona a Lambda de F1 e o gatilho S3 (`make infra-video-local`/`infra-video-cloud`)."""
+    """Provisiona a Lambda do pipeline de vídeo e o gatilho S3
+    (`make infra-video-local`/`infra-video-cloud`)."""
     bucket = os.environ.get("S3_BUCKET")
     if not bucket:
         log.error("variável ausente: S3_BUCKET")

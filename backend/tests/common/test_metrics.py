@@ -1,4 +1,4 @@
-"""Testes de core.metrics — derivados dos ACs da spec de vitals-anomaly (VITALS-06, VITALS-10)."""
+"""Testes de core.metrics."""
 
 import json
 
@@ -34,7 +34,7 @@ def test_predicao_perfeita_zera_erros():
 
 
 def test_sem_positivos_reais_deixa_recall_indefinido():
-    """VITALS-10: nenhum registro patológico ⇒ recall indefinido, nunca 0.0 silencioso."""
+    """Nenhum registro patológico ⇒ recall indefinido, nunca 0.0 silencioso."""
     y_true = [False, False, False]
     y_pred = [True, False, False]
 

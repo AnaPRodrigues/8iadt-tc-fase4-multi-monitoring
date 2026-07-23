@@ -1,4 +1,4 @@
-"""Testes de `adapters.YoloImageAnalyzer`/`register_local_adapters` (T10)."""
+"""Testes de `adapters.YoloImageAnalyzer`/`register_local_adapters`."""
 
 from pathlib import Path
 

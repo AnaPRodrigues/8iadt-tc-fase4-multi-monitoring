@@ -1,5 +1,5 @@
-"""Testes de `pose_features.windowed_features` -- derivados de VIDEO-02 e do
-edge case VIDEO-13 (frame sem pessoa excluído da janela)."""
+"""Testes de `pose_features.windowed_features` -- métricas de movimento e o
+edge case de frame sem pessoa excluído da janela."""
 
 import math
 

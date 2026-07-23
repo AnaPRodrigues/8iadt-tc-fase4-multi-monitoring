@@ -1,4 +1,4 @@
-"""Testes do adaptador opcional MIT-BIH (VITALS-11)."""
+"""Testes do adaptador opcional MIT-BIH."""
 
 import numpy as np
 import pytest
@@ -78,7 +78,7 @@ def test_dataset_presente_e_reportado_como_disponivel(tmp_path):
 
 
 def test_dataset_ausente_devolve_lista_vazia_sem_excecao(tmp_path):
-    """VITALS-11 AC3: ausência do dataset opcional não pode interromper o pipeline."""
+    """Ausência do dataset opcional não pode interromper o pipeline."""
     assert load_mitbih_dataset(tmp_path / "nao-existe") == []
 
 

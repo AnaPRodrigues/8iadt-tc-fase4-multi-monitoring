@@ -1,4 +1,4 @@
-"""Testes de verify_zip (DATA-09, DATA-13) — a defesa contra o 403/HTML disfarçado."""
+"""Testes de verify_zip — a defesa contra o 403/HTML disfarçado."""
 
 import os
 import zipfile

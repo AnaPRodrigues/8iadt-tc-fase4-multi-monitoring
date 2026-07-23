@@ -1,8 +1,8 @@
-"""Regras de anomalia sobre um ``PrescriptionRecord`` (PRESC-12, PRESC-13, PRESC-14).
+"""Regras de anomalia sobre um ``PrescriptionRecord``.
 
 Um medicamento fora do catálogo nunca é classificado como normal ou anômalo por
 omissão — vira ``"sem_referencia"`` e é excluído das métricas de avaliação
-(mesmo princípio de VITALS-10: indefinido não é a mesma coisa que zero).
+(indefinido não é a mesma coisa que zero).
 """
 
 from collections.abc import Callable

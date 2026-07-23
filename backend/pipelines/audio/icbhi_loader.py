@@ -2,9 +2,8 @@
 
 O rótulo do ciclo é derivado das duas flags binárias (crackle, wheeze) da anotação
 real do especialista: ``"both"`` é uma 4ª classe explícita, nunca descartada nem
-colapsada em ``"crackle"`` por acidente (SPEC_DEVIATION documentada em
-design.md § Tech Decisions — o rótulo real do ICBHI permite as duas anomalias
-simultâneas, e dado real rotulado não é descartado por conveniência).
+colapsada em ``"crackle"`` por acidente — o rótulo real do ICBHI permite as duas anomalias
+simultâneas, e dado real rotulado não é descartado por conveniência.
 """
 
 import random
@@ -55,7 +54,7 @@ def load_cycles(txt_path: Path, wav_path: Path) -> list[RespiratoryCycle]:
     """Lê os ciclos anotados de um par ``.txt``/``.wav``.
 
     Uma linha malformada (coluna faltando ou valor ilegível) é excluída do
-    resultado, nunca contada como erro do classificador (AUDIO-13).
+    resultado, nunca contada como erro do classificador.
     """
     record_id = Path(wav_path).stem
     meta = parse_filename(Path(wav_path).name)
@@ -94,7 +93,7 @@ def load_dataset(dataset_dir: Path) -> tuple[list[RespiratoryCycle], list[str]]:
     """Lê todos os pares ``.wav``/``.txt`` do diretório, sem parar o lote em falha.
 
     Arquivo sem anotação correspondente ou WAV corrompido/ilegível é pulado e
-    reportado na lista de falhas (AUDIO-12).
+    reportado na lista de falhas.
     """
     dataset_dir = Path(dataset_dir)
     if not dataset_dir.is_dir():

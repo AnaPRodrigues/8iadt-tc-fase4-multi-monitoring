@@ -1,4 +1,4 @@
-"""Agregação dos veredictos de janela em um veredicto por registro (AD-027).
+"""Agregação dos veredictos de janela em um veredicto por registro.
 
 O rótulo (pH) é um por registro; os detectores produzem centenas de veredictos por
 janela. Esta regra é a ponte entre os dois — e, por isso, determina sozinha as

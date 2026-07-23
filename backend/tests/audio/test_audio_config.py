@@ -1,4 +1,4 @@
-"""Testes da configuração declarativa de F2 (AUDIO-01..14, fundação)."""
+"""Testes da configuração declarativa do pipeline de áudio."""
 
 import pytest
 import yaml

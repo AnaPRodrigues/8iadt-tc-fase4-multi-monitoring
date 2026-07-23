@@ -1,8 +1,6 @@
-"""Classificação da sequência (queda vs ADL) e evidência do evento (VIDEO-03, VIDEO-05, VIDEO-14).
+"""Classificação da sequência (queda vs ADL) e evidência do evento.
 
-SPEC_DEVIATION: o design assina `classify_sequence(...) -> SequenceVerdict`, mas
-`SequenceVerdict` carrega `seq_id`/`label` que não são entradas desta função
-(ela só recebe `windows`/`threshold`, per `tasks.md` T4). Devolve o veredito
+`classify_sequence` recebe apenas `windows`/`threshold` e devolve o veredito
 puro (`"queda" | "adl" | "dados_insuficientes"`); montar o `SequenceVerdict`
 completo (juntando `seq_id`/`label` da `Sequence`) é responsabilidade do
 chamador -- `pose_detector.py` não tem acesso ao rótulo real da sequência.
@@ -19,7 +17,8 @@ from pipelines.video.models import MovementWindow, PoseFrame
 log = get_logger("video.pose_detector")
 
 # Calibrado como ponto de partida contra sequências reais do URFD (mesmo
-# princípio de ABRUPT_CHANGE_THRESHOLD em F3): não é um valor fixado pela
+# princípio de calibração empírica usado em outros limiares do projeto,
+# como ABRUPT_CHANGE_THRESHOLD): não é um valor fixado pela
 # spec, ajustável ao rodar o pipeline completo sobre o subconjunto curado.
 DEFAULT_FALL_THRESHOLD = 0.3
 
@@ -31,8 +30,8 @@ def classify_sequence(windows: list[MovementWindow], threshold: float) -> str:
 
     "queda" se qualquer janela exceder o limiar de amplitude do centro de
     massa; "adl" se nenhuma exceder; "dados_insuficientes" se não houver
-    nenhuma janela (sequência curta demais para uma janela completa,
-    VIDEO-14) -- nunca "adl" por omissão nesse caso.
+    nenhuma janela (sequência curta demais para uma janela completa)
+    -- nunca "adl" por omissão nesse caso.
     """
     if not windows:
         return "dados_insuficientes"
@@ -68,7 +67,7 @@ def save_fall_evidence(
     run_id: str,
     root: str | Path = "output",
 ) -> Evidence:
-    """Gera a evidência de queda (frame anotado + metadados) no contrato único (AD-026)."""
+    """Gera a evidência de queda (frame anotado + metadados) no contrato único de evidência."""
     dest_dir = evidence_dir("video_pose", run_id, root)
     annotated_path = dest_dir / f"{seq_id}-fall.png"
     draw_keypoints(frame_path, pose_frame, annotated_path)

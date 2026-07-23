@@ -1,4 +1,4 @@
-"""Testes de features acústicas (AUDIO-11)."""
+"""Testes de features acústicas."""
 
 import math
 from pathlib import Path

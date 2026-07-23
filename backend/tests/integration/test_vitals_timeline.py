@@ -1,4 +1,4 @@
-"""Integração do cenário de timeline composta (VITALS-07)."""
+"""Integração do cenário de timeline composta."""
 
 import json
 

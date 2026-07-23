@@ -1,4 +1,4 @@
-"""Testes dos modelos de dados e interfaces TextExtractor/ImageAnalyzer (AWSF-04)."""
+"""Testes dos modelos de dados e interfaces TextExtractor/ImageAnalyzer."""
 
 import pytest
 

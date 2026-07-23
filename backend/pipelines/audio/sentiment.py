@@ -1,6 +1,6 @@
-"""Sentimento local (positivo/negativo/neutro) via léxico pt-BR embutido (AUDIO-08).
+"""Sentimento local (positivo/negativo/neutro) via léxico pt-BR embutido.
 
-100% local (AD-002/AD-003): nenhuma chamada a serviço de nuvem — o léxico é uma
+100% local: nenhuma chamada a serviço de nuvem — o léxico é uma
 constante do módulo, sem I/O de rede.
 """
 

@@ -1,4 +1,4 @@
-"""IaC idempotente dos recursos compartilhados (AD-034, AWSF-06).
+"""IaC idempotente dos recursos compartilhados.
 
 Cada `ensure_*` checa existência antes de criar — nunca "cria e ignora erro de
 já existir". Roda igual nos dois ambientes; só o endpoint muda (via `ENV`).

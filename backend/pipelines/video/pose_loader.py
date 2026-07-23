@@ -1,6 +1,6 @@
-"""Carga de uma sequência do URFD (VIDEO-01, carga).
+"""Carga de uma sequência do URFD.
 
-Layout real (verificado em F0/Design): ``<seq>/<seq>-cam0-rgb/<seq>-cam0-rgb-NNN.png``.
+Layout real (verificado em campo): ``<seq>/<seq>-cam0-rgb/<seq>-cam0-rgb-NNN.png``.
 O rótulo é o nome do diretório da sequência (``fall-NN``/``adl-NN``) -- URFD não
 fornece anotação por frame do instante da queda (ver Out of Scope da spec).
 """

@@ -1,4 +1,4 @@
-"""Precision/recall/F1 por classe da raia objeto, via casamento IoU (VIDEO-08).
+"""Precision/recall/F1 por classe da raia objeto, via casamento IoU.
 
 Limiar de IoU escolhido como 0.5 -- convenção comum de detecção de objetos
 (ex.: COCO/Pascal VOC); aceitável também para as estruturas do Endoscapes,
@@ -7,7 +7,7 @@ objetos COCO típicos, o que torna 0.5 uma exigência já razoavelmente
 tolerante, não mais rígida que o caso típico.
 
 Persistência do relatório reaproveita `common.metrics.save_report`
-diretamente -- mesmo princípio de `pose_evaluate.py` (T5).
+diretamente -- mesmo princípio de `pose_evaluate.py`.
 """
 
 from collections import defaultdict

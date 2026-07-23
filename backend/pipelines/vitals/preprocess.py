@@ -4,9 +4,8 @@ Perda de sinal é endêmica em cardiotocografia: o transdutor se desloca e o FHR
 gravado como zero. Se esses zeros chegarem aos detectores como valores reais, viram
 outliers espúrios e produzem falsos positivos em massa — o risco registrado no design.
 
-SPEC_DEVIATION: o design assinava ``interpolate_gaps(signal, mask, max_gap_s) -> ndarray``.
-Faltava ``fs`` (sem ele não dá para converter segundos em amostras) e o retorno precisa
-incluir a máscara atualizada — gaps longos continuam inválidos, e sem isso o chamador não
+``interpolate_gaps`` recebe ``fs`` (sem ele não dá para converter segundos em amostras) e o retorno
+inclui a máscara atualizada — gaps longos continuam inválidos, e sem isso o chamador não
 teria como saber quais amostras ainda não são confiáveis.
 """
 

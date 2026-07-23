@@ -1,4 +1,4 @@
-"""Testes de `pose_detector.py` -- derivados de VIDEO-03, VIDEO-05 e VIDEO-14."""
+"""Testes de `pose_detector.py`."""
 
 import json
 from pathlib import Path

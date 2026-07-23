@@ -1,4 +1,4 @@
-"""Testes de core.evidence — contrato único de evidência (AD-026, VITALS-06, VITALS-07)."""
+"""Testes de core.evidence — contrato único de evidência."""
 
 import json
 

@@ -1,5 +1,5 @@
-"""Provisiona os recursos específicos de F4 que a fundação não cobre: a função
-Lambda e o gatilho S3→Lambda (PRESC-02, PRESC-07, PRESC-08).
+"""Provisiona os recursos específicos do pipeline de prescrições que a fundação não cobre: a função
+Lambda e o gatilho S3→Lambda.
 
 S3/DynamoDB genéricos já vêm de `aws.provision`; este módulo só acrescenta a
 Lambda e a notificação do bucket, reaproveitando o padrão idempotente
@@ -79,7 +79,7 @@ def package_lambda() -> bytes:
 
 
 def role_arn() -> str:
-    """`LAB_ROLE_ARN` no cloud (AD-007); ARN dummy aceito pelo LocalStack no local."""
+    """`LAB_ROLE_ARN` no cloud; ARN dummy aceito pelo LocalStack no local."""
     return os.environ.get("LAB_ROLE_ARN") or _DEFAULT_LOCAL_ROLE_ARN
 
 
@@ -90,10 +90,9 @@ def function_arn(name: str) -> str:
 def _env_vars() -> dict[str, str]:
     """Variáveis que o handler precisa em runtime dentro do próprio Lambda.
 
-    SPEC_DEVIATION: o design não previa este parâmetro — descoberto empiricamente
-    que o container Lambda do LocalStack não herda o shell do host; sem isso,
-    `aws.clients.load_aws_config()`/`history._table_name()` falham em runtime
-    (ver fix em `aws/clients.py`, fallback de `LOCALSTACK_HOSTNAME`).
+    Descoberto empiricamente que o container Lambda do LocalStack não herda o
+    shell do host; sem isso, `aws.clients.load_aws_config()`/`history._table_name()`
+    falham em runtime (ver fix em `aws/clients.py`, fallback de `LOCALSTACK_HOSTNAME`).
     """
     # LOCALSTACK_ENDPOINT do host (ex.: http://localhost:4566) NUNCA é propagada:
     # de dentro do container ela seria o loopback do próprio Lambda, não o
@@ -173,7 +172,8 @@ def ensure_s3_trigger(bucket: str, lambda_function_arn: str) -> ProvisionResult:
 
 
 def main() -> int:
-    """Provisiona a Lambda de F4 e o gatilho S3 (`make infra-local`/`infra-cloud`)."""
+    """Provisiona a Lambda do pipeline de prescrições e o gatilho S3
+    (`make infra-local`/`infra-cloud`)."""
     bucket = os.environ.get("S3_BUCKET")
     if not bucket:
         log.error("variável ausente: S3_BUCKET")

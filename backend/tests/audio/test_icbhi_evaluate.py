@@ -1,4 +1,4 @@
-"""Testes da avaliação por classe do classificador ICBHI (AUDIO-04)."""
+"""Testes da avaliação por classe do classificador ICBHI."""
 
 import json
 

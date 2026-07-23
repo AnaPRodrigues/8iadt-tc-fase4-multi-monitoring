@@ -1,4 +1,4 @@
-"""Dataclasses centrais do pipeline de prescrições (F4)."""
+"""Dataclasses centrais do pipeline de prescrições."""
 
 from dataclasses import dataclass
 
@@ -45,11 +45,10 @@ class AnomalyResult:
 class GroundTruthEntry:
     """Rótulo esperado de um PDF sintético gerado por ``generator.py``.
 
-    SPEC_DEVIATION: o design não incluía ``timestamp`` — acrescentado para que
-    ``evaluate.py`` consiga casar cada rótulo com o registro exato (patient_id+drug
-    sozinhos colidem em sequências de mudança abrupta, onde o mesmo paciente/
-    medicamento aparece mais de uma vez) e reconstruir a ordem para a regra de
-    mudança abrupta (PRESC-12).
+    ``timestamp`` existe para que ``evaluate.py`` consiga casar cada rótulo com o
+    registro exato (patient_id+drug sozinhos colidem em sequências de mudança
+    abrupta, onde o mesmo paciente/medicamento aparece mais de uma vez) e
+    reconstruir a ordem para a regra de mudança abrupta.
     """
 
     patient_id: str
@@ -64,9 +63,8 @@ class GroundTruthEntry:
 class ProcessResult:
     """Resultado do processamento de ponta a ponta de um evento S3.
 
-    SPEC_DEVIATION: o design não previa um campo para falha de parsing —
-    ``parse_failure`` foi acrescentado para que ``handler.py`` distinga "PDF
-    ilegível" (move para ``errors/``, PRESC-07) de "parseado, sem anomalias".
+    ``parse_failure`` existe para que ``handler.py`` distinga "PDF
+    ilegível" (move para ``errors/``) de "parseado, sem anomalias".
     """
 
     record: PrescriptionRecord | None

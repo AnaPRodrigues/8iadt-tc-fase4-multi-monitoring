@@ -1,4 +1,4 @@
-"""Testes de termos críticos configuráveis (AUDIO-07, AUDIO-09)."""
+"""Testes de termos críticos configuráveis."""
 
 import json
 from pathlib import Path

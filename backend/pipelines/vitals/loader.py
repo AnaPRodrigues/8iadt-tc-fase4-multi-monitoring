@@ -1,7 +1,7 @@
 """Leitura de registros CTU-UHB e rotulagem de ground truth.
 
 O rótulo de anomalia é clínico e real — o pH do cordão umbilical registrado no
-próprio header — e não uma anomalia injetada (AD-015, AD-021).
+próprio header — e não uma anomalia injetada.
 """
 
 import re
@@ -32,7 +32,7 @@ def parse_ph(comments: list[str]) -> float | None:
     """Extrai o pH do cordão das linhas de comentário do header.
 
     Retorna ``None`` quando o campo está ausente ou não é numérico — o registro é
-    então descartado do lote pelo chamador (VITALS-08), nunca rotulado por suposição.
+    então descartado do lote pelo chamador, nunca rotulado por suposição.
     """
     for line in comments:
         match = _PH_RE.match(line.strip())
@@ -45,7 +45,7 @@ def parse_ph(comments: list[str]) -> float | None:
 
 
 def is_pathological(ph: float) -> bool:
-    """Rótulo de ground truth: ``True`` quando o pH indica acidose (VITALS-02)."""
+    """Rótulo de ground truth: ``True`` quando o pH indica acidose."""
     return ph < PH_THRESHOLD
 
 
@@ -55,7 +55,7 @@ class InvalidRecordError(Exception):
 
 @dataclass(frozen=True)
 class Segment:
-    """Trecho de uma série e o registro real de onde veio (VITALS-07)."""
+    """Trecho de uma série e o registro real de onde veio."""
 
     source_record_id: str
     start_idx: int
@@ -113,7 +113,7 @@ def load_dataset(directory: Path) -> tuple[list[VitalRecord], list[LoadFailure]]
     """Lê todos os registros do diretório, descartando os inválidos sem parar o lote.
 
     Um registro corrompido no meio do dataset não pode custar a execução inteira
-    (VITALS-08) — a contagem de descartes vai para o log e o chamador decide o que fazer.
+    — a contagem de descartes vai para o log e o chamador decide o que fazer.
     """
     directory = Path(directory)
     if not directory.is_dir():

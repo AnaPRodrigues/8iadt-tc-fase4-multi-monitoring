@@ -1,4 +1,4 @@
-"""Testes da evidência de ciclo anômalo (AUDIO-05)."""
+"""Testes da evidência de ciclo anômalo."""
 
 import json
 from pathlib import Path

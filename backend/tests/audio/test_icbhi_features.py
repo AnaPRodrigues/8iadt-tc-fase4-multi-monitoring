@@ -1,4 +1,4 @@
-"""Testes da extração de features espectrais/MFCC por ciclo (AUDIO-01)."""
+"""Testes da extração de features espectrais/MFCC por ciclo."""
 
 from pathlib import Path
 

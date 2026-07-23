@@ -1,4 +1,4 @@
-"""Evidência de ciclo anômalo: espectrograma + metadados (AUDIO-05).
+"""Evidência de ciclo anômalo: espectrograma + metadados.
 
 Backend Agg fixado: a demo roda sem display (mesmo motivo de ``pipelines/vitals/plot.py``).
 """

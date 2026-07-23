@@ -1,4 +1,4 @@
-"""Compositor da timeline de demonstração (VITALS-07, AD-021).
+"""Compositor da timeline de demonstração.
 
 Isto **não** é um gerador sintético: nenhum valor é inventado. A composição apenas
 concatena registros reais na ordem declarada, para contar a história de deterioração

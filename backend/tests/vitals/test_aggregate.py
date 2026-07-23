@@ -1,4 +1,4 @@
-"""Testes da agregação janela → registro (VITALS-05, AD-027)."""
+"""Testes da agregação janela → registro."""
 
 import pytest
 
@@ -24,7 +24,7 @@ def test_fracao_abaixo_de_tau_nao_classifica_como_patologico():
 
 
 def test_fracao_exatamente_igual_a_tau_nao_e_patologico():
-    """AD-027 define `> tau`, estritamente — a fronteira fica de fora."""
+    """A regra de agregação define `> tau`, estritamente — a fronteira fica de fora."""
     v = aggregate("0001", _flags(2, 8), tau=0.2)
 
     assert v.anomalous_fraction == pytest.approx(0.2)
@@ -32,14 +32,14 @@ def test_fracao_exatamente_igual_a_tau_nao_e_patologico():
 
 
 def test_tau_default_e_015():
-    # 2 de 10 = 0.2 > 0.15 (default de AD-027)
+    # 2 de 10 = 0.2 > 0.15 (default de tau)
     v = aggregate("0001", _flags(2, 8))
 
     assert v.predicted_pathological is True
 
 
 def test_janelas_invalidas_ficam_fora_do_denominador():
-    """AD-027: janela insuficiente não pode ser contada como normal."""
+    """Janela insuficiente não pode ser contada como normal."""
     v = aggregate("0001", _flags(3, 7, n_invalidas=90), tau=0.2)
 
     assert v.n_windows_valid == 10

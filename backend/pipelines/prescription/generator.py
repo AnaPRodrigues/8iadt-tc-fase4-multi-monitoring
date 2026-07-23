@@ -1,20 +1,19 @@
-"""Gerador de prescrições sintéticas com ground truth conhecido (PRESC-01).
+"""Gerador de prescrições sintéticas com ground truth conhecido.
 
 Os PDFs contêm texto real embutido via ``reportlab`` (não uma imagem escaneada),
 o que permite extração direta por ``pdfplumber`` sem OCR — verificado em REPL
 durante o design (round-trip preserva a ordem das linhas).
 
-SPEC_DEVIATION: o design descreve ``generate_dataset(n, seed, anomaly_rate) ->
-list[GroundTruthEntry]``. Aqui o retorno inclui também os bytes do PDF —
+O retorno inclui também os bytes do PDF —
 ``list[tuple[bytes, GroundTruthEntry]]`` — porque sem o PDF em mãos os testes
-(e a integração de T7) não teriam como associar o rótulo esperado ao artefato
+de integração não teriam como associar o rótulo esperado ao artefato
 real; `generate_dataset` não tem responsabilidade de subir para o S3 (isso é do
 chamador/teste).
 
-``generate_dataset`` produz apenas o rótulo ``"dose_fora_de_faixa"`` (PRESC-01,
-P1). "Mudança abrupta" depende de uma sequência de dois registros do mesmo
-paciente/medicamento — é exercida diretamente pelos testes de integração de
-T6, chamando ``generate_prescription`` duas vezes, não por um rótulo isolado
+``generate_dataset`` produz apenas o rótulo ``"dose_fora_de_faixa"``.
+"Mudança abrupta" depende de uma sequência de dois registros do mesmo
+paciente/medicamento — é exercida diretamente pelos testes de integração,
+chamando ``generate_prescription`` duas vezes, não por um rótulo isolado
 aqui.
 """
 
@@ -118,7 +117,7 @@ def generate_sequence_dataset(
     n_sequences: int, seed: int, abrupt_rate: float = 0.3
 ) -> list[tuple[bytes, GroundTruthEntry]]:
     """Gera pares (baseline, seguinte) do mesmo paciente/medicamento, para avaliar
-    a regra de mudança abrupta (PRESC-12) — `generate_dataset` sozinho não produz
+    a regra de mudança abrupta — `generate_dataset` sozinho não produz
     sequências, só casos independentes de dose fora de faixa.
 
     Todo medicamento do catálogo tem `max_dose >= 2×min_dose`; usar os extremos da
@@ -194,7 +193,7 @@ def generate_sequence_dataset(
 def generate_dataset_to_disk(
     n: int, seed: int, anomaly_rate: float, output_dir: Path
 ) -> list[GroundTruthEntry]:
-    """Gera o dataset e persiste os PDFs + o ground truth em arquivo separado (PRESC-01 AC1)."""
+    """Gera o dataset e persiste os PDFs + o ground truth em arquivo separado."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 

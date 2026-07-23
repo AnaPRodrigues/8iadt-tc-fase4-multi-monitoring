@@ -1,4 +1,4 @@
-"""Testes do detector IsolationForest multivariado (VITALS-04, VITALS-09)."""
+"""Testes do detector IsolationForest multivariado."""
 
 import pytest
 

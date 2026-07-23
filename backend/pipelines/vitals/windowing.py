@@ -1,8 +1,8 @@
 """Fatiamento da série em janelas deslizantes.
 
-SPEC_DEVIATION: o design assinava ``make_windows(record, size_s, stride_s)``. A máscara
+A máscara
 de validade produzida por ``preprocess`` precisa entrar aqui — sem ela não há como
-marcar ``insufficient_data`` (VITALS-09), que é justamente o que impede uma janela
+marcar ``insufficient_data``, que é justamente o que impede uma janela
 degradada de virar falso negativo silencioso na agregação.
 """
 

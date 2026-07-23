@@ -1,4 +1,4 @@
-"""Testes de require_tools (DATA-11) e das variáveis do topo (DATA-05)."""
+"""Testes de require_tools e das variáveis do topo."""
 
 
 def test_todas_as_ferramentas_presentes_passa(run, stubbin):

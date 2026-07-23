@@ -1,4 +1,4 @@
-"""Testes de integração do pipeline ponta a ponta de F2 (T13)."""
+"""Testes de integração do pipeline ponta a ponta de análise de áudio."""
 
 import json
 import logging
@@ -59,7 +59,7 @@ def test_p2_p3_com_audio_icbhi_real_sem_fala_grava_resumo_reliable_false(tmp_pat
     cfg = _config(
         tmp_path,
         _ICBHI_DIR,
-        icbhi_max_patients=5,  # P1 mínimo: o foco do teste é a raia P2/P3
+        icbhi_max_patients=5,  # mínimo necessário: o foco do teste é a análise do áudio de consulta
         consult_audio_paths=[str(wav_sem_fala)],
         whisper_model_size="tiny",
     )
@@ -78,10 +78,10 @@ def test_p2_p3_com_audio_icbhi_real_sem_fala_grava_resumo_reliable_false(tmp_pat
 
 
 def test_p3_com_2_audios_reais_grava_evidencia_de_fadiga_vocal(tmp_path):
-    """AC3 de P3: score de fadiga ultrapassa o limiar -> evidência "possível fadiga vocal"
+    """Score de fadiga ultrapassa o limiar -> evidência "possível fadiga vocal"
     marcada como heurística não validada clinicamente. Com só 1 áudio o baseline degenera
-    (design.md § Risks & Concerns), então o teste precisa de 2 áudios de consulta reais do
-    ICBHI para exercitar `fatigued=True` de fato (validation.md § Fix 3)."""
+    (desvio-padrão zero contra si mesmo), então o teste precisa de 2 áudios de consulta
+    reais do ICBHI para exercitar `fatigued=True` de fato."""
     _skip_se_dataset_ausente()
     audio_a = _ICBHI_DIR / "104_1b1_Ar_sc_Litt3200.wav"
     audio_b = _ICBHI_DIR / "105_1b1_Tc_sc_Meditron.wav"
@@ -90,7 +90,7 @@ def test_p3_com_2_audios_reais_grava_evidencia_de_fadiga_vocal(tmp_path):
     cfg = _config(
         tmp_path,
         _ICBHI_DIR,
-        icbhi_max_patients=5,  # foco do teste é P3, não a métrica de P1
+        icbhi_max_patients=5,  # foco é o score de fadiga vocal, não o classificador respiratório
         consult_audio_paths=[str(audio_a), str(audio_b)],
         whisper_model_size="tiny",
         fatigue_threshold=0.5,
@@ -117,9 +117,9 @@ def test_p3_com_2_audios_reais_grava_evidencia_de_fadiga_vocal(tmp_path):
 
 
 def test_consult_audio_corrompido_e_pulado_e_reportado_sem_derrubar_o_lote(tmp_path, caplog):
-    """AUDIO-12, lado consult-audio (cli.py `try/except Exception` em torno de `transcribe()`):
+    """Lado consult-audio (cli.py `try/except Exception` em torno de `transcribe()`):
     um áudio de consulta corrompido não derruba o lote — é logado e o áudio válido seguinte
-    continua sendo processado normalmente (validation.md § Fix 4)."""
+    continua sendo processado normalmente."""
     _skip_se_dataset_ausente()
     audio_corrompido = tmp_path / "corrompido.wav"
     audio_corrompido.write_bytes(b"nao e um wav valido")

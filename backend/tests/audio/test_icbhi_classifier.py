@@ -1,4 +1,4 @@
-"""Testes do classificador respiratório (AUDIO-02, AUDIO-03, AUDIO-14)."""
+"""Testes do classificador respiratório."""
 
 from pathlib import Path
 
@@ -116,7 +116,7 @@ def test_class_weight_balanced_recupera_a_classe_minoritaria_em_conjunto_9_para_
     """Prova que `class_weight="balanced"` muda o comportamento do modelo (não só o parâmetro
     setado): num conjunto desbalanceado 9:1 (18 normal / 2 crackle) com classes parcialmente
     sobrepostas (frequências próximas + ruído), a classe minoritária só é predita corretamente
-    com o balanceamento ligado (validation.md § Fix 2 — mutante sobrevivente)."""
+    com o balanceamento ligado."""
     rng = np.random.default_rng(42)
     cycles = []
     for i in range(18):

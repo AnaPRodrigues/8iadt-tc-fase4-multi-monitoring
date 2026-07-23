@@ -1,4 +1,4 @@
-"""Testes da leitura WFDB (VITALS-01) e do descarte resiliente (VITALS-08)."""
+"""Testes da leitura WFDB e do descarte resiliente."""
 
 from pathlib import Path
 

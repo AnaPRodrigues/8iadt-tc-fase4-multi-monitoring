@@ -1,8 +1,8 @@
-"""Detecção via YOLOv8 fine-tuned + evidência de estrutura crítica (VIDEO-07, VIDEO-09).
+"""Detecção via YOLOv8 fine-tuned + evidência de estrutura crítica.
 
 `YOLO.predict(...)` grava em `runs/detect/predict` por padrão mesmo pela API
 Python (`DEFAULT_CFG.save=True`) -- por isso `save=False` é sempre explícito
-aqui, mesmo princípio de nunca depender do padrão do ultralytics (T7).
+aqui, mesmo princípio de nunca depender do padrão do ultralytics.
 """
 
 from pathlib import Path
@@ -20,7 +20,7 @@ CRITICAL_STRUCTURES = {"cystic_artery", "cystic_duct", "cystic_plate"}
 
 
 class YoloDetector:
-    """Envolve os pesos fine-tuned (T7) para devolver bbox+classe+confiança reais."""
+    """Envolve os pesos fine-tuned para devolver bbox+classe+confiança reais."""
 
     def __init__(self, weights_path: Path, confidence_threshold: float = 0.25):
         self._model = YOLO(str(weights_path))
@@ -81,7 +81,7 @@ def save_critical_structure_evidence(
     run_id: str,
     root: str | Path = "output",
 ) -> Evidence | None:
-    """Gera evidência (frame com caixas + metadados, AD-026) só se houver estrutura crítica.
+    """Gera evidência (frame com caixas + metadados) só se houver estrutura crítica.
 
     Devolve `None` quando nenhuma detecção é de uma estrutura crítica -- ausência
     de evidência é o resultado esperado, não uma falha.

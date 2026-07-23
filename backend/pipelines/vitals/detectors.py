@@ -1,6 +1,6 @@
 """Detectores de anomalia por janela.
 
-SPEC_DEVIATION: o design assinava ``score(windows) -> list[float]``. O retorno é
+O retorno de ``score`` é
 ``list[float | None]``: janela sem dado utilizável recebe ``None``, nunca ``0.0``.
 Zero é um score legítimo (valor exatamente no baseline) — usá-lo para "sem dado"
 tornaria as duas situações indistinguíveis na agregação.
@@ -29,7 +29,7 @@ class AnomalyEvent:
     """Uma janela sinalizada como anômala por um detector.
 
     ``source_record_id`` é o registro real de onde o trecho veio — na timeline
-    composta de F3 ele difere de ``record_id`` (VITALS-07).
+    composta ele difere de ``record_id``.
     """
 
     record_id: str
@@ -50,7 +50,7 @@ class Detector(Protocol):
 
 
 class RollingZScoreDetector:
-    """Baseline univariado sobre a média de FHR da janela (VITALS-03).
+    """Baseline univariado sobre a média de FHR da janela.
 
     O baseline é móvel: cada janela é comparada às ``baseline_size`` janelas válidas
     imediatamente anteriores. Janelas inválidas não entram no baseline — uma janela
@@ -98,7 +98,7 @@ class RollingZScoreDetector:
 
 
 class IsolationForestDetector:
-    """Detector multivariado sobre o vetor de features completo (VITALS-04).
+    """Detector multivariado sobre o vetor de features completo.
 
     ``seed`` é obrigatória e fixa ``random_state``: sem isso o mesmo dataset
     produziria métricas diferentes a cada execução e o relatório não seria

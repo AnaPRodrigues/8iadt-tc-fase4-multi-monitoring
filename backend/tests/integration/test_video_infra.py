@@ -5,10 +5,10 @@ Requer `make localstack-up`. Pula com mensagem clara se o LocalStack não
 responder em :4566. Compartilha um único deploy entre os testes do módulo
 (package+deploy tem custo; recriar por teste seria caro sem ganho).
 
-Rekognition não existe no LocalStack Community (AD-035) -- o `analyze()` real
+Rekognition não existe no LocalStack Community -- o `analyze()` real
 dentro do Lambda implantado necessariamente falha (ou por falta de adapter
 registrado, ou pela chamada Rekognition em si), e `handler.py` já trata isso
-sem propagar (T11). O que este módulo prova é a fiação da infraestrutura --
+sem propagar. O que este módulo prova é a fiação da infraestrutura --
 o upload real no S3 dispara o Lambda de verdade -- via CloudWatch Logs, não
 via evidência de análise (que não é alcançável neste ambiente).
 """

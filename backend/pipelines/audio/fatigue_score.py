@@ -1,7 +1,7 @@
-"""Score heurístico de fadiga/qualidade vocal (AUDIO-11).
+"""Score heurístico de fadiga/qualidade vocal.
 
-Heurística relativa (não validada clinicamente, ver spec.md § Out of Scope):
-z-score de cada feature contra o ``baseline`` da própria execução, combinados
+Heurística relativa, não validada clinicamente: z-score de cada feature contra
+o ``baseline`` da própria execução, combinados
 em média simples de ``[jitter_z, shimmer_z, -hnr_z, pause_rate_z, -speaking_rate_z]``
 (sinal invertido em HNR e velocidade de fala: "quanto maior, melhor").
 """

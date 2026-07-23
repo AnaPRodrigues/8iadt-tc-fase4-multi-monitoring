@@ -1,6 +1,5 @@
 """Comparação dos veredictos por registro contra o rótulo pH real.
 
-SPEC_DEVIATION: o design assinava ``evaluate(verdicts, records) -> list[MetricsReport]``.
 O retorno é um ``EvaluationReport`` que embrulha os relatórios por detector e acrescenta
 a prevalência. Prevalência descreve o conjunto avaliado, não o desempenho de um detector:
 colocá-la dentro de cada ``MetricsReport`` a duplicaria em todos eles.

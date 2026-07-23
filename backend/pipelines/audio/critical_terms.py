@@ -1,6 +1,6 @@
-"""Termos críticos configuráveis: busca + evidência (AUDIO-07, AUDIO-09).
+"""Termos críticos configuráveis: busca + evidência.
 
-``normalize_text`` também é reusada por ``sentiment.py`` (design.md § Components).
+``normalize_text`` também é reusada por ``sentiment.py``.
 """
 
 import unicodedata

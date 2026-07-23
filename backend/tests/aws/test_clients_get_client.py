@@ -1,4 +1,4 @@
-"""Testes de get_client (AWSF-01, AWSF-07)."""
+"""Testes de get_client."""
 
 from aws.clients import AwsConfig, get_client
 

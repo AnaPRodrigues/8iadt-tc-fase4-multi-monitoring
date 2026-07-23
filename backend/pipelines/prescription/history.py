@@ -1,4 +1,4 @@
-"""Persistência e consulta do histórico de prescrições no DynamoDB (PRESC-11).
+"""Persistência e consulta do histórico de prescrições no DynamoDB.
 
 Reaproveita o schema genérico `pk`/`sk` (String) já provisionado pela
 aws-foundation — nenhuma tabela nova é criada por este módulo.

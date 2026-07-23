@@ -1,7 +1,8 @@
-"""Dataclasses compartilhadas por todas as raias de F2 (P1/P2/P3).
+"""Dataclasses compartilhadas pelas três etapas da análise de áudio (classificação
+respiratória, transcrição e fadiga vocal).
 
 Um único módulo para as três raias evita duplicar tipos que atravessam a
-orquestração (``cli.py``), mesmo precedente de ``pipelines/video/models.py`` (F1/T1).
+orquestração (``cli.py``), mesmo precedente de ``pipelines/video/models.py``.
 """
 
 from dataclasses import dataclass

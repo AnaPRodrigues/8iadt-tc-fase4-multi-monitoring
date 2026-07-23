@@ -18,7 +18,7 @@ from aws.clients import get_client
 
 
 class TextractExtractor:
-    """`TextExtractor` via AWS Textract (AD-035)."""
+    """`TextExtractor` via AWS Textract."""
 
     def __init__(self, client: Any) -> None:
         self._client = client
@@ -30,7 +30,7 @@ class TextractExtractor:
 
 
 class RekognitionAnalyzer:
-    """`ImageAnalyzer` via AWS Rekognition (AD-035)."""
+    """`ImageAnalyzer` via AWS Rekognition."""
 
     def __init__(self, client: Any) -> None:
         self._client = client
@@ -45,10 +45,10 @@ class RekognitionAnalyzer:
 
 
 def register_cloud_adapters() -> None:
-    """Registra as implementações cloud para `env="cloud"` (AD-035).
+    """Registra as implementações cloud para `env="cloud"`.
 
-    As implementações LOCAL (Tesseract/pdfplumber, YOLOv8) são registradas por
-    F4/F1 quando forem construídas — a fundação não as conhece.
+    As implementações LOCAL (Tesseract/pdfplumber, YOLOv8) são registradas pelos
+    pipelines de prescrição e vídeo — a fundação não as conhece.
     """
     register_text_extractor("cloud", lambda: TextractExtractor(get_client("textract")))
     register_image_analyzer("cloud", lambda: RekognitionAnalyzer(get_client("rekognition")))

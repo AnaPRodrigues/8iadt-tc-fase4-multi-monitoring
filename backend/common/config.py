@@ -18,10 +18,10 @@ DEFAULTS: dict[str, Any] = {
     "window_stride_s": 30.0,
     "zscore_threshold": 3.0,
     "iforest_contamination": 0.1,
-    "tau": 0.15,  # AD-027
+    "tau": 0.15,
     "seed": 42,
     "output_root": "output",
-    # Lista de record_ids a concatenar como timeline de demo (VITALS-07). Quando
+    # Lista de record_ids a concatenar como timeline de demo. Quando
     # ausente, o pipeline processa todos os registros do dataset individualmente.
     "timeline": None,
 }

@@ -1,6 +1,6 @@
-"""Testes de `pose.py` -- derivados de VIDEO-01 (extração) e VIDEO-13 (frame sem pessoa).
+"""Testes de `pose.py` -- extração de keypoints e caso de frame sem pessoa.
 
-Download real do modelo `.task` (sem mock, por instrução explícita da tarefa T2):
+Download real do modelo `.task` (sem mock, por instrução explícita):
 compartilhado entre os testes do módulo via fixture `scope="module"` para não
 baixar 5.7MB repetidas vezes.
 """

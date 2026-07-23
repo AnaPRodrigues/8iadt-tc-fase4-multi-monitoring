@@ -1,4 +1,4 @@
-"""Carga de frames + anotação COCO real do Endoscapes-BBox201 (VIDEO-06)."""
+"""Carga de frames + anotação COCO real do Endoscapes-BBox201."""
 
 import json
 from pathlib import Path

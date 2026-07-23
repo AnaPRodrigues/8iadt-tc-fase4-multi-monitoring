@@ -1,4 +1,4 @@
-"""Adaptador opcional para o MIT-BIH Arrhythmia (VITALS-11, P3).
+"""Adaptador opcional para o MIT-BIH Arrhythmia.
 
 Segundo caso de série vital com rótulo real: aqui o ground truth vem das anotações
 de batimento feitas por especialistas, não do pH. O dataset é explicitamente
@@ -68,7 +68,7 @@ def load_mitbih_dataset(directory: Path) -> list[MITBIHRecord]:
     """Lê todos os registros do diretório; devolve lista vazia se indisponível.
 
     Ausência do dataset não é erro: o caso de estudo é opcional e o pipeline
-    principal (CTU-UHB) deve seguir normalmente (VITALS-11).
+    principal (CTU-UHB) deve seguir normalmente.
     """
     if not mitbih_disponivel(directory):
         log.info("MIT-BIH indisponível em %s — caso de estudo opcional pulado", directory)

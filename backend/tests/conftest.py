@@ -25,7 +25,7 @@ def _registro_de_adapters_limpo(monkeypatch):
 
 FS = 4
 
-# ---- Harness do script shell de aquisição (F0) — sem download real ----
+# ---- Harness do script shell de aquisição de datasets — sem download real ----
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / "backend" / "scripts" / "download_datasets.sh"
 _BASH = shutil.which("bash") or "/bin/bash"

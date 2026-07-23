@@ -1,4 +1,4 @@
-"""Testes de AwsConfig/load_aws_config (AWSF-01, AWSF-02)."""
+"""Testes de AwsConfig/load_aws_config."""
 
 import pytest
 
@@ -63,7 +63,7 @@ def test_env_ausente_nomeia_a_variavel(monkeypatch):
 
 def test_env_local_sem_endpoint_explicito_usa_localstack_hostname(monkeypatch):
     # Dentro de um container Lambda do próprio LocalStack, LOCALSTACK_ENDPOINT
-    # não existe -- mas LOCALSTACK_HOSTNAME/EDGE_PORT vêm injetadas (F4/infra.py).
+    # não existe -- mas LOCALSTACK_HOSTNAME/EDGE_PORT vêm injetadas (ver aws/infra.py).
     monkeypatch.setenv("ENV", "local")
     monkeypatch.setenv("AWS_REGION", "us-east-1")
     monkeypatch.delenv("LOCALSTACK_ENDPOINT", raising=False)

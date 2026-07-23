@@ -1,8 +1,7 @@
-"""Avaliação do classificador respiratório contra o rótulo real do ICBHI (AUDIO-04).
+"""Avaliação do classificador respiratório contra o rótulo real do ICBHI.
 
 Sem wrapper de relatório agregado (diferente de ``pipelines/vitals/evaluate.py``):
-aqui não há prevalência relevante o suficiente para justificar um tipo novo
-(design.md § Components — YAGNI).
+aqui não há prevalência relevante o suficiente para justificar um tipo novo.
 """
 
 import json

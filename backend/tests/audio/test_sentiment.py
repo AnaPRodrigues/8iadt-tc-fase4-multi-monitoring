@@ -1,4 +1,4 @@
-"""Testes do sentimento local pt-BR (AUDIO-08)."""
+"""Testes do sentimento local pt-BR."""
 
 import inspect
 
@@ -38,7 +38,7 @@ def test_threshold_configuravel_muda_a_classificacao_do_mesmo_texto():
 
 
 def test_modulo_nao_importa_cliente_de_nuvem():
-    """AD-002/AD-003: sentimento precisa ser 100% local, garantido por construção."""
+    """Sentimento precisa ser 100% local, garantido por construção."""
     fonte = inspect.getsource(sentiment_module)
 
     assert "boto3" not in fonte

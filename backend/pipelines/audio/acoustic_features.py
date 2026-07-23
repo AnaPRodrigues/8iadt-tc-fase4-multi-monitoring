@@ -1,4 +1,4 @@
-"""Features acústicas para o score de fadiga vocal (AUDIO-11).
+"""Features acústicas para o score de fadiga vocal.
 
 Receita Parselmouth/Praat validada em sessão de design contra sinal sintético
 (valores plausíveis: jitter≈0.3%, shimmer≈1.8%, HNR≈19.6 dB) — ``jitter_local``/

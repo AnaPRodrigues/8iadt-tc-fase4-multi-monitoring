@@ -1,5 +1,6 @@
-"""Pipeline ponta a ponta de F2 — orquestra P1 (ICBHI) + P2 (transcrição/termos/sentimento) +
-P3 (fadiga vocal), gravando tudo sob ``output/audio/<run_id>/``.
+"""Pipeline ponta a ponta de análise de áudio — orquestra a classificação de
+dificuldade respiratória (ICBHI), a transcrição com termos críticos/sentimento
+e o score de fadiga vocal, gravando tudo sob ``output/audio/<run_id>/``.
 
 Mesmo esqueleto de ``pipelines/vitals/cli.py``: ``run(config_path, run_id)``/``main(argv)``,
 mesma dica de ``make data`` em ``FileNotFoundError``.
@@ -76,7 +77,8 @@ def _run_p1(cfg: Config, run_id: str, destino: Path) -> int:
             n_evidencias += 1
 
     log.info(
-        "P1: %d ciclo(s) de treino, %d de teste, %d evidência(s), %d arquivo(s) descartado(s)",
+        "classificador respiratório: %d ciclo(s) de treino, %d de teste, %d evidência(s), "
+        "%d arquivo(s) descartado(s)",
         len(train_cycles),
         len(test_cycles),
         n_evidencias,
@@ -93,7 +95,7 @@ class _ConsultResult:
 
 
 def _processa_p2(cfg: Config, run_id: str, transcript: Transcript) -> tuple[str | None, float, int]:
-    """Termos críticos + sentimento; pulado quando o transcript não é confiável (AUDIO-10)."""
+    """Termos críticos + sentimento; pulado quando o transcript não é confiável."""
     if not transcript.reliable:
         log.warning("transcrição não confiável para %s: termos críticos/sentimento pulados",
                     transcript.audio_path)
@@ -131,10 +133,11 @@ def _salva_evidencia_fadiga(
     )
 
 
-def _run_p2_p3(cfg: Config, run_id: str, destino: Path) -> None:
-    """Transcreve cada áudio de consulta e roda P2 (termos/sentimento) + P3 (fadiga vocal)."""
+def _processa_audios_de_consulta(cfg: Config, run_id: str, destino: Path) -> None:
+    """Transcreve cada áudio de consulta e roda a busca de termos críticos/sentimento
+    e o score de fadiga vocal."""
     if not cfg.consult_audio_paths:
-        log.warning("consult_audio_paths vazio: pulando P2/P3")
+        log.warning("consult_audio_paths vazio: pulando análise de áudio de consulta")
         return
 
     resultados: list[_ConsultResult] = []
@@ -143,7 +146,7 @@ def _run_p2_p3(cfg: Config, run_id: str, destino: Path) -> None:
     for audio_path in cfg.consult_audio_paths:
         try:
             transcript = transcribe(audio_path, cfg.whisper_model_size, cfg.no_speech_threshold)
-        except Exception as exc:  # áudio corrompido/formato não suportado (AUDIO-12)
+        except Exception as exc:  # áudio corrompido/formato não suportado
             log.warning("falha ao processar áudio de consulta %s: %s", audio_path, exc)
             continue
 
@@ -186,7 +189,7 @@ def _run_p2_p3(cfg: Config, run_id: str, destino: Path) -> None:
             json.dumps(resumo, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
-    log.info("P2/P3: %d áudio(s) de consulta processado(s)", len(resultados))
+    log.info("análise de áudio de consulta: %d áudio(s) processado(s)", len(resultados))
 
 
 def run(config_path: Path, run_id: str | None = None) -> int:
@@ -200,14 +203,14 @@ def run(config_path: Path, run_id: str | None = None) -> int:
     if n_evidencias_p1 < 0:
         return 1
 
-    _run_p2_p3(cfg, run_id, destino)
+    _processa_audios_de_consulta(cfg, run_id, destino)
 
     log.info("run %s completo em %s", run_id, destino)
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Pipeline de análise de áudio (F2)")
+    parser = argparse.ArgumentParser(description="Pipeline de análise de áudio")
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--run-id", default=None)
     args = parser.parse_args(argv)

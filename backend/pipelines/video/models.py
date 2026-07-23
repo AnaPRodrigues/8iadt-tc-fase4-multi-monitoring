@@ -1,7 +1,7 @@
-"""Dataclasses compartilhadas pelas duas raias de F1 (pose e objeto).
+"""Dataclasses compartilhadas pelas duas raias do pipeline de vídeo (pose e objeto).
 
 Um único módulo para os dois lados evita duplicar tipos que atravessam o
-relatório consolidado (``report.py``, T13).
+relatório consolidado (``report.py``).
 """
 
 from dataclasses import dataclass

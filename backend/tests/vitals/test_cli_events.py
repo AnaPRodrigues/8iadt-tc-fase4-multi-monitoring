@@ -1,4 +1,4 @@
-"""Testes da construção do evento de anomalia (VITALS-06, VITALS-07).
+"""Testes da construção do evento de anomalia.
 
 Estes testes existem porque asserir o payload só no teste de integração é fraco:
 lá não há como recomputar o score esperado, então uma troca de valor passa

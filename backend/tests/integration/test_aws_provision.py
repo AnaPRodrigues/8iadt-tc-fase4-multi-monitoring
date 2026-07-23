@@ -1,4 +1,4 @@
-"""Testes de integração de provision.py contra LocalStack real (AD-038, AWSF-06).
+"""Testes de integração de provision.py contra LocalStack real.
 
 Requer `make localstack-up`. Pula com mensagem clara se o LocalStack não
 responder em :4566, em vez de falhar a suíte inteira em máquinas sem Docker.
@@ -119,7 +119,7 @@ def test_ensure_table_segunda_chamada_nao_recria():
     assert segunda.created is False
 
 
-# ---------- main() e make infra-local (T8) ----------
+# ---------- main() e make infra-local ----------
 
 
 def _nomes_unicos():

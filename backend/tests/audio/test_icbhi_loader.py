@@ -1,4 +1,4 @@
-"""Testes do loader ICBHI (AUDIO-01, AUDIO-12, AUDIO-13)."""
+"""Testes do loader ICBHI."""
 
 from pathlib import Path
 

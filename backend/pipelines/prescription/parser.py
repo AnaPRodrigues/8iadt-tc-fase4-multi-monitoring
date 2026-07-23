@@ -1,4 +1,4 @@
-"""Estrutura um `PrescriptionRecord` a partir do texto extraído do PDF (PRESC-04).
+"""Estrutura um `PrescriptionRecord` a partir do texto extraído do PDF.
 
 Campo ausente ou dose não numérica vira `ParseFailure` explícito, nomeando o
 campo — nunca um valor inferido/adivinhado.

@@ -1,4 +1,4 @@
-"""Orquestra o processamento de ponta a ponta de uma prescrição (PRESC-02/06).
+"""Orquestra o processamento de ponta a ponta de uma prescrição.
 
 Chamado pelo handler Lambda fino (`handler.py`). Nenhuma dependência de AWS além
 das já resolvidas por `aws.adapters`/`history` — testável sem mock de rede além

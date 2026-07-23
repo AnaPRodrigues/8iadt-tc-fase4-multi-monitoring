@@ -1,4 +1,4 @@
-"""Testes da sentinela de idempotência (DATA-07) e da checagem de espaço (DATA-08)."""
+"""Testes da sentinela de idempotência e da checagem de espaço."""
 
 
 def test_is_complete_falso_sem_sentinela(run, tmp_path):

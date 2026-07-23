@@ -1,4 +1,4 @@
-"""Testes de `pose_evaluate.evaluate` -- derivados de VIDEO-04."""
+"""Testes de `pose_evaluate.evaluate`."""
 
 from pipelines.video.models import SequenceVerdict
 from pipelines.video.pose_evaluate import evaluate

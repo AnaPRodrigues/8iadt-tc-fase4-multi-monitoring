@@ -1,14 +1,13 @@
-"""Contrato único de evidência do projeto (AD-026).
+"""Contrato único de evidência do projeto.
 
 Toda anomalia detectada — em qualquer modalidade — produz um artefato visual e um
-sidecar JSON de metadados no mesmo formato. É o que permite ao dashboard de F5 fazer
+sidecar JSON de metadados no mesmo formato. É o que permite ao dashboard de fusão e alertas fazer
 drill-down de qualquer feature sem tratar cada uma como caso especial.
 
-SPEC_DEVIATION: o design assinava ``save_evidence(event: AnomalyEvent, ...)``, mas
-``AnomalyEvent`` é um tipo de ``vitals`` e o mesmo design exige que ``core`` seja
-genérico (F1 grava frame, F2 espectrograma, F4 PDF). Os metadados são portanto um
+``AnomalyEvent`` é um tipo específico de ``vitals``, mas ``core`` precisa ser
+genérico (vídeo grava frame, áudio espectrograma, prescrição PDF). Os metadados são portanto um
 mapa livre, e ``source_record_id`` virou parâmetro explícito por ser proveniência —
-uma exigência transversal a todas as features, não só a F3 (VITALS-07).
+uma exigência transversal a todas as features, não só ao monitoramento de sinais vitais.
 """
 
 import json
@@ -47,8 +46,8 @@ def save_evidence(
 ) -> Evidence:
     """Copia o artefato para o diretório de evidências e grava o sidecar de metadados.
 
-    ``source_record_id`` identifica o registro de origem — na timeline composta de F3
-    é o registro real de onde o trecho veio (VITALS-07).
+    ``source_record_id`` identifica o registro de origem — na timeline composta
+    é o registro real de onde o trecho veio.
     """
     if not artifact_path.is_file():
         raise FileNotFoundError(f"artefato inexistente: {artifact_path}")

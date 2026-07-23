@@ -1,8 +1,8 @@
-"""Handler Lambda fino do complemento cloud (VIDEO-10, VIDEO-16).
+"""Handler Lambda fino do complemento de análise de vídeo na nuvem.
 
 Lê o evento S3, roda o `ImageAnalyzer` já registrado para o `ENV` ativo e anexa
 os labels como evidência complementar. Falha/timeout do analyzer é logada e
-não propaga -- mesmo padrão de PRESC-07 (não trava o processamento do lote).
+não propaga -- mesmo padrão usado no pipeline de prescrições (não trava o processamento do lote).
 """
 
 import re

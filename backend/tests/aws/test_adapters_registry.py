@@ -1,4 +1,4 @@
-"""Testes do registro/resolução de adapters por ENV (AWSF-05)."""
+"""Testes do registro/resolução de adapters por ENV."""
 
 import pytest
 

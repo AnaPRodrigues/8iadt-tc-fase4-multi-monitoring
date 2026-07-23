@@ -1,4 +1,4 @@
-"""Testes do gráfico de evidência da janela anômala (VITALS-06, AD-026)."""
+"""Testes do gráfico de evidência da janela anômala."""
 
 import numpy as np
 import pytest

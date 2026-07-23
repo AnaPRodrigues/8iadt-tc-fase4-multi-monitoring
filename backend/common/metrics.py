@@ -1,9 +1,9 @@
-"""Relatório de precision/recall/F1 compartilhado pelas features (AD-025).
+"""Relatório de precision/recall/F1 compartilhado pelas features.
 
 Métricas indefinidas são representadas como ``None``, nunca como ``0.0``: um recall
 indefinido (nenhum positivo real no conjunto) é uma informação diferente de um recall
-zero (havia positivos e nenhum foi encontrado). Confundir os dois é exatamente o que
-VITALS-10 proíbe.
+zero (havia positivos e nenhum foi encontrado). Confundir os dois esconderia justamente
+os casos em que não há evidência suficiente para calcular a métrica.
 """
 
 import json

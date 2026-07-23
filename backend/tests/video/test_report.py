@@ -1,4 +1,4 @@
-"""Testes de `report.generate_report` (T13)."""
+"""Testes de `report.generate_report`."""
 
 from pathlib import Path
 

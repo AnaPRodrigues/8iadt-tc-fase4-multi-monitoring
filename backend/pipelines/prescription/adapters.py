@@ -1,4 +1,4 @@
-"""`TextExtractor` local via `pdfplumber` (AD-035).
+"""`TextExtractor` local via `pdfplumber`.
 
 Os PDFs sintéticos gerados por `generator.py` têm texto real embutido — extração
 direta é mais rápida/precisa que OCR (Tesseract seria necessário só para imagem
@@ -25,5 +25,5 @@ class PdfplumberExtractor:
 
 
 def register_local_adapters() -> None:
-    """Registra `PdfplumberExtractor` para `env="local"` (AD-035)."""
+    """Registra `PdfplumberExtractor` para `env="local"`."""
     register_text_extractor("local", lambda: PdfplumberExtractor())

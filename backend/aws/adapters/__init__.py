@@ -1,8 +1,8 @@
-"""Interfaces e modelos de dados para os adapters de IA gerenciada (AD-035).
+"""Interfaces e modelos de dados para os adapters de IA gerenciada.
 
 `TextExtractor`/`ImageAnalyzer` isolam Textract/Rekognition (cloud) e as
-implementações OSS locais (Tesseract/YOLOv8, registradas por F4/F1) atrás de
-um único contrato. Pipelines dependem só da interface.
+implementações OSS locais (Tesseract/YOLOv8, registradas pelos pipelines de
+prescrição e vídeo) atrás de um único contrato. Pipelines dependem só da interface.
 """
 
 from collections.abc import Callable
@@ -40,8 +40,8 @@ class ImageAnalyzer(Protocol):
     def analyze(self, image_bytes: bytes) -> ImageAnalysis: ...
 
 
-# Registro por ENV (AWSF-05). A fundação registra as implementações CLOUD
-# (ver adapters/cloud.py); LOCAL é registrado por F4/F1 quando forem construídas.
+# Registro por ENV. A fundação registra as implementações CLOUD
+# (ver adapters/cloud.py); LOCAL é registrado pelos pipelines de prescrição e vídeo.
 _TEXT_EXTRACTORS: dict[str, Callable[[], TextExtractor]] = {}
 _IMAGE_ANALYZERS: dict[str, Callable[[], ImageAnalyzer]] = {}
 

@@ -1,4 +1,4 @@
-"""Log estruturado compartilhado por todas as features (AD-025)."""
+"""Log estruturado compartilhado por todas as features."""
 
 import logging
 import sys

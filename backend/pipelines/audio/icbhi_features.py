@@ -1,4 +1,4 @@
-"""Extração de features espectrais/MFCC por ciclo respiratório (AUDIO-01).
+"""Extração de features espectrais/MFCC por ciclo respiratório.
 
 Ciclos têm duração variável; agregar média+desvio-padrão ao longo dos frames
 produz um vetor 1-D de tamanho fixo, exigido pelo classificador (icbhi_classifier.py).

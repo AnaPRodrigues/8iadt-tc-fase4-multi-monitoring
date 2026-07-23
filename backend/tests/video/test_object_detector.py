@@ -1,4 +1,4 @@
-"""Testes de `object_detector` -- detecção real via YOLOv8 fine-tuned (T8)."""
+"""Testes de `object_detector` -- detecção real via YOLOv8 fine-tuned."""
 
 import json
 from pathlib import Path

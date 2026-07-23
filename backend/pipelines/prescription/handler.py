@@ -1,7 +1,7 @@
 """Handler Lambda fino: lê o evento S3, baixa o objeto, chama `logic.process`.
 
 Erro de extração/parsing é logado e o objeto movido para `errors/` no S3 — nunca
-propaga exceção que travaria o processamento do lote (PRESC-07).
+propaga exceção que travaria o processamento do lote.
 """
 
 from typing import Any

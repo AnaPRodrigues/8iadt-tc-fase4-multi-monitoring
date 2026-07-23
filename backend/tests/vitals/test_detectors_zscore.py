@@ -1,4 +1,4 @@
-"""Testes do detector rolling z-score (VITALS-03)."""
+"""Testes do detector rolling z-score."""
 
 import math
 

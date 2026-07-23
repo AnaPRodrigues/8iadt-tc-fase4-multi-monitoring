@@ -1,4 +1,4 @@
-"""Relatório Markdown consolidado por sequência/vídeo (VIDEO-11, VIDEO-12, VIDEO-15).
+"""Relatório Markdown consolidado por sequência/vídeo.
 
 `ReportEvent` é definido aqui -- nenhum outro módulo produz um registro de
 "evento pronto para relatório" (frame + tipo + link de evidência); as duas
@@ -28,9 +28,9 @@ def generate_report(
     """Gera o relatório Markdown consolidando eventos das duas raias.
 
     Nenhum evento nas duas raias -> relatório indica explicitamente "nenhum
-    evento detectado" (VIDEO-12), nunca omitido. Função pura -- não lê nem
+    evento detectado", nunca omitido. Função pura -- não lê nem
     grava estado global, então sequências/vídeos processados em chamadas
-    sucessivas nunca se misturam (VIDEO-15).
+    sucessivas nunca se misturam.
     """
     events = list(pose_result) + list(object_result or [])
 

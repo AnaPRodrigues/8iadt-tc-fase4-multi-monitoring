@@ -1,4 +1,4 @@
-"""Precision/recall/F1 da raia pose contra o rótulo real do URFD (VIDEO-04).
+"""Precision/recall/F1 da raia pose contra o rótulo real do URFD.
 
 Persistência do relatório reaproveita `common.metrics.save_report` diretamente
 -- não há necessidade de um wrapper local de uma linha só para isso.
@@ -15,7 +15,7 @@ def evaluate(verdicts: list[SequenceVerdict]) -> MetricsReport:
     """Compara `predicted` ("queda") contra `label` ("fall"), mapeamento explícito.
 
     Veredictos "dados_insuficientes" são excluídos do cálculo -- não contam
-    como TP/FP/FN (mesmo princípio de VITALS-10/PRESC-14: indefinido != zero).
+    como TP/FP/FN (indefinido != zero).
     """
     excluidos = [v for v in verdicts if v.predicted == "dados_insuficientes"]
     if excluidos:

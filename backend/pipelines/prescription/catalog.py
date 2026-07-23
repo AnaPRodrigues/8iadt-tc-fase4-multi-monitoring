@@ -1,4 +1,4 @@
-"""Catálogo curado de faixas terapêuticas por medicamento (PRESC-05).
+"""Catálogo curado de faixas terapêuticas por medicamento.
 
 Faixas de dose diária usual em adultos, a partir de bulas públicas — valores
 aproximados para fins de demonstração; validar contra bulário oficial antes de

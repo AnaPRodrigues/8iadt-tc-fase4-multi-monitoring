@@ -1,4 +1,4 @@
-"""Testes do parser de pH e da rotulagem de ground truth (VITALS-02).
+"""Testes do parser de pH e da rotulagem de ground truth.
 
 O formato das linhas é o entregue pelo wfdb, que remove o '#' inicial do .hea:
 o comentário `#pH           7.26` chega como `'pH           7.26'`.

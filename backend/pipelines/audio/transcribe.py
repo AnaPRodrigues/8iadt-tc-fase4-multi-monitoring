@@ -1,10 +1,8 @@
 """Transcrição local pt-BR via faster-whisper, com flag de confiabilidade.
 
-AUDIO-06, AUDIO-10, AUDIO-14.
-
 ``temperature=0.0`` fixo desliga o fallback estocástico de temperaturas do
 faster-whisper (o default é uma lista `[0.0, 0.2, ...]`), condição necessária
-para o determinismo exigido por AUDIO-14 (confirmado via introspecção real da
+para o determinismo exigido (confirmado via introspecção real da
 assinatura de ``WhisperModel.transcribe`` nesta sessão).
 """
 

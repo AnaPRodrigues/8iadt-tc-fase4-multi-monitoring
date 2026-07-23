@@ -1,5 +1,5 @@
-"""Testes de TextractExtractor (AWSF-04, AWSF-05). Cliente boto3 fake por
-duck-typing — Textract não existe no LocalStack Community (AD-035)."""
+"""Testes de TextractExtractor. Cliente boto3 fake por
+duck-typing — Textract não existe no LocalStack Community."""
 
 from aws.adapters.cloud import TextractExtractor
 

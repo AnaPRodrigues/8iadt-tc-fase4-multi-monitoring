@@ -1,4 +1,4 @@
-"""Integração das aquisições da F0 com downloaders dublados (sem download real)."""
+"""Integração das aquisições de datasets com downloaders dublados (sem download real)."""
 
 import os
 import stat
@@ -65,7 +65,7 @@ def _call(run, func, env, path=None):
     return rc, status, r
 
 
-# ---------- CTU-UHB (T4) ----------
+# ---------- CTU-UHB ----------
 
 _PY_OK = 'test -n "$CTU_DEST"\n: > "$CTU_DEST/1001.hea"\n: > "$CTU_DEST/1001.dat"\n'
 _PY_VAZIO = "exit 0\n"  # roda mas não cria nada
@@ -120,7 +120,7 @@ def test_ctu_ja_completo_pula_sem_rodar_python(run, tmp_path):
     assert not (dest / "STUB_RAN").exists()  # não rebaixou
 
 
-# ---------- ICBHI (T5): Dataverse + fallback SSL ----------
+# ---------- ICBHI: Dataverse + fallback SSL ----------
 
 
 def _icbhi_env(tmp_path, dataverse, original):
@@ -180,7 +180,7 @@ def test_icbhi_ambas_falham_nao_marca_completo(run, tmp_path):
     assert not (data / "icbhi" / ".complete").exists()
 
 
-# ---------- Endoscapes (T6) ----------
+# ---------- Endoscapes ----------
 
 _WGET_STUB = r"""
 out=""; prev=""
@@ -249,7 +249,7 @@ def test_endoscapes_ja_completo_pula_sem_baixar(run, tmp_path):
     assert not mark.exists()
 
 
-# ---------- main: orquestração (T7 + emenda T10: URFD/BIDMC) ----------
+# ---------- main: orquestração (URFD/BIDMC) ----------
 
 # Cobre CTU (CTU_DEST) e BIDMC (BIDMC_DEST) — cada fetch exporta só a sua
 # variável, então checar qual está setada basta para distinguir os dois.
@@ -282,7 +282,7 @@ def _main_setup(tmp_path, dataverse, original, endo):
         "ORIGINAL_MODE": original,
         "ENDO_MODE": endo,
         # Reduzido para o teste de main() ser rápido; a lógica de sentinela
-        # por sequência/dataset do URFD já é testada exaustivamente em T8.
+        # por sequência/dataset do URFD já é testada exaustivamente abaixo.
         "URFD_N_FALL": "2",
         "URFD_N_ADL": "2",
     }
@@ -355,7 +355,7 @@ def test_main_ignora_estimativa_de_fonte_ja_completa(run, tmp_path):
     assert "RC=0" in r.stdout
 
 
-# ---------- URFD (T8): sentinela por sequência + por dataset ----------
+# ---------- URFD: sentinela por sequência + por dataset ----------
 
 _WGET_URFD_STUB = r"""
 out=""; prev=""; url=""
@@ -445,7 +445,7 @@ def test_urfd_sequencia_ja_completa_nao_e_rebaixada(run, tmp_path):
     assert (data / "urfd" / "fall-02" / ".complete").is_file()
 
 
-# ---------- BIDMC (T9): formas de onda + numerics (achado crítico) ----------
+# ---------- BIDMC: formas de onda + numerics (achado crítico) ----------
 
 _PY_BIDMC_OK = (
     'test -n "$BIDMC_DEST"\n'

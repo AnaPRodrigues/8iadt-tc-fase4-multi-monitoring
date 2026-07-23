@@ -1,4 +1,4 @@
-"""Testes de transcrição local (AUDIO-06, AUDIO-10, AUDIO-14)."""
+"""Testes de transcrição local."""
 
 from dataclasses import dataclass
 from pathlib import Path

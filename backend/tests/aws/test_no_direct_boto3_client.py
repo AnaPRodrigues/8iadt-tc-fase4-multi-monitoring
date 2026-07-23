@@ -1,4 +1,4 @@
-"""Guarda de AD-034 (AWSF-03): nenhum módulo fora de aws/clients.py chama
+"""Guarda: nenhum módulo fora de aws/clients.py chama
 `boto3.client(...)` diretamente. Testes ficam de fora da varredura — podem
 precisar de um cliente cru para verificação independente do factory.
 """
