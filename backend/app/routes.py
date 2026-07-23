@@ -8,19 +8,26 @@ registradas no `app` compartilhado -- `main.py` só instancia o app, não import
 `routes.py` de volta (evita import circular).
 """
 
+import json
+import mimetypes
+import os
 from dataclasses import replace
 from pathlib import Path
 
 from fastapi import HTTPException
+from fastapi.responses import FileResponse
 
 from app.main import app
-from app.schemas import FusionEventSchema, RiskPointSchema
+from app.schemas import AlertSchema, FusionEventSchema, RiskPointSchema
+from aws.clients import get_client
 from common.logging import get_logger
+from pipelines.fusion.alert import build_payload
 from pipelines.fusion.config import PatientDemoConfig, load_patient_demo_config
-from pipelines.fusion.hysteresis import HysteresisClassifier
+from pipelines.fusion.hysteresis import VERDE, HysteresisClassifier
 from pipelines.fusion.loader import load_events
-from pipelines.fusion.models import FusionEvent, RiskPoint
+from pipelines.fusion.models import FusionEvent, RiskPoint, Transition
 from pipelines.fusion.risk_engine import compute_timeline
+from pipelines.fusion.transitions import record_transition
 
 log = get_logger("app.routes")
 
@@ -94,3 +101,89 @@ def analyze(patient_demo_id: str) -> RiskPointSchema:
             status_code=404, detail=f"paciente-demo sem eventos resolvidos: {patient_demo_id}"
         )
     return _to_point_schema(timeline[-1])
+
+
+def _alert_transitions(points: list[RiskPoint], alert_level: str) -> list[Transition]:
+    """Deriva as `Transition` a partir da timeline já classificada (nível muda
+    entre pontos consecutivos), filtrando só as que atingem `alert_level` -- são
+    essas que efetivamente disparam um alerta SNS (FUSION-07)."""
+    transitions: list[Transition] = []
+    previous_level = VERDE  # mesmo nível inicial de HysteresisClassifier
+    for point in points:
+        if point.level != previous_level:
+            transitions.append(record_transition(previous_level, point.level, point))
+        previous_level = point.level
+    return [t for t in transitions if t.new_level == alert_level]
+
+
+def _is_confirmed(dedup_key: str) -> bool:
+    """Verifica no DynamoDB se o alerta de `dedup_key` foi de fato confirmado como
+    enviado -- `handler.py` só grava `ALERT#<dedup_key>` quando o SNS publica com
+    sucesso (FUSION-09), então a presença do item É a confirmação. Sem
+    `DYNAMODB_TABLE` configurada (API rodando sem infra de alerta de pé), o
+    alerta é reportado como não confirmado em vez de derrubar a rota."""
+    table_name = os.environ.get("DYNAMODB_TABLE")
+    if not table_name:
+        return False
+    client = get_client("dynamodb")
+    response = client.get_item(
+        TableName=table_name, Key={"pk": {"S": f"ALERT#{dedup_key}"}, "sk": {"S": "ALERT"}}
+    )
+    return "Item" in response
+
+
+def _to_alert_schema(patient_demo_id: str, transition: Transition) -> AlertSchema:
+    payload = build_payload(transition.point, patient_demo_id)
+    return AlertSchema(
+        t=transition.t,
+        previous_level=transition.previous_level,
+        new_level=transition.new_level,
+        dedup_key=payload.dedup_key,
+        contributions=payload.contributions,
+        confirmed=_is_confirmed(payload.dedup_key),
+    )
+
+
+@app.get("/alerts", response_model=list[AlertSchema])
+def get_alerts(patient_demo_id: str) -> list[AlertSchema]:
+    """Transições que cruzaram o nível de disparo configurado (`alert_level`),
+    com o status de confirmação de envio do alerta (FUSION-09)."""
+    cfg = _load_config_or_404(patient_demo_id)
+    points = _classified_timeline(cfg)
+    transitions = _alert_transitions(points, cfg.alert_level)
+    return [_to_alert_schema(patient_demo_id, t) for t in transitions]
+
+
+def _find_evidence_sidecar(evidence_id: str) -> Path | None:
+    """Busca `<evidence_id>.json` em qualquer `output/<feature>/<run_id>/` -- a
+    rota só recebe o `evidence_id` (sem feature/run_id, mesmo contrato do design),
+    então a busca é por nome de arquivo em toda a árvore de evidências."""
+    if not _OUTPUT_ROOT.is_dir():
+        return None
+    for sidecar in sorted(_OUTPUT_ROOT.glob(f"*/*/{evidence_id}.json")):
+        return sidecar
+    return None
+
+
+@app.get("/evidence/{evidence_id}")
+def get_evidence(evidence_id: str) -> FileResponse:
+    """Serve o artefato real da evidência (imagem/texto/etc., pelo `content-type`
+    inferido da extensão) com os metadados do sidecar embutidos como headers --
+    é o proxy fino sobre `common/evidence.py` que resolve o drill-down por
+    evento (FUSION-12)."""
+    sidecar_path = _find_evidence_sidecar(evidence_id)
+    if sidecar_path is None:
+        raise HTTPException(status_code=404, detail=f"evidência inexistente: {evidence_id}")
+
+    raw = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    artifact_path = sidecar_path.parent / raw["artifact"]
+    media_type, _ = mimetypes.guess_type(str(artifact_path))
+    return FileResponse(
+        path=artifact_path,
+        media_type=media_type or "application/octet-stream",
+        headers={
+            "X-Evidence-Feature": raw["feature"],
+            "X-Evidence-Run-Id": raw["run_id"],
+            "X-Evidence-Source-Record-Id": raw["source_record_id"],
+        },
+    )
