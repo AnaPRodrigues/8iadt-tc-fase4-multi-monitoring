@@ -1,31 +1,31 @@
 #!/usr/bin/env bash
-# F0 — aquisição idempotente dos datasets abertos do projeto (AD-031, AD-033).
-#
-# Baixa só fontes abertas sem barreira: CTU-UHB (F3), ICBHI 2017 (F2),
-# Endoscapes2023 (F1). Idempotente por sentinela `.complete` por dataset.
+# Baixa, de forma idempotente, os conjuntos de dados públicos abertos usados
+# pelo sistema: CTU-UHB (sinais vitais), ICBHI 2017 (áudio respiratório),
+# Endoscapes2023 (vídeo cirúrgico), UR Fall Detection (postura/quedas) e BIDMC
+# (monitor de UTI). Idempotente por sentinela `.complete` por dataset.
 # Uso: ./backend/scripts/download_datasets.sh   (ou `make data`)
 #
 # Sem `set -e`: os fetch tratam falhas explicitamente para que a falha de um
 # dataset não derrube os outros.
 set -uo pipefail
 
-# ---- Variáveis (DATA-05) — sobrescrevíveis por ambiente (usado nos testes) ----
+# ---- Variáveis, sobrescrevíveis por ambiente (usado nos testes) ----
 DATA_DIR="${DATA_DIR:-data}"
 PY="${PY:-.venv/bin/python}"
 CTU_DB="${CTU_DB:-ctu-uhb-ctgdb}"
 
 # ICBHI: primária no Harvard Dataverse (aberto, responde); alternativa na URL
-# original, que exige --no-check-certificate (cert autoassinado) — ver AD/spec.
+# original, que exige --no-check-certificate (certificado autoassinado).
 ICBHI_DATAVERSE_URL="${ICBHI_DATAVERSE_URL:-https://dataverse.harvard.edu/api/access/datafile/7127117}"
 ICBHI_ORIGINAL_URL="${ICBHI_ORIGINAL_URL:-https://bhichallenge.med.auth.gr/sites/default/files/ICBHI_final_database/ICBHI_final_database.zip}"
 ENDOSCAPES_URL="${ENDOSCAPES_URL:-https://s3.unistra.fr/camma_public/datasets/endoscapes/endoscapes.zip}"
 
-# URFD (AD-039): ~70 zips por sequência, um por fall-NN/adl-NN. Contagens da AD-039.
+# URFD: ~70 zips por sequência, um por fall-NN/adl-NN.
 URFD_BASE_URL="${URFD_BASE_URL:-https://fenix.ur.edu.pl/~mkepski/ds/data}"
 URFD_N_FALL="${URFD_N_FALL:-30}"
 URFD_N_ADL="${URFD_N_ADL:-40}"
 
-# BIDMC (AD-040): mesmo padrão de aquisição do CTU-UHB via wfdb.
+# BIDMC: mesmo padrão de aquisição do CTU-UHB via wfdb.
 BIDMC_DB="${BIDMC_DB:-bidmc}"
 
 # Estimativas de tamanho (bytes) para a checagem de espaço.
@@ -39,7 +39,7 @@ MIN_ZIP_BYTES="${MIN_ZIP_BYTES:-1000}"               # abaixo disso não é um d
 log() { printf '[data] %s\n' "$*" >&2; }
 err() { printf '[data] ERRO: %s\n' "$*" >&2; }
 
-# require_tools — falha nomeando a ferramenta ausente (DATA-11).
+# require_tools — falha nomeando a ferramenta ausente.
 require_tools() {
     local missing=0 t
     for t in curl wget unzip; do
@@ -55,7 +55,7 @@ require_tools() {
     return "$missing"
 }
 
-# verify_zip — aceita só um zip real (DATA-09, DATA-13).
+# verify_zip — aceita só um zip real.
 # Rejeita página de erro HTML (o caso do ICBHI 403, que vinha com exit 0) e
 # arquivos pequenos demais, checando a assinatura PK\x03\x04 e o tamanho.
 verify_zip() {
@@ -79,11 +79,11 @@ verify_zip() {
     return 0
 }
 
-# Idempotência (DATA-07): a sentinela `.complete` é a única coisa que autoriza pular.
+# Idempotência: a sentinela `.complete` é a única coisa que autoriza pular.
 is_complete()   { [ -f "$1/.complete" ]; }
 mark_complete() { touch "$1/.complete"; }
 
-# check_disk_space (DATA-08): aborta antes de baixar se o livre < necessário.
+# check_disk_space: aborta antes de baixar se o livre < necessário.
 check_disk_space() {
     local need="$1" avail
     avail=$(df -PB1 "$DATA_DIR" 2>/dev/null | awk 'NR==2 {print $4}')
@@ -98,7 +98,7 @@ check_disk_space() {
     return 0
 }
 
-# fetch_ctu_uhb — CTU-UHB via wfdb (DATA-01). Só marca completo com .hea/.dat presentes.
+# fetch_ctu_uhb — CTU-UHB via wfdb. Só marca completo com .hea/.dat presentes.
 # CTU_DEST é exportado para o python; o wfdb real usa o argumento do -c, e o stub
 # de teste usa o env — o mesmo contrato serve para os dois.
 fetch_ctu_uhb() {
@@ -148,7 +148,7 @@ _curl_zip() {
 }
 
 # fetch_icbhi — Dataverse (primária) com fallback para a URL original via
-# --no-check-certificate (cert autoassinado) (DATA-02, DATA-06, DATA-13).
+# --no-check-certificate (cert autoassinado).
 fetch_icbhi() {
     local dest="$DATA_DIR/icbhi" zip
     if is_complete "$dest"; then
@@ -180,7 +180,7 @@ fetch_icbhi() {
     return 0
 }
 
-# fetch_endoscapes — Endoscapes2023 via wget --continue (DATA-03, DATA-06).
+# fetch_endoscapes — Endoscapes2023 via wget --continue.
 fetch_endoscapes() {
     local dest="$DATA_DIR/endoscapes" zip
     if is_complete "$dest"; then
@@ -240,7 +240,7 @@ _fetch_urfd_seq() {
     return 0
 }
 
-# fetch_urfd — 70 sequências (fall+adl) do URFD (DATA-14). Idempotência em DOIS
+# fetch_urfd — 70 sequências (fall+adl) do URFD. Idempotência em DOIS
 # níveis: por sequência (evita rebaixar 69 zips já prontos por causa de 1) e por
 # dataset (só marca completo quando TODAS as sequências completam).
 fetch_urfd() {
@@ -275,10 +275,10 @@ fetch_urfd() {
     return 0
 }
 
-# fetch_bidmc — BIDMC via wfdb (DATA-15).
+# fetch_bidmc — BIDMC via wfdb.
 #
-# Achado verificado (não presumir de novo): os arquivos de "numerics" (HR,
-# PULSE, RESP, SpO2 a 1 Hz — o sinal que AD-040 realmente quer) são
+# Os arquivos de "numerics" (frequência cardíaca, pulso, respiração e
+# oxigenação a 1 Hz — o sinal de monitor de UTI que interessa aqui) são
 # REGISTROS SEPARADOS com sufixo 'n' (ex. bidmc01n) que NÃO aparecem no
 # RECORDS do dataset. `dl_database(records='all')` baixa só as 53 formas de
 # onda (125 Hz); os numerics exigem uma segunda chamada explícita com os
@@ -332,7 +332,7 @@ _run_fetch() {
     fi
 }
 
-# main — checagens globais, os três fetch, resumo e exit code (DATA-07, DATA-10).
+# main — checagens globais, os três fetch, resumo e exit code.
 main() {
     require_tools || return 1
 

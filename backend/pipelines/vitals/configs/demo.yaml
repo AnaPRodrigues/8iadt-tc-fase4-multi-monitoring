@@ -1,10 +1,10 @@
-# Cenário de demonstração de F3 (vitals-anomaly).
+# Cenário de demonstração da análise de sinais vitais (cardiotocografia).
 #
 # Requer o CTU-UHB baixado em data/ctu-uhb-ctgdb/ (PhysioNet, Open Data Commons):
 #   wget -r -N -c -np https://physionet.org/files/ctu-uhb-ctgdb/1.0.0/
 #
 # Os limiares abaixo são pontos de partida documentados, não valores calibrados —
-# a calibração usa um conjunto de desenvolvimento separado do de avaliação (AD-027).
+# a calibração usa um conjunto de desenvolvimento separado do de avaliação.
 
 dataset_dir: data/ctu-uhb
 
@@ -17,7 +17,7 @@ zscore_threshold: 3.0
 iforest_contamination: 0.1
 
 # Fração de janelas anômalas acima da qual o registro é classificado como
-# patológico (AD-027).
+# patológico.
 tau: 0.15
 
 seed: 42
