@@ -10,5 +10,5 @@ processamento — só apresentação:
 Consome o contrato REST versionado: `/patients/{id}/timeline`, `/analyze`,
 `/alerts`, `/evidence/{id}`.
 
-**Framework a definir** — decisão adiada; não é bloqueante para F0 nem para a
-migração de F3. Será registrada como AD quando escolhida.
+**Framework: Streamlit** (AD-044) — cliente fino consumindo `backend/app/`
+(FastAPI), sem lógica de processamento própria.

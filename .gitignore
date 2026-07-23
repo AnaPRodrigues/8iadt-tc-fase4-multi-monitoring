@@ -18,6 +18,7 @@ models/*
 
 # Subconjunto de imagens preparado localmente para subir ao Drive (AD-042)
 training/staging/
+training/*.zip
 
 # Frontend
 node_modules/

@@ -135,26 +135,26 @@ UI, mas o dashboard é essencial para o vídeo de demonstração.
 
 | Requirement ID | Story | Phase | Status |
 | --- | --- | --- | --- |
-| FUSION-01 | P1: Carga de eventos do paciente-demo por modalidade | Design | Pending |
-| FUSION-02 | P1: Reordenação cronológica cross-modal | Design | Pending |
-| FUSION-03 | P1: Cálculo do risk score ponderado com decaimento | Design | Pending |
-| FUSION-04 | P1: Tratamento de modalidade ausente na janela | Design | Pending |
-| FUSION-05 | P1: Classificação verde/amarelo/vermelho com histerese | Design | Pending |
-| FUSION-06 | P1: Log de transição de nível (auditoria) | Design | Pending |
-| FUSION-07 | P2: Alerta SNS explicável com links de evidência | Design | Pending |
-| FUSION-08 | P2: Dedupe de alerta por evento de origem | Design | Pending |
-| FUSION-09 | P2: Tratamento de falha de envio SNS | Design | Pending |
-| FUSION-10 | P3: Dashboard com timeline unificada | Design | Pending |
-| FUSION-11 | P3: Replay controlado do cenário | Design | Pending |
-| FUSION-12 | P3: Detalhe de evidência por evento selecionado | Design | Pending |
-| FUSION-13 | Edge: nível mantido quando não há dado novo na janela | Design | Pending |
-| FUSION-14 | Edge: paciente-demo com modalidade ausente | Design | Pending |
+| FUSION-01 | P1: Carga de eventos do paciente-demo por modalidade | Design | In Design |
+| FUSION-02 | P1: Reordenação cronológica cross-modal | Design | In Design |
+| FUSION-03 | P1: Cálculo do risk score ponderado com decaimento | Design | In Design |
+| FUSION-04 | P1: Tratamento de modalidade ausente na janela | Design | In Design |
+| FUSION-05 | P1: Classificação verde/amarelo/vermelho com histerese | Design | In Design |
+| FUSION-06 | P1: Log de transição de nível (auditoria) | Design | In Design |
+| FUSION-07 | P2: Alerta SNS explicável com links de evidência | Design | In Design |
+| FUSION-08 | P2: Dedupe de alerta por evento de origem | Design | In Design |
+| FUSION-09 | P2: Tratamento de falha de envio SNS | Design | In Design |
+| FUSION-10 | P3: Dashboard com timeline unificada | Design | In Design |
+| FUSION-11 | P3: Replay controlado do cenário | Design | In Design |
+| FUSION-12 | P3: Detalhe de evidência por evento selecionado | Design | In Design |
+| FUSION-13 | Edge: nível mantido quando não há dado novo na janela | Design | In Design |
+| FUSION-14 | Edge: paciente-demo com modalidade ausente | Design | In Design |
 
 **ID format:** `FUSION-NN`
 
 **Status values:** Pending → In Design → In Tasks → Implementing → Verified
 
-**Coverage:** 14 total, 0 mapped to tasks, 14 unmapped ⚠️ (aguardando fase Design/Tasks)
+**Coverage:** 14 total, 0 mapped to tasks, 14 unmapped ⚠️ (design escrito — ver `design.md`; próxima fase é Tasks)
 
 ---
 
