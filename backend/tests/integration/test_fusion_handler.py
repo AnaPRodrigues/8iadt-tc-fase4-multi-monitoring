@@ -5,6 +5,11 @@ Requer `make localstack-up`. Pula com mensagem clara se o LocalStack não
 responder em :4566. Uma fila SQS assinando o tópico SNS (raw message delivery)
 comprova a publicação real -- sem isso não haveria como observar de fora se o
 `publish` de fato aconteceu.
+
+Também cobre `app.routes._is_confirmed` (FUSION-09, lado da leitura): o
+handler grava o dedupe no DynamoDB real e a API real lê de volta -- os testes
+de `test_routes.py` só cobrem `_is_confirmed` via monkeypatch ou a guarda
+`DYNAMODB_TABLE` ausente, nunca a chamada real a `client.get_item(...)`.
 """
 
 import socket
@@ -12,6 +17,7 @@ import uuid
 
 import pytest
 
+from app.routes import _is_confirmed
 from aws.clients import get_client
 from aws.provision import ensure_table, ensure_topic
 from pipelines.fusion.handler import lambda_handler
@@ -157,3 +163,13 @@ def test_handler_falha_de_publish_nao_grava_dedupe_e_permite_nova_tentativa(
     assert resposta_retry["published"] is True  # nova tentativa consegue publicar
     mensagens = _mensagens_da_fila(topic_com_fila["queue_url"])
     assert len(mensagens) == 1  # só o retry bem-sucedido publicou de fato
+
+
+def test_is_confirmed_le_o_item_real_do_dynamodb_gravado_pelo_handler(table, topic_com_fila):
+    dedup_key = f"fall-04-{uuid.uuid4().hex[:6]}"
+
+    assert _is_confirmed(dedup_key) is False  # nenhum alerta gravado ainda
+
+    lambda_handler(_payload(dedup_key), context=None)
+
+    assert _is_confirmed(dedup_key) is True  # handler gravou ALERT#<dedup_key> de verdade

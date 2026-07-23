@@ -42,6 +42,16 @@ def test_salto_direto_de_verde_para_vermelho_sem_passar_por_amarelo():
     assert c.update(0.9) == "vermelho"
 
 
+def test_verde_para_vermelho_respeita_a_fronteira_exata_da_banda_do_limiar_vermelho():
+    # 0.9 (teste acima) passa tão longe de 0.75 que não discrimina a fronteira real
+    # de threshold_vermelho+histerese -- um score logo abaixo dela (0.70, que já
+    # cruzou a banda do amarelo em 0.35) precisa parar em "amarelo", não pular
+    # direto pra "vermelho".
+    c = _classifier()
+
+    assert c.update(0.70) == "amarelo"  # > 0.3 + 0.05, mas não > 0.7 + 0.05
+
+
 def test_salto_direto_de_vermelho_para_verde_sem_passar_por_amarelo():
     c = _classifier(initial_level="vermelho")
 
