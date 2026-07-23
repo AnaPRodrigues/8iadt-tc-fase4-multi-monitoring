@@ -379,9 +379,9 @@ Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) �
 | Req.1 — Vídeo: análise postural (OpenPose/pose) | F1 raia pose: URFD + MediaPipe Pose (AD-039) — **FECHADO, Verifier PASS** | ✅ Coberto |
 | Req.1 — Vídeo: detecção de objeto/área crítica (YOLOv8) | F1 raia objeto: Endoscapes/Cholec80 + YOLOv8/Rekognition (AD-033/035) — **FECHADO, Verifier PASS** | ✅ Coberto |
 | Req.1 — Vídeo: relatórios automáticos de desvios | F1 (saída: JSON de eventos + frames anotados + relatório) — **FECHADO, Verifier PASS** | ✅ Coberto |
-| Req.2 — Áudio: alterações vocais (cansaço, dif. respiratória) | F2: ICBHI (crackle/wheeze) + jitter/shimmer/HNR (AD-020) | ✅ Planejado |
-| Req.2 — Áudio: transcrição (Azure STT → faster-whisper) | F2 (AD-003) | ✅ Substituído |
-| Req.2 — Áudio: termos críticos + sentimento (Text Analytics → local) | F2 (AD-003) | ✅ Substituído |
+| Req.2 — Áudio: alterações vocais (cansaço, dif. respiratória) | F2: ICBHI (crackle/wheeze) + jitter/shimmer/HNR (AD-020) — **FECHADO, Verifier PASS** | ✅ Coberto |
+| Req.2 — Áudio: transcrição (Azure STT → faster-whisper) | F2 (AD-003) — **FECHADO, Verifier PASS** | ✅ Substituído |
+| Req.2 — Áudio: termos críticos + sentimento (Text Analytics → local) | F2 (AD-003) — **FECHADO, Verifier PASS** | ✅ Substituído |
 | Req.2 — Áudio: disartria | Trabalho futuro (sem dataset aberto rotulado, AD-020) | ⚠️ Deferido |
 | Req.3 — Vitais: batimentos (HR) | F3 caso UTI: BIDMC (AD-040) + FHR do CTU-UHB | ✅ Coberto |
 | Req.3 — Vitais: oxigenação (SpO2) | F3 caso UTI: BIDMC (AD-040) | ✅ Coberto |
