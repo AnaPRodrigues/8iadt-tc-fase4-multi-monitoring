@@ -1,5 +1,5 @@
 """Reordenação cronológica cross-modal e cálculo do risk score ponderado por janela de
-tempo, com decaimento temporal (FUSION-02, FUSION-03, FUSION-04, FUSION-14).
+tempo, com decaimento temporal.
 
 Eventos de modalidades diferentes podem chegar fora de ordem cronológica -- `sort_events`
 normaliza a lista antes de qualquer varredura por janela, para que o motor sempre
@@ -7,9 +7,9 @@ processe a timeline em ordem crescente.
 
 `score_at`/`compute_timeline` só calculam o score numérico e as contribuições --
 não classificam `RiskPoint.level` (verde/amarelo/vermelho): essa é responsabilidade
-exclusiva de `hysteresis.py`, que mantém estado entre janelas (FUSION-05/13) e por isso
-não pode ser aplicada aqui ponto a ponto. `level` sai como `""` (não classificado) e é
-preenchido pelo chamador que percorre a timeline aplicando o `HysteresisClassifier`.
+exclusiva de `hysteresis.py`, que mantém estado entre janelas e por isso não pode ser
+aplicada aqui ponto a ponto. `level` sai como `""` (não classificado) e é preenchido
+pelo chamador que percorre a timeline aplicando o `HysteresisClassifier`.
 """
 
 from pipelines.fusion.config import PatientDemoConfig
@@ -17,7 +17,7 @@ from pipelines.fusion.models import FusionEvent, RiskPoint
 
 
 def sort_events(events: list[FusionEvent]) -> list[FusionEvent]:
-    """Reordena os eventos por `demo_timestamp_s`, crescente (FUSION-02)."""
+    """Reordena os eventos por `demo_timestamp_s`, crescente."""
     return sorted(events, key=lambda e: e.demo_timestamp_s)
 
 
@@ -36,9 +36,9 @@ def score_at(
     """Soma a contribuição (`peso * severidade * decay`) do evento mais recente de cada
     modalidade configurada em `weights` com `demo_timestamp_s <= t`.
 
-    Modalidade sem nenhum evento até `t` entra em `RiskPoint.missing_modalities`
-    (FUSION-04) e não contribui como 0 silenciosamente -- o campo existe justamente
-    para tornar essa ausência visível, distinta de uma contribuição calculada como zero.
+    Modalidade sem nenhum evento até `t` entra em `RiskPoint.missing_modalities` e não
+    contribui como 0 silenciosamente -- o campo existe justamente para tornar essa
+    ausência visível, distinta de uma contribuição calculada como zero.
     """
     mais_recente_por_modalidade: dict[str, FusionEvent] = {}
     for event in sort_events(events):

@@ -1,6 +1,6 @@
-"""Dataclasses de domínio da fusão multimodal (F5), compartilhadas por todos os módulos
-de `pipelines/fusion/` -- mesmo padrão de centralização de tipos usado em F1/F2
-(`video/models.py`, `audio/models.py`).
+"""Dataclasses de domínio da fusão multimodal, compartilhadas por todos os módulos
+de `pipelines/fusion/` -- mesmo padrão de centralização de tipos usado em
+`video/models.py`/`audio/models.py`.
 """
 
 from dataclasses import dataclass
@@ -14,7 +14,7 @@ class CuratedEventRef:
     feature: str  # nome da pasta em output/ (ex.: "video_pose", "audio", "vitals", "prescription")
     run_id: str
     evidence_id: str
-    demo_timestamp_s: float  # curado manualmente (AD-045a) -- não derivado dos dados reais
+    demo_timestamp_s: float  # curado manualmente -- não derivado dos dados reais
     severity: float = 1.0  # override curado; default 1.0 (presença = anomalia já confirmada)
 
 
@@ -33,7 +33,7 @@ class RiskPoint:
     score: float
     level: str  # "verde" | "amarelo" | "vermelho"
     contributions: dict[str, float]  # modalidade -> contribuição no score
-    missing_modalities: list[str]  # modalidades sem nenhum evento até `t` (FUSION-04)
+    missing_modalities: list[str]  # modalidades sem nenhum evento até `t`
     contributing_events: list[FusionEvent]  # eventos que efetivamente pesaram neste ponto
 
 
@@ -50,4 +50,4 @@ class AlertPayload:
     patient_demo_id: str
     level: str
     dedup_key: str
-    contributions: list[tuple[str, str, str]]  # (modalidade, resumo, link_s3_evidencia)
+    contributions: list[tuple[str, str, str]]  # (modalidade, resumo, link `/evidence/{id}`)

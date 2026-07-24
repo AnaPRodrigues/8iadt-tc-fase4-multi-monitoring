@@ -1,5 +1,5 @@
 """Testes de `pipelines.fusion.alert` -- payload explicável de alerta e chave de
-dedupe determinística (FUSION-07, FUSION-08)."""
+dedupe determinística."""
 
 from pathlib import Path
 

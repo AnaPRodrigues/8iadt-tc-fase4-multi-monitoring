@@ -1,5 +1,4 @@
-"""Testes de `pipelines.fusion.transitions` -- log de auditoria de transição de nível
-(FUSION-06)."""
+"""Testes de `pipelines.fusion.transitions` -- log de auditoria de transição de nível."""
 
 import json
 from pathlib import Path

@@ -1,28 +1,26 @@
-# Config curada do paciente-demo de F5 (fusion-and-alerting) -- AD-045a.
+# Config curada de um cenário de demonstração para o motor de fusão multimodal.
 #
-# Composição didática (AD-024): 1 evento real de cada uma das 4 modalidades (F1-F4),
-# curado manualmente (evidence_id + demo_timestamp_s) -- NÃO é uma correlação clínica
-# real entre registros de um mesmo paciente de verdade (ver spec.md § Out of Scope).
+# Composição didática: 1 evento real de cada uma das 4 modalidades de análise (vídeo,
+# sinais vitais, prescrição, áudio), curado manualmente (evidence_id + demo_timestamp_s)
+# -- NÃO é uma correlação clínica real entre registros de um mesmo paciente de verdade.
 #
-# Caso de sinais vitais (F3) usado: CTU-UHB (cardiotocografia fetal / FHR), via
+# Caso de sinais vitais usado: CTU-UHB (cardiotocografia fetal / FHR), via
 # `pipelines/vitals/configs/demo.yaml` -- decisão confirmada com o usuário, não BIDMC
-# (HR/SpO2 de UTI adulta). `pipelines/vitals/{loader,features,detectors}.py` são
-# inteiramente específicos do CTU-UHB (rótulo por pH fetal); processar HR/SpO2/PULSE
-# do BIDMC exigiria um segundo caso de F3 inteiro, fora do escopo desta config.
+# (HR/SpO2 de internação adulta), que tem seu próprio caso de sinais vitais separado
+# (`pipelines/vitals/bidmc.py`) com loader/features/detectores próprios.
 #
 # Consequência aceita conscientemente: o desencaixe narrativo entre "monitoramento
 # fetal" (CTU-UHB) e "queda de paciente adulto" (URFD) não é um erro de curadoria --
-# é o mesmo princípio já aceito pela AD-024 (o paciente-demo demonstra o MECANISMO de
-# fusão multimodal -- peso, decaimento, histerese, explicabilidade -- não uma
-# correlação clínica real entre as 4 fontes).
+# este cenário demonstra o MECANISMO de fusão multimodal -- peso, decaimento,
+# histerese, explicabilidade -- não uma correlação clínica real entre as 4 fontes.
 #
-# Narrativa (demo_timestamp_s em segundos, evidência real de cada feature):
-#   t=0    video (F1, URFD fall-01): queda detectada (pose_detector, score 0.31)
-#   t=300  vitals (F3, CTU-UHB registro 1001): janela anômala do IsolationForest
+# Narrativa (demo_timestamp_s em segundos, evidência real de cada análise):
+#   t=0    video (URFD fall-01): queda detectada (pose_detector, score 0.31)
+#   t=300  vitals (CTU-UHB registro 1001): janela anômala do IsolationForest
 #          (pH real do registro = 7.14, indicativo de acidose fetal -- deterioração)
-#   t=600  prescription (F4, paciente p3): mudança abrupta de dose de losartana
+#   t=600  prescription (paciente p3): mudança abrupta de dose de losartana
 #          (50mg -> 100mg, +100%) -- prescrição ajustada após a deterioração
-#   t=900  audio (F2, ICBHI): sibilo (wheeze) detectado em ciclo respiratório real
+#   t=900  audio (ICBHI): sibilo (wheeze) detectado em ciclo respiratório real
 patient_demo_id: demo
 events:
   - modality: video

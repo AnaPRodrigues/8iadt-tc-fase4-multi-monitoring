@@ -1,9 +1,8 @@
 """Configuração declarativa do paciente-demo (YAML -> dataclass validada).
 
 Mesmo *padrão* de validação de `pipelines/audio/config.py` (campo desconhecido é
-erro, obrigatórios explícitos), não uma classe compartilhada -- ver design.md
-("Reuses" de `fusion/config.py`). Não é "1 registro por modalidade": é uma lista
-curada de eventos (AD-045a), cada um resolvido depois por `loader.py`.
+erro, obrigatórios explícitos), não uma classe compartilhada. Não é "1 registro por
+modalidade": é uma lista curada de eventos, cada um resolvido depois por `loader.py`.
 """
 
 from dataclasses import dataclass

@@ -1,5 +1,5 @@
 """Testes de `pipelines.fusion.loader.load_events` -- resolução de eventos curados em
-evidência real de F1-F4 (FUSION-01)."""
+evidência real gravada pelas análises de vídeo/áudio/vitais/prescrição."""
 
 from pathlib import Path
 
@@ -13,7 +13,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _OUTPUT_ROOT = _REPO_ROOT / "output"
 _DEMO_CONFIG_PATH = _REPO_ROOT / "backend" / "pipelines" / "fusion" / "configs" / "demo.yaml"
 
-# Evidência real já gravada por F4 (prescription) -- ver output/prescription/20260721/.
+# Evidência real já gravada pela análise de prescrição -- ver output/prescription/20260721/.
 _REF_REAL = CuratedEventRef(
     modality="prescription",
     feature="prescription",
@@ -26,7 +26,9 @@ _REF_REAL = CuratedEventRef(
 def _skip_se_evidencia_ausente():
     sidecar = _OUTPUT_ROOT / "prescription" / "20260721" / f"{_REF_REAL.evidence_id}.json"
     if not sidecar.is_file():
-        pytest.skip(f"evidência real de F4 ausente em {sidecar} — rode o pipeline de prescrição")
+        pytest.skip(
+            f"evidência real de prescrição ausente em {sidecar} — rode o pipeline de prescrição"
+        )
 
 
 def _cfg(events: list[CuratedEventRef]) -> PatientDemoConfig:
@@ -113,9 +115,9 @@ def _skip_se_evidencias_do_demo_ausentes() -> None:
 
 
 def test_config_curada_do_paciente_demo_resolve_as_4_modalidades_sem_falhas():
-    """AD-045a: `demo.yaml` referencia evidência real das 4 modalidades (F1-F4) e
-    `load_events` resolve 100% das referências, sem nenhuma na lista de falhas --
-    prova de que a curadoria aponta para evidência real, não fixture (T18)."""
+    """`demo.yaml` referencia evidência real das 4 modalidades e `load_events` resolve
+    100% das referências, sem nenhuma na lista de falhas -- prova de que a curadoria
+    aponta para evidência real, não fixture."""
     _skip_se_evidencias_do_demo_ausentes()
     cfg = load_patient_demo_config(_DEMO_CONFIG_PATH)
 

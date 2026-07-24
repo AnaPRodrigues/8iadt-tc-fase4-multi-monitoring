@@ -1,8 +1,9 @@
 """Resolve cada `CuratedEventRef` da config do paciente-demo em um `FusionEvent` real,
-lendo o sidecar JSON já gravado por F1-F4 (mesmo contrato de `common/evidence.py`).
+lendo o sidecar JSON já gravado pelas análises de vídeo/áudio/vitais/prescrição (mesmo
+contrato de `common/evidence.py`).
 
-Não usa `save_evidence` -- F5 não cria evidência nova nesta etapa, só lê o que já
-existe em disco (FUSION-01).
+Não usa `save_evidence` -- a fusão não cria evidência nova nesta etapa, só lê o que já
+existe em disco.
 """
 
 import json

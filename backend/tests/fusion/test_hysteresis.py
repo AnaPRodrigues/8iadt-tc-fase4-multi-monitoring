@@ -1,5 +1,5 @@
 """Testes de `pipelines.fusion.hysteresis.HysteresisClassifier` -- classificação com
-histerese e memória de estado entre janelas (FUSION-05, FUSION-13)."""
+histerese e memória de estado entre janelas."""
 
 from pipelines.fusion.hysteresis import HysteresisClassifier
 

@@ -1,5 +1,5 @@
 """Testes de `pipelines.fusion.risk_engine` -- reordenação cronológica, decaimento
-temporal e risk score ponderado por janela (FUSION-02, FUSION-03, FUSION-04, FUSION-14)."""
+temporal e risk score ponderado por janela."""
 
 from pathlib import Path
 
@@ -167,8 +167,8 @@ def test_compute_timeline_sem_eventos_devolve_lista_vazia():
 
 
 def test_compute_timeline_paciente_demo_sem_uma_modalidade_confirma_missing_desde_t_zero():
-    # Edge case FUSION-14: paciente-demo sem vídeo no cenário inteiro -- "video" precisa
-    # aparecer em `missing_modalities` desde o primeiro ponto (t=0), não só depois.
+    # Cenário sem vídeo no período inteiro -- "video" precisa aparecer em
+    # `missing_modalities` desde o primeiro ponto (t=0), não só depois.
     cfg = _cfg(window_size_s=10.0)
     eventos = [_evento("audio", t=0.0), _evento("vitals", t=5.0), _evento("prescription", t=5.0)]
 

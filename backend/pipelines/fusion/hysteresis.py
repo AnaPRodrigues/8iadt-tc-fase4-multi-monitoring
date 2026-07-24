@@ -1,11 +1,11 @@
 """Classificador de nível (verde/amarelo/vermelho) com histerese e memória de estado
-entre janelas (FUSION-05, FUSION-13).
+entre janelas.
 
 `HysteresisClassifier` mantém o nível atual internamente; `.update(score)` só muda de
 nível quando o score cruza `limiar + histerese` (subindo) ou `limiar - histerese`
 (descendo) a partir do nível atual -- nunca reavalia do zero a cada chamada. É
-exatamente isso que impede a oscilação na fronteira (edge case da spec) e mantém o
-último nível quando não há sinal novo suficiente para cruzar a banda (FUSION-13).
+exatamente isso que impede a oscilação na fronteira entre níveis e mantém o último
+nível quando não há sinal novo suficiente para cruzar a banda.
 """
 
 VERDE = "verde"

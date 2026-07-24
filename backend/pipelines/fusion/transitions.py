@@ -1,4 +1,4 @@
-"""Log de auditoria de toda transição de nível (FUSION-06).
+"""Log de auditoria de toda transição de nível de risco.
 
 Reaproveita o *princípio* de persistência de `common/metrics.py::save_report` (JSON
 indentado, cria os diretórios necessários) -- não importa a função porque ela é
