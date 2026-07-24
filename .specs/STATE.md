@@ -444,11 +444,11 @@ Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) �
 | Req.3 — Vitais: pressão arterial (PA) | Trabalho futuro — fonte aberta identificada: VitalDB (AD-041) | ⚠️ Deferido |
 | Req.3 — Prescrições: evolução | F4: Textract/adapter + regras — **FECHADO, Verifier PASS** (AD-022/035) | ✅ Coberto |
 | Req.3 — Padrões de movimentação do paciente | F1 raia pose: URFD fall/ADL (AD-039) — **FECHADO, Verifier PASS** | ✅ Coberto |
-| Req.3 — Alertas automáticos à equipe | F5: Lambda → SNS (AD-004/024) — **FECHADO, Verifier PASS** | ✅ Coberto |
+| Req.3 — Alertas automáticos à equipe | F5: motor de fusão + histerese, alerta registrado no banco local e exibido pela interface (reformulação, AD-048) — **substitui o envio por SNS da versão original** | ✅ Coberto |
 | Objetivo — Fusão multimodal | F5: late fusion + risk score (AD-024) — **FECHADO, Verifier PASS** | ✅ Coberto |
-| Objetivo — Nuvem gerenciada (Azure → AWS) | AWS Learner Lab + LocalStack (AD-001/034); **explicar a troca no relatório/vídeo** | ✅ Substituído |
+| Objetivo — Nuvem gerenciada (Azure → AWS) | AWS Learner Lab, só Textract/Rekognition síncronos (AD-001/048, LocalStack removido); **explicar a troca no relatório/vídeo** | ✅ Substituído |
 | Objetivo — Tempo real | Near-real-time por micro-batch (AD-011) | ✅ Substituído |
-| Entregável — Relatório técnico | Pendente (escrever ao final) | ⏳ Pendente |
+| Entregável — Relatório técnico | `docs/relatorio-tecnico.md` tem um rascunho substancial (arquitetura, resultados, nuvem, reprodução), sincronizado com o fluxo atual nesta sessão — falta revisão final e a seção de conclusão/limitações fechada | 🟡 Em andamento |
 | Entregável — Vídeo demo ≤15 min | Pendente (gravar ao final) | ⏳ Pendente |
 
 Lacunas obrigatórias remanescentes: **nenhuma bloqueadora**. Sinais vitais: `batimentos` (HR — FHR do CTU-UHB e HR do BIDMC) e `oxigenação` (SpO2 do BIDMC, AD-052) cobertos; `pressão arterial` deferida com justificativa (sem dataset aberto em waveform sem credenciamento). `disartria` (áudio) deferida (sem dataset aberto rotulado). Entregáveis (relatório + vídeo) pendentes por natureza (fase final).

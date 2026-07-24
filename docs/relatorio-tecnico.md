@@ -253,11 +253,12 @@ tudo sem nenhuma dependência de nuvem.
 
 Registradas com transparência (nada foi mascarado como "coberto" sem código real):
 
-- **Oxigenação (SpO₂) e batimentos de UTI adulta**: o dataset BIDMC (HR/SpO₂ de UTI) já
-  é baixado, mas o pipeline de vitais processa apenas o CTU-UHB (cardiotocografia
-  fetal). A técnica de detecção de anomalia (z-score + Isolation Forest sobre janelas) é
-  geral e se aplicaria ao BIDMC, mas o loader/features específicos ainda não foram
-  escritos. **Batimentos** estão cobertos via FHR; **SpO₂** fica como trabalho futuro.
+- **Oxigenação (SpO₂) e batimentos de UTI adulta**: coberto. O pipeline de vitais lê o
+  BIDMC (`pipelines/vitals/bidmc.py`) além do CTU-UHB, reaproveitando os mesmos
+  detectores (z-score + Isolation Forest sobre janelas) contra critérios clínicos
+  publicados (hipoxemia SpO₂ < 90% sustentada; bradicardia/taquicardia fora de 60–100
+  bpm) — o BIDMC não tem desfecho anotado, por isso a avaliação usa referência clínica
+  em vez de rótulo do dataset.
 - **Pressão arterial**: sem fonte aberta em waveform sem credenciamento (a fonte
   identificada, VitalDB, fica como trabalho futuro).
 - **Disartria (áudio)**: sem dataset aberto rotulado; deferido com justificativa.
