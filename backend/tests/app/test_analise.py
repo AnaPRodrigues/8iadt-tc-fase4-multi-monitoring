@@ -6,10 +6,12 @@
 """
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from app import analise
+from aws.adapters import ImageAnalysis, ImageLabel
 from pipelines.prescription.generator import generate_prescription
 from pipelines.prescription.models import PrescriptionRecord
 
@@ -64,6 +66,54 @@ def test_video_sequencia_de_queda_real_produz_resumo_e_evidencia(tmp_path):
     if r.pontuacao == 1.0:
         assert "queda" in r.resumo.lower()
         assert r.evidencia_id is not None
+
+
+# --------------------------------------------------------------------------- #
+# Vídeo (unitário — quadro cirúrgico único, ImageAnalyzer dublado)
+# --------------------------------------------------------------------------- #
+def _dublar_image_analyzer(monkeypatch, labels: list[ImageLabel]) -> None:
+    monkeypatch.setattr(analise, "_pesos_yolo", lambda: Path("pesos-nao-usados.pt"))
+    monkeypatch.setattr("pipelines.video.adapters.register_local_adapters", lambda pesos: None)
+    monkeypatch.setattr(
+        "aws.adapters.get_image_analyzer",
+        lambda env=None: SimpleNamespace(
+            analyze=lambda _bytes: ImageAnalysis(labels=labels, raw={})
+        ),
+    )
+
+
+def test_video_quadro_unico_roteia_para_raia_cirurgica(monkeypatch, tmp_path):
+    quadro = tmp_path / "quadro.jpg"
+    quadro.write_bytes(b"conteudo-fake-do-quadro")
+    _dublar_image_analyzer(monkeypatch, labels=[ImageLabel(name="tool", confidence=0.9)])
+
+    r = analise._analisar_video(quadro, run_id="teste-objeto")
+
+    assert r.detalhes.get("caso") == "cirurgico"
+    assert r.pontuacao == 0.0  # "tool" não é estrutura crítica
+    assert r.evidencia_id is None
+
+
+def test_video_quadro_com_estrutura_critica_gera_evidencia_em_linguagem_clinica(
+    monkeypatch, tmp_path
+):
+    quadro = tmp_path / "quadro.jpg"
+    quadro.write_bytes(b"conteudo-fake-do-quadro")
+    _dublar_image_analyzer(
+        monkeypatch, labels=[ImageLabel(name="cystic_artery", confidence=0.87)]
+    )
+
+    r = analise._analisar_video(quadro, run_id="teste-objeto")
+
+    assert r.pontuacao == 1.0
+    assert "artéria cística" in r.resumo  # nome clínico, não o rótulo técnico
+    assert "cystic_artery" not in r.resumo
+    assert r.evidencia_id is not None
+
+
+def test_video_diretorio_inexistente_e_arquivo_inexistente_falham_com_erro_claro(tmp_path):
+    with pytest.raises(analise.ErroDeAnalise):
+        analise._analisar_video(tmp_path / "nao-existe", run_id="teste-erro")
 
 
 # --------------------------------------------------------------------------- #

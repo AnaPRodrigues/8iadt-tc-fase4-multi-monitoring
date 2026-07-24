@@ -84,9 +84,20 @@ def _analisar_documento(
 
 
 # --------------------------------------------------------------------------- #
-# Vídeo (postura / quedas)
+# Vídeo (postura/queda ou estrutura crítica cirúrgica)
 # --------------------------------------------------------------------------- #
 def _analisar_video(caminho: Path, run_id: str) -> ResultadoAnalise:
+    """Roteia pelo formato do envio: um diretório de quadros é uma sequência de
+    postura (padrão UR Fall); um arquivo único é um quadro cirúrgico isolado."""
+    caminho = Path(caminho)
+    if caminho.is_dir():
+        return _analisar_postura(caminho, run_id)
+    if caminho.is_file():
+        return _analisar_quadro_cirurgico(caminho, run_id)
+    raise ErroDeAnalise(f"envio de vídeo não encontrado: {caminho}")
+
+
+def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
     from pipelines.video.pose import create_landmarker, ensure_pose_model, extract_keypoints
     from pipelines.video.pose_detector import (
         DEFAULT_FALL_THRESHOLD,
@@ -95,12 +106,6 @@ def _analisar_video(caminho: Path, run_id: str) -> ResultadoAnalise:
     )
     from pipelines.video.pose_features import windowed_features
     from pipelines.video.pose_loader import load_sequence
-
-    caminho = Path(caminho)
-    if not caminho.is_dir():
-        raise ErroDeAnalise(
-            "a análise de vídeo espera um diretório de quadros de uma sequência (padrão UR Fall)"
-        )
 
     atividade.local("video", "avaliando postura e movimentação com MediaPipe Pose")
     seq = load_sequence(caminho)
@@ -128,6 +133,79 @@ def _analisar_video(caminho: Path, run_id: str) -> ResultadoAnalise:
         pontuacao=1.0,
         evidencia_id=evidencia.evidence_id,
         detalhes={"quadro": idx},
+    )
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Estruturas anatômicas da via biliar que compõem a "visão crítica de segurança"
+# (Critical View of Safety) em colecistectomia — as mesmas de
+# `pipelines/video/object_detector.CRITICAL_STRUCTURES`, traduzidas para o nome
+# clínico em português usado no resumo.
+_TRADUCAO_ESTRUTURA_CRITICA = {
+    "cystic_artery": "artéria cística",
+    "cystic_duct": "ducto cístico",
+    "cystic_plate": "placa cística",
+}
+
+
+def _pesos_yolo() -> Path:
+    pesos = _REPO_ROOT / "models" / "best.pt"
+    if not pesos.is_file():
+        raise ErroDeAnalise(
+            "pesos do modelo de detecção de estruturas cirúrgicas ausentes — "
+            "rode `make models-fetch`"
+        )
+    return pesos
+
+
+def _analisar_quadro_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
+    """Raia de estrutura crítica cirúrgica: rótulos de objeto num único quadro,
+    via o adaptador `ImageAnalyzer` (YOLOv8 local ou Rekognition, por `ENV`)."""
+    from aws.adapters import get_image_analyzer
+    from aws.adapters.cloud import register_cloud_adapters
+    from aws.clients import resolve_env
+    from common.evidence import save_evidence
+    from pipelines.video.adapters import register_local_adapters
+    from pipelines.video.object_detector import CRITICAL_STRUCTURES
+
+    env = resolve_env()
+    if env == "aws":
+        register_cloud_adapters()
+    else:
+        atividade.local("video", "avaliando estrutura cirúrgica crítica no quadro com YOLOv8")
+        register_local_adapters(_pesos_yolo())
+
+    analise_imagem = get_image_analyzer(env).analyze(caminho.read_bytes())
+    criticas = [rotulo for rotulo in analise_imagem.labels if rotulo.name in CRITICAL_STRUCTURES]
+
+    if not criticas:
+        return ResultadoAnalise(
+            resumo="Nenhuma estrutura crítica detectada no quadro cirúrgico.",
+            pontuacao=0.0,
+            detalhes={"caso": "cirurgico"},
+        )
+
+    nomes = ", ".join(
+        sorted({_TRADUCAO_ESTRUTURA_CRITICA.get(r.name, r.name) for r in criticas})
+    )
+    evidencia = save_evidence(
+        feature="video_object",
+        run_id=run_id,
+        evidence_id=f"{caminho.stem}-critico",
+        source_record_id=caminho.stem,
+        artifact_path=caminho,
+        metadata={
+            "estruturas": [
+                {"nome": rotulo.name, "confianca": rotulo.confidence} for rotulo in criticas
+            ]
+        },
+    )
+    return ResultadoAnalise(
+        resumo=f"Estrutura(s) crítica(s) identificada(s) no quadro cirúrgico: {nomes}.",
+        pontuacao=1.0,
+        evidencia_id=evidencia.evidence_id,
+        detalhes={"caso": "cirurgico"},
     )
 
 
