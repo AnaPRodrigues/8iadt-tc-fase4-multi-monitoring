@@ -1,9 +1,16 @@
-"""Log estruturado compartilhado por todas as features."""
+"""Log de atividade compartilhado por todas as partes do sistema.
+
+O formato é pensado para ser lido no terminal durante a demonstração: horário,
+o contexto entre colchetes (ex.: `[áudio][LOCAL]`) e a mensagem em português. O
+contexto vem embutido na própria mensagem (ver `common/atividade.py`).
+"""
 
 import logging
 import sys
 
-_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
+# Só horário (não a data inteira) + mensagem -- linhas curtas e legíveis.
+_FORMAT = "%(asctime)s %(message)s"
+_DATEFMT = "%H:%M:%S"
 _configured = False
 
 
@@ -12,7 +19,7 @@ def _configure() -> None:
     if _configured:
         return
     handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter(_FORMAT))
+    handler.setFormatter(logging.Formatter(_FORMAT, datefmt=_DATEFMT))
     root = logging.getLogger("mm")
     root.addHandler(handler)
     root.setLevel(logging.INFO)

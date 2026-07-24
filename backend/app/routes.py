@@ -23,10 +23,8 @@ from app.schemas import (
     RiskPointSchema,
     UploadSchema,
 )
-from common.logging import get_logger
+from common import atividade
 from pipelines.fusion.models import FusionEvent, RiskPoint
-
-log = get_logger("app.routes")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _OUTPUT_ROOT = _REPO_ROOT / "output"
@@ -99,12 +97,10 @@ async def enviar_arquivo(
             f"(esperado uma de {', '.join(repositorio.MODALIDADES)})",
         )
     conteudo = await arquivo.read()
-    caminho = armazenamento.salvar_arquivo(
-        paciente_id, modalidade, arquivo.filename or "arquivo", conteudo
-    )
-    u = repositorio.criar_upload(
-        paciente_id, modalidade, str(caminho), arquivo.filename or "arquivo"
-    )
+    nome = arquivo.filename or "arquivo"
+    caminho = armazenamento.salvar_arquivo(paciente_id, modalidade, nome, conteudo)
+    u = repositorio.criar_upload(paciente_id, modalidade, str(caminho), nome)
+    atividade.arquivo_recebido(paciente_id, modalidade, nome, len(conteudo))
     return _para_upload_schema(u)
 
 

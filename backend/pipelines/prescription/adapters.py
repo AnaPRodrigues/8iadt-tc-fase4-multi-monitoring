@@ -10,6 +10,7 @@ import io
 import pdfplumber
 
 from aws.adapters import ExtractedText, register_text_extractor
+from common import atividade
 
 
 class PdfplumberExtractor:
@@ -21,6 +22,7 @@ class PdfplumberExtractor:
             text = page.extract_text() or ""
             lines = text.split("\n") if text else []
             raw = {"page_count": len(pdf.pages)}
+        atividade.local("documento", f"texto extraído do PDF com pdfplumber — {len(lines)} linhas")
         return ExtractedText(lines=lines, raw=raw)
 
 

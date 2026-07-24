@@ -176,22 +176,35 @@ make test
 
 ---
 
-## Rodar o painel localmente (API + dashboard)
+## Rodar o painel localmente (API + interface)
 
-O painel são **dois processos**, cada um num terminal:
+São **dois processos**, cada um num terminal:
 
 ```bash
 # Terminal 1 — a API (fica em http://localhost:8000)
 make serve-api
 
-# Terminal 2 — o painel (abre em http://localhost:5173; rode make frontend-install antes na 1a vez)
+# Terminal 2 — a interface (abre em http://localhost:5173; rode make frontend-install antes na 1a vez)
 make serve-front
 ```
 
-O painel já vem apontando para o paciente-demo `demo`
-(`backend/pipelines/fusion/configs/demo.yaml`) — não é preciso configurar nada. As
-portas são ajustáveis: `make serve-api API_PORT=9000` e
+Abra `http://localhost:5173`, cadastre um paciente e envie arquivos para ele — ou use a
+carga inicial de demonstração (ver `make seed`, quando disponível) para já ter pacientes
+com dados. As portas são ajustáveis: `make serve-api API_PORT=9000` e
 `make serve-front API_PORT=9000` sobem o par noutra porta.
+
+**Log de atividade no terminal.** Enquanto a API roda, o terminal mostra, de forma
+legível, o que o sistema está fazendo — arquivo recebido, início/fim de cada análise,
+cálculo de risco e alertas — com a **origem do processamento marcada**: `[LOCAL]` quando
+resolvido na própria máquina, `[AWS]` quando houve chamada a um serviço gerenciado (com
+o serviço, a duração e o id da resposta). Exemplo:
+
+```
+14:32:07 [paciente:p-0007] arquivo recebido — modalidade=áudio, consulta_01.wav (2.3 MB)
+14:32:11 [áudio][LOCAL] classificando ciclos respiratórios (treino sob demanda)
+14:32:12 [risco] pontuação 0.31 -> 0.55 — nível AMARELO
+14:35:04 [prescrição][AWS] 34 blocos extraídos em 1.8s — requestId=a1b2c3d4
+```
 
 ---
 

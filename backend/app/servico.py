@@ -8,20 +8,19 @@ monta a linha do tempo de risco do paciente a partir do banco local.
 """
 
 import os
+import time
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
 from app import analise, repositorio
 from app.analise import ResultadoAnalise
+from common import atividade
 from common.evidence import Evidence
-from common.logging import get_logger
 from pipelines.fusion.config import DEFAULTS
 from pipelines.fusion.hysteresis import VERDE, HysteresisClassifier
 from pipelines.fusion.models import FusionEvent, RiskPoint
 from pipelines.fusion.risk_engine import compute_timeline
-
-log = get_logger("app.servico")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _OUTPUT_ROOT = _REPO_ROOT / "output"
@@ -103,10 +102,12 @@ def analisar_upload(upload_id: str) -> repositorio.Analise:
 
     repositorio.atualizar_situacao_upload(upload_id, "processando")
     caminho = Path(upload.caminho)
+    atividade.analise_iniciada(upload.paciente_id, upload.modalidade)
+    inicio = time.monotonic()
     try:
         resultado = _despachar(upload, caminho)
     except analise.ErroDeAnalise as exc:
-        log.warning("análise de %s falhou: %s", upload_id, exc)
+        atividade.analise_falhou(upload.modalidade, str(exc))
         repositorio.atualizar_situacao_upload(upload_id, "erro")
         resultado = ResultadoAnalise(
             resumo=f"Não foi possível analisar o arquivo: {exc}", pontuacao=None
@@ -116,6 +117,7 @@ def analisar_upload(upload_id: str) -> repositorio.Analise:
         )
         return registro
 
+    atividade.analise_concluida(upload.modalidade, time.monotonic() - inicio, resultado.resumo)
     registro = repositorio.criar_analise(
         upload_id, upload.modalidade, _para_dict(resultado), resultado.pontuacao
     )
@@ -244,9 +246,11 @@ def _reavaliar_alertas(paciente_id: str) -> None:
     }
 
     nivel_anterior = VERDE
+    score_anterior = 0.0
     for ponto in pontos:
-        cruzou = ponto.level != nivel_anterior and ponto.level == cfg.alert_level
-        if cruzou:
+        if ponto.level != nivel_anterior:
+            atividade.risco(score_anterior, ponto.score, ponto.level)
+        if ponto.level != nivel_anterior and ponto.level == cfg.alert_level:
             referencias = sorted(e.evidence.evidence_id for e in ponto.contributing_events)
             if tuple(referencias) not in ja_registrados:
                 motivo = _motivo_clinico(ponto)
@@ -254,13 +258,9 @@ def _reavaliar_alertas(paciente_id: str) -> None:
                     paciente_id, ponto.level, round(ponto.score, 2), motivo, referencias
                 )
                 ja_registrados.add(tuple(referencias))
-                log.info(
-                    "alerta registrado para %s -- nível %s (pontuação %.2f)",
-                    paciente_id,
-                    ponto.level,
-                    ponto.score,
-                )
+                atividade.alerta_registrado(paciente_id, motivo)
         nivel_anterior = ponto.level
+        score_anterior = ponto.score
 
 
 def _motivo_clinico(ponto: RiskPoint) -> str:

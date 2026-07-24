@@ -217,6 +217,13 @@ Nenhum outro serviço de nuvem é usado — sem S3, sem DynamoDB, sem SNS, sem f
 funções serverless. A seleção local/aws é feita por adaptadores intercambiáveis; o
 restante do código é idêntico nos dois modos.
 
+**Observabilidade da origem.** O terminal mostra um registro de atividade legível das
+etapas do sistema, marcando explicitamente a origem de cada processamento: `[LOCAL]`
+quando resolvido na máquina e `[AWS]` quando houve chamada a um serviço gerenciado. As
+linhas de nuvem registram serviço, operação, duração e o `requestId` da resposta —
+evidência de que a chamada foi real. É o que torna visível, na demonstração, quando o
+sistema resolve localmente e quando recorre à nuvem.
+
 ### Mapeamento Azure → AWS / local
 
 | Sugerido no enunciado (Azure) | Usado no projeto | Onde |

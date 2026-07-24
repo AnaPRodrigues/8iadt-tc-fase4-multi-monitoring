@@ -402,6 +402,14 @@
 - **Date**: 2026-07-24
 - **Status**: active
 
+### AD-051
+- **Decision**: Bloco 4 — registro de atividade legível no terminal, pensado para o vídeo de demonstração. Novo módulo `common/atividade.py` com funções de log nas fronteiras do fluxo: arquivo recebido, análise iniciada/concluída (com duração), origem do processamento, cálculo de risco e decisão de alerta. Cada linha traz o contexto entre colchetes e, nas etapas de processamento, a **origem explícita**: `[LOCAL]` (modelo/biblioteca na máquina) ou `[AWS]` (serviço gerenciado). As chamadas de nuvem registram serviço + operação + duração + `requestId` da resposta (evidência de que a chamada foi real). Mensagens incluem paciente e modalidade. Formato de log mudado para `HH:MM:SS <mensagem>` (`common/logging.py`); o access log do uvicorn foi rebaixado para WARNING (`app/main.py`) para não afogar o log de aplicação. Ligações: `routes.enviar_arquivo` (recebido), `servico.analisar_upload` (iniciada/concluída/falhou), `servico._reavaliar_alertas` (risco/alerta), despachos de `analise.py` (`[LOCAL]` por modalidade), adapters `pdfplumber` (`[LOCAL]`) e `Textract`/`Rekognition` (`[AWS]` com duração+requestId).
+- **Reason**: Pedido explícito do usuário — o terminal precisa mostrar o que o sistema faz, com a origem (local vs. nuvem) marcada, para exibição em vídeo. Clareza importa mais que volume.
+- **Trade-off**: O formato de log ficou mais enxuto (sem nível/nome do logger na saída de terminal) — decisão consciente pela legibilidade da demonstração; a captura de log dos testes (`caplog`) usa formatter próprio do pytest e não é afetada. Verificação: log capturado ao vivo confirmou todos os formatos batendo com o exemplo do enunciado (`[paciente:...]`, `[prescrição][LOCAL]`, `[prescrição][AWS] Textract analyze_document ... requestId=...`, `[risco] pontuação X -> Y — nível NIVEL`, `[alerta] registrado ...`); zero linhas de acesso HTTP afogando o log.
+- **Scope**: `common/atividade.py` (novo), `common/logging.py` (formato), `app/main.py` (access log), `app/routes.py`/`app/servico.py`/`app/analise.py` (ligações), `aws/adapters/cloud.py` e `pipelines/prescription/adapters.py` (origem). Bloco 4 de 6.
+- **Date**: 2026-07-24
+- **Status**: active
+
 ## Rastreabilidade de Requisitos Obrigatórios
 
 Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) às features.

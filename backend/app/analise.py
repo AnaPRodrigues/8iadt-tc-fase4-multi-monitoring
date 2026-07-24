@@ -20,10 +20,8 @@ identificador da evidência gerada (quando há).
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from common.logging import get_logger
+from common import atividade
 from pipelines.prescription.models import PrescriptionRecord
-
-log = get_logger("app.analise")
 
 # Tamanho de janela (em quadros) da análise de postura -- mesmo valor calibrado no
 # driver da raia de vídeo para as sequências reais de queda.
@@ -104,6 +102,7 @@ def _analisar_video(caminho: Path, run_id: str) -> ResultadoAnalise:
             "a análise de vídeo espera um diretório de quadros de uma sequência (padrão UR Fall)"
         )
 
+    atividade.local("video", "avaliando postura e movimentação com MediaPipe Pose")
     seq = load_sequence(caminho)
     model_path = ensure_pose_model(caminho.parent / "_modelo_pose")
     landmarker = create_landmarker(model_path)
@@ -164,6 +163,7 @@ def _analisar_audio(
 
     # Treina o classificador com o conjunto de referência (ICBHI) -- o modelo não é
     # persistido; é treinado sob demanda, como no restante do sistema.
+    atividade.local("audio", "classificando ciclos respiratórios (treino sob demanda)")
     referencia, _ = load_dataset(dataset_icbhi)
     por_paciente: dict[str, list] = {}
     for c in referencia:
@@ -222,6 +222,7 @@ def _analisar_sinais_vitais(caminho: Path, run_id: str) -> ResultadoAnalise:
     if not janelas:
         return ResultadoAnalise(resumo="Registro curto demais para avaliar.", pontuacao=None)
 
+    atividade.local("sinais_vitais", "buscando anomalias na série temporal (Isolation Forest)")
     features = [extract(j, fs=limpo.fs) for j in janelas]
     detector = IsolationForestDetector(contamination=0.1, seed=42)
     scores = detector.score(features)
