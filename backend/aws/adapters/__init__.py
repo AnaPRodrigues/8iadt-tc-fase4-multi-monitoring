@@ -1,15 +1,21 @@
-"""Interfaces e modelos de dados para os adapters de IA gerenciada.
+"""Contrato dos adaptadores de extração de texto e de análise de imagem.
 
-`TextExtractor`/`ImageAnalyzer` isolam Textract/Rekognition (cloud) e as
-implementações OSS locais (Tesseract/YOLOv8, registradas pelos pipelines de
-prescrição e vídeo) atrás de um único contrato. Pipelines dependem só da interface.
+Cada capacidade tem uma interface (`TextExtractor`, `ImageAnalyzer`) e duas
+implementações, escolhidas pela variável de ambiente `ENV`:
+
+- `local`: bibliotecas/modelos que rodam na própria máquina (pdfplumber para PDF,
+  YOLOv8 para imagem) — registradas pelos pipelines de prescrição e vídeo.
+- `aws`: serviços gerenciados (Textract, Rekognition) — registradas em
+  `aws/adapters/cloud.py`.
+
+Os pipelines dependem só da interface; a seleção da implementação é feita por `ENV`.
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from aws.clients import load_aws_config
+from aws.clients import resolve_env
 
 
 @dataclass(frozen=True)
@@ -40,8 +46,8 @@ class ImageAnalyzer(Protocol):
     def analyze(self, image_bytes: bytes) -> ImageAnalysis: ...
 
 
-# Registro por ENV. A fundação registra as implementações CLOUD
-# (ver adapters/cloud.py); LOCAL é registrado pelos pipelines de prescrição e vídeo.
+# Registro por modo (`local` / `aws`). As implementações locais são registradas
+# pelos pipelines de prescrição e vídeo; as de nuvem, por `aws/adapters/cloud.py`.
 _TEXT_EXTRACTORS: dict[str, Callable[[], TextExtractor]] = {}
 _IMAGE_ANALYZERS: dict[str, Callable[[], ImageAnalyzer]] = {}
 
@@ -55,18 +61,18 @@ def register_image_analyzer(env: str, factory: Callable[[], ImageAnalyzer]) -> N
 
 
 def get_text_extractor(env: str | None = None) -> TextExtractor:
-    env = env or load_aws_config().env
+    env = env or resolve_env()
     try:
         factory = _TEXT_EXTRACTORS[env]
     except KeyError:
-        raise ValueError(f"nenhum TextExtractor registrado para ENV={env!r}") from None
+        raise ValueError(f"nenhum extrator de texto registrado para o modo {env!r}") from None
     return factory()
 
 
 def get_image_analyzer(env: str | None = None) -> ImageAnalyzer:
-    env = env or load_aws_config().env
+    env = env or resolve_env()
     try:
         factory = _IMAGE_ANALYZERS[env]
     except KeyError:
-        raise ValueError(f"nenhum ImageAnalyzer registrado para ENV={env!r}") from None
+        raise ValueError(f"nenhum analisador de imagem registrado para o modo {env!r}") from None
     return factory()

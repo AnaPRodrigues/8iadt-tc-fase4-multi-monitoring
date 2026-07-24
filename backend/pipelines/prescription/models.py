@@ -61,14 +61,13 @@ class GroundTruthEntry:
 
 @dataclass(frozen=True)
 class ProcessResult:
-    """Resultado do processamento de ponta a ponta de um evento S3.
+    """Resultado do processamento de ponta a ponta de uma prescrição.
 
-    ``parse_failure`` existe para que ``handler.py`` distinga "PDF
-    ilegível" (move para ``errors/``) de "parseado, sem anomalias".
+    ``parse_failure`` existe para distinguir "PDF ilegível" de "parseado, sem
+    anomalias".
     """
 
     record: PrescriptionRecord | None
     anomalies: list[AnomalyResult]
     evidence_id: str | None
-    deduplicated: bool
     parse_failure: ParseFailure | None = None

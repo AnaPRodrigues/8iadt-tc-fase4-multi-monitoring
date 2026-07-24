@@ -15,7 +15,7 @@ consome a API e não tem lógica própria.
 | `pipelines/video/` | Análise de vídeo: postura e padrões de movimentação (quedas), detecção de estruturas críticas em cirurgia |
 | `pipelines/prescription/` | Leitura de prescrições médicas (PDF) e checagem de dose/variação anômala |
 | `fusion/` | Combinação dos sinais das quatro análises acima num único indicador de risco, com alerta automático |
-| `aws/` | Integração com serviços de nuvem (armazenamento, mensageria, banco de dados) — funciona tanto contra a nuvem real quanto contra um simulador local, sem precisar de conta na nuvem para desenvolver/testar |
+| `aws/` | Modo `aws`: chama só dois serviços gerenciados — Amazon Textract (texto de documentos) e Amazon Rekognition (rótulos de imagem). No modo `local` (padrão) nada aqui é usado. A seleção local/aws é feita por adaptadores intercambiáveis, escolhidos pela variável `ENV` |
 | `scripts/` | Utilitários, incluindo o download dos conjuntos de dados públicos |
 | `tests/` | Testes automatizados de tudo acima |
 

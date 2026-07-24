@@ -378,6 +378,14 @@
 - **Date**: 2026-07-23
 - **Status**: active
 
+### AD-048
+- **Decision**: Reformulação de infraestrutura pedida pelo usuário — remoção completa do LocalStack e da arquitetura serverless/gerenciada. O sistema passa a ter dois modos por `ENV`: `local` (padrão, **nenhuma** chamada de nuvem, **zero** boto3 em runtime — extração de PDF por pdfplumber/Tesseract, rótulos de imagem por YOLOv8 local) e `aws` (chama **exatamente dois** serviços gerenciados síncronos com bytes embutidos: Textract `analyze_document` para prescrições e Rekognition `detect_labels` para quadros de vídeo; o resultado volta ao processamento local). Removidos: S3, SNS, DynamoDB, SQS, Lambda, Step Functions e todo IaC/handler associado (`aws/provision.py`, `pipelines/*/handler.py`, `pipelines/*/infra.py`, `pipelines/prescription/history.py`, `docker-compose.yml`). O factory `aws/clients.py` só existe para o modo `aws` e só cria clientes de Textract/Rekognition. Lógica útil que vivia na nuvem foi trazida ao processo local: a decisão de alerta (transição de nível que cruza o limiar) já era pura na API e permanece; o histórico de prescrições (para a regra de variação abrupta) deixa de vir do DynamoDB e passa a ser injetado por parâmetro (`previous_record`), a ser ligado ao banco local no bloco seguinte. Alertas deixam de ser enviados por SNS — passam a ser registrados no banco local e exibidos na interface (destino muda, comportamento de geração automática ao cruzar o limiar não muda).
+- **Reason**: Pedido explícito do usuário. Elimina a dependência de Docker/LocalStack para desenvolver, testar e demonstrar; reduz a superfície de nuvem a dois serviços com valor claro (OCR gerenciado e visão gerenciada), mantendo o resto 100% local e CPU-only. As APIs síncronas com bytes dispensam bucket intermediário — o arquivo local vai direto na chamada.
+- **Trade-off**: Perde-se a demonstração de uma arquitetura serverless orientada a eventos (S3→Lambda→SNS/DynamoDB) que existia antes; em troca, o sistema fica reproduzível por qualquer pessoa sem conta AWS nem Docker, e o caminho de nuvem fica trivial de auditar (dois serviços, chamadas síncronas). Supersede a parte de fundação de nuvem que dependia de LocalStack/serverless (AD-001/004/024/034/043-related infra); o padrão de adapter por `ENV` é mantido.
+- **Scope**: `backend/aws/`, `backend/pipelines/*/` (remoção de handlers/infra), `backend/app/`, `Makefile`, `.env.example`, `docker-compose.yml`, documentação. Reformulação em 6 blocos (este é o bloco 1); blocos seguintes: banco SQLite local, frontend React, log de atividade, pipeline de oxigenação (BIDMC), dados de demonstração.
+- **Date**: 2026-07-24
+- **Status**: active
+
 ## Rastreabilidade de Requisitos Obrigatórios
 
 Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) às features.

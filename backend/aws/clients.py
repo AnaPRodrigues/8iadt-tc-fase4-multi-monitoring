@@ -1,7 +1,15 @@
-"""Factory único de cliente boto3, selecionado por `ENV`.
+"""Factory de cliente da AWS, usado apenas no modo `ENV=aws`.
 
-Nenhum outro módulo em `backend/` deve chamar `boto3.client(...)` diretamente
-— um teste de guarda (`test_no_direct_boto3_client.py`) torna isso executável.
+O sistema tem dois modos, escolhidos pela variável de ambiente `ENV`:
+
+- `local` (padrão): todo o processamento é local, sem nenhuma chamada de nuvem.
+  Este factory **não** é usado nesse modo.
+- `aws`: usa exatamente dois serviços gerenciados — Amazon Textract (extração de
+  texto/campos de documentos) e Amazon Rekognition (rótulos de objetos em imagens).
+
+Só esses dois serviços são permitidos aqui; qualquer outro é recusado. Nenhum
+outro módulo cria um cliente da AWS diretamente (há um teste de guarda que garante
+isso).
 """
 
 import os
@@ -14,74 +22,55 @@ from common.logging import get_logger
 
 log = get_logger("aws.clients")
 
-_VALID_ENVS = ("local", "cloud")
+_VALID_ENVS = ("local", "aws")
+_ALLOWED_SERVICES = ("textract", "rekognition")
 
 
 @dataclass(frozen=True)
 class AwsConfig:
     env: str
     region: str
-    endpoint_url: str | None
 
 
-def _require(name: str) -> str:
-    value = os.environ.get(name)
-    if not value:
-        raise ValueError(f"variável de ambiente obrigatória ausente: {name}")
-    return value
-
-
-def _local_endpoint() -> str:
-    """``LOCALSTACK_ENDPOINT`` explícita ou, dentro de um container Lambda do
-    próprio LocalStack, construída a partir de ``LOCALSTACK_HOSTNAME``/``EDGE_PORT``
-    (injetadas automaticamente pelo LocalStack no runtime do Lambda — confirmado
-    empiricamente durante a implementação do provisionamento de infraestrutura:
-    o container não recebe nossa variável de projeto, só as suas próprias).
-    """
-    explicit = os.environ.get("LOCALSTACK_ENDPOINT")
-    if explicit:
-        return explicit
-
-    hostname = os.environ.get("LOCALSTACK_HOSTNAME")
-    if not hostname:
-        raise ValueError("variável de ambiente obrigatória ausente: LOCALSTACK_ENDPOINT")
-    port = os.environ.get("EDGE_PORT", "4566")
-    return f"http://{hostname}:{port}"
+def resolve_env() -> str:
+    """Modo ativo. Ausente ou vazio equivale ao padrão `local`."""
+    env = os.environ.get("ENV") or "local"
+    if env not in _VALID_ENVS:
+        raise ValueError(f"ENV inválido: {env!r} (esperado 'local' ou 'aws')")
+    return env
 
 
 def load_aws_config() -> AwsConfig:
-    """Lê e valida a config do ambiente ativo. Não faz nenhuma chamada AWS."""
-    env = _require("ENV")
-    if env not in _VALID_ENVS:
-        raise ValueError(f"ENV inválido: {env!r} (esperado 'local' ou 'cloud')")
+    """Lê e valida a configuração do modo `aws`. Não faz nenhuma chamada de rede.
 
-    region = _require("AWS_REGION")
+    Só faz sentido no modo `aws` — a região é obrigatória ali. Chamar no modo
+    `local` é um erro de uso: no modo local não há acesso a serviços de nuvem.
+    """
+    env = resolve_env()
+    if env != "aws":
+        raise ValueError(
+            "load_aws_config só se aplica ao modo aws; "
+            f"ENV atual é {env!r} (nenhum serviço de nuvem é usado no modo local)"
+        )
 
-    endpoint_url = None
-    if env == "local":
-        endpoint_url = _local_endpoint()
+    region = os.environ.get("AWS_REGION")
+    if not region:
+        raise ValueError("variável de ambiente obrigatória ausente: AWS_REGION")
 
-    return AwsConfig(env=env, region=region, endpoint_url=endpoint_url)
+    return AwsConfig(env=env, region=region)
 
 
 def get_client(service: str, config: AwsConfig | None = None) -> Any:
-    """Único ponto de criação de clientes boto3 do projeto.
+    """Cria um cliente da AWS para `service` (só `textract` ou `rekognition`).
 
-    `ENV=local` injeta o endpoint do LocalStack e credenciais dummy; `ENV=cloud`
-    usa a cadeia de credenciais padrão da sessão (perfil/env do Learner Lab), sem
-    `endpoint_url`. Se o LocalStack não estiver de pé, a chamada de rede que o
-    cliente eventualmente fizer falha com o erro de conexão do próprio boto3 —
-    rode `make localstack-up` antes de usar `ENV=local`.
+    Usa a cadeia de credenciais padrão da sessão (perfil/variáveis já configurados
+    no ambiente). Só deve ser chamado no modo `aws`.
     """
-    cfg = config or load_aws_config()
-    if cfg.env == "local":
-        log.info("cliente %s via LocalStack (%s)", service, cfg.endpoint_url)
-        return boto3.client(
-            service,
-            endpoint_url=cfg.endpoint_url,
-            region_name=cfg.region,
-            aws_access_key_id="test",
-            aws_secret_access_key="test",
+    if service not in _ALLOWED_SERVICES:
+        raise ValueError(
+            f"serviço de nuvem não permitido: {service!r} "
+            f"(apenas {', '.join(_ALLOWED_SERVICES)} são usados)"
         )
-    log.info("cliente %s via AWS (%s)", service, cfg.region)
+    cfg = config or load_aws_config()
+    log.info("cliente %s da AWS (região %s)", service, cfg.region)
     return boto3.client(service, region_name=cfg.region)

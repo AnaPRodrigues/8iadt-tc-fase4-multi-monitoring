@@ -1,8 +1,8 @@
-"""Rotas HTTP da API fina de F5 (AD-044/AD-029) -- expõe o motor de fusão
-(`pipelines/fusion/`) para o dashboard Streamlit.
+"""Rotas HTTP da API — expõe o motor de fusão de risco (`pipelines/fusion/`)
+para a interface web.
 
 Importa `app` de `main.py` e decora as rotas diretamente nele (sem `APIRouter`
--- só 4 rotas ao todo, não justifica a camada extra). Este módulo precisa ser
+-- poucas rotas, não justifica a camada extra). Este módulo precisa ser
 importado (ex.: `from app import routes`) para que as rotas sejam de fato
 registradas no `app` compartilhado -- `main.py` só instancia o app, não importa
 `routes.py` de volta (evita import circular).
@@ -10,7 +10,6 @@ registradas no `app` compartilhado -- `main.py` só instancia o app, não import
 
 import json
 import mimetypes
-import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -19,7 +18,6 @@ from fastapi.responses import FileResponse
 
 from app.main import app
 from app.schemas import AlertSchema, FusionEventSchema, RiskPointSchema
-from aws.clients import get_client
 from common.logging import get_logger
 from pipelines.fusion.alert import build_payload
 from pipelines.fusion.config import PatientDemoConfig, load_patient_demo_config
@@ -104,32 +102,16 @@ def analyze(patient_demo_id: str) -> RiskPointSchema:
 
 
 def _alert_transitions(points: list[RiskPoint], alert_level: str) -> list[Transition]:
-    """Deriva as `Transition` a partir da timeline já classificada (nível muda
-    entre pontos consecutivos), filtrando só as que atingem `alert_level` -- são
-    essas que efetivamente disparam um alerta SNS (FUSION-07)."""
+    """Deriva as transições de nível a partir da timeline já classificada (o nível
+    muda entre pontos consecutivos), filtrando só as que atingem `alert_level` --
+    são essas que geram um alerta automático à equipe."""
     transitions: list[Transition] = []
-    previous_level = VERDE  # mesmo nível inicial de HysteresisClassifier
+    previous_level = VERDE  # mesmo nível inicial do classificador
     for point in points:
         if point.level != previous_level:
             transitions.append(record_transition(previous_level, point.level, point))
         previous_level = point.level
     return [t for t in transitions if t.new_level == alert_level]
-
-
-def _is_confirmed(dedup_key: str) -> bool:
-    """Verifica no DynamoDB se o alerta de `dedup_key` foi de fato confirmado como
-    enviado -- `handler.py` só grava `ALERT#<dedup_key>` quando o SNS publica com
-    sucesso (FUSION-09), então a presença do item É a confirmação. Sem
-    `DYNAMODB_TABLE` configurada (API rodando sem infra de alerta de pé), o
-    alerta é reportado como não confirmado em vez de derrubar a rota."""
-    table_name = os.environ.get("DYNAMODB_TABLE")
-    if not table_name:
-        return False
-    client = get_client("dynamodb")
-    response = client.get_item(
-        TableName=table_name, Key={"pk": {"S": f"ALERT#{dedup_key}"}, "sk": {"S": "ALERT"}}
-    )
-    return "Item" in response
 
 
 def _to_alert_schema(patient_demo_id: str, transition: Transition) -> AlertSchema:
@@ -138,16 +120,14 @@ def _to_alert_schema(patient_demo_id: str, transition: Transition) -> AlertSchem
         t=transition.t,
         previous_level=transition.previous_level,
         new_level=transition.new_level,
-        dedup_key=payload.dedup_key,
         contributions=payload.contributions,
-        confirmed=_is_confirmed(payload.dedup_key),
     )
 
 
 @app.get("/alerts", response_model=list[AlertSchema])
 def get_alerts(patient_demo_id: str) -> list[AlertSchema]:
-    """Transições que cruzaram o nível de disparo configurado (`alert_level`),
-    com o status de confirmação de envio do alerta (FUSION-09)."""
+    """Transições que cruzaram o nível de disparo configurado -- é quando um
+    alerta automático é gerado para a equipe."""
     cfg = _load_config_or_404(patient_demo_id)
     points = _classified_timeline(cfg)
     transitions = _alert_transitions(points, cfg.alert_level)

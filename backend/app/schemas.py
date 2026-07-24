@@ -1,5 +1,5 @@
-"""Schemas Pydantic de resposta da API fina de F5 (AD-044) -- espelham os campos
-de `pipelines.fusion.models` relevantes para o consumo HTTP (dashboard Streamlit).
+"""Schemas Pydantic de resposta da API -- espelham os campos de
+`pipelines.fusion.models` relevantes para o consumo HTTP pela interface web.
 """
 
 from pydantic import BaseModel
@@ -23,17 +23,14 @@ class RiskPointSchema(BaseModel):
 
 
 class AlertSchema(BaseModel):
-    """Uma transição de nível que cruzou o `alert_level` configurado, com o status
-    de confirmação de envio (FUSION-09) -- `confirmed` reflete se o dedupe do
-    alerta foi de fato gravado no DynamoDB (só acontece quando o SNS publica com
-    sucesso, ver `pipelines/fusion/handler.py`)."""
+    """Uma transição de nível que cruzou o nível de disparo configurado -- é
+    quando um alerta automático é gerado para a equipe. Cada contribuição é uma
+    tripla (modalidade, resumo em linguagem clínica, link da evidência)."""
 
     t: float
     previous_level: str
     new_level: str
-    dedup_key: str
     contributions: list[tuple[str, str, str]]
-    confirmed: bool
 
 
 class EvidenceSchema(BaseModel):

@@ -1,11 +1,9 @@
 """Precision/recall por tipo de anomalia, contra o ground truth do gerador.
 
-O DynamoDB não persiste o veredito das regras, só o registro em si — este módulo
-reaplica `rules.check_dose_range`/`check_abrupt_change` a cada registro e compara
-com o rótulo conhecido do gerador. Registros "sem_referencia" (medicamento fora
-do catálogo) são excluídos do cálculo de dose, nunca contados como falso
-positivo/negativo (indefinido não é a mesma coisa
-que zero).
+Este módulo reaplica `rules.check_dose_range`/`check_abrupt_change` a cada
+registro e compara com o rótulo conhecido do gerador. Registros "sem_referencia"
+(medicamento fora do catálogo) são excluídos do cálculo de dose, nunca contados
+como falso positivo/negativo (indefinido não é a mesma coisa que zero).
 """
 
 from collections import defaultdict

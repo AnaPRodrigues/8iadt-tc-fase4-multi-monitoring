@@ -152,13 +152,10 @@ def _config_que_dispara_vermelho(configs_dir, patient_demo_id="demo-alerta"):
     )
 
 
-def test_get_alerts_lista_transicao_que_cruza_o_nivel_de_disparo_confirmada(
-    tmp_path, monkeypatch
-):
+def test_get_alerts_lista_transicao_que_cruza_o_nivel_de_disparo(tmp_path, monkeypatch):
     configs_dir, output_root = _fixture_ambiente(tmp_path, monkeypatch)
     _grava_evidencia(output_root, "video", "run-1", "fall-01", {"queda": "detectada"})
     _config_que_dispara_vermelho(configs_dir)
-    monkeypatch.setattr(routes, "_is_confirmed", lambda dedup_key: True)
 
     response = client.get("/alerts", params={"patient_demo_id": "demo-alerta"})
 
@@ -167,37 +164,9 @@ def test_get_alerts_lista_transicao_que_cruza_o_nivel_de_disparo_confirmada(
     assert len(alertas) == 1
     assert alertas[0]["previous_level"] == "verde"
     assert alertas[0]["new_level"] == "vermelho"
-    assert alertas[0]["confirmed"] is True
+    # cada contribuição é (modalidade, resumo clínico, link da evidência)
     assert alertas[0]["contributions"][0][0] == "video"
-
-
-def test_get_alerts_alerta_nao_confirmado_quando_dynamodb_nao_tem_o_dedup_key(
-    tmp_path, monkeypatch
-):
-    configs_dir, output_root = _fixture_ambiente(tmp_path, monkeypatch)
-    _grava_evidencia(output_root, "video", "run-1", "fall-01", {"queda": "detectada"})
-    _config_que_dispara_vermelho(configs_dir)
-    monkeypatch.setattr(routes, "_is_confirmed", lambda dedup_key: False)
-
-    response = client.get("/alerts", params={"patient_demo_id": "demo-alerta"})
-
-    alertas = response.json()
-    assert len(alertas) == 1
-    assert alertas[0]["confirmed"] is False
-
-
-def test_get_alerts_sem_dynamodb_table_configurada_reporta_nao_confirmado_sem_quebrar(
-    tmp_path, monkeypatch
-):
-    configs_dir, output_root = _fixture_ambiente(tmp_path, monkeypatch)
-    _grava_evidencia(output_root, "video", "run-1", "fall-01", {"queda": "detectada"})
-    _config_que_dispara_vermelho(configs_dir)
-    monkeypatch.delenv("DYNAMODB_TABLE", raising=False)
-
-    response = client.get("/alerts", params={"patient_demo_id": "demo-alerta"})
-
-    assert response.status_code == 200
-    assert response.json()[0]["confirmed"] is False
+    assert alertas[0]["contributions"][0][2] == "/evidence/fall-01"
 
 
 def test_get_alerts_sem_transicao_de_disparo_devolve_lista_vazia(tmp_path, monkeypatch):

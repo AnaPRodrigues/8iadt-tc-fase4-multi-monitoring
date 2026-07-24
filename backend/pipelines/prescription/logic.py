@@ -1,8 +1,14 @@
 """Orquestra o processamento de ponta a ponta de uma prescrição.
 
-Chamado pelo handler Lambda fino (`handler.py`). Nenhuma dependência de AWS além
-das já resolvidas por `aws.adapters`/`history` — testável sem mock de rede além
-do LocalStack real (integration).
+Extrai o texto do PDF (por pdfplumber no modo local ou Amazon Textract no modo
+aws), estrutura os campos, aplica as regras clínicas (dose fora da faixa e
+variação abrupta em relação à prescrição anterior) e, havendo anomalia, grava a
+evidência reproduzível.
+
+O histórico do paciente (a prescrição anterior do mesmo medicamento, usada pela
+regra de variação abrupta) é recebido por parâmetro — quem chama busca esse
+registro na sua fonte de dados e o injeta aqui. Assim o processamento não depende
+de nenhum banco específico.
 """
 
 import tempfile
@@ -10,9 +16,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from aws.adapters import get_text_extractor
+from aws.adapters.cloud import register_cloud_adapters
+from aws.clients import resolve_env
 from common.evidence import save_evidence
 from common.logging import get_logger
-from pipelines.prescription import history
 from pipelines.prescription.adapters import register_local_adapters
 from pipelines.prescription.models import (
     AnomalyResult,
@@ -34,8 +41,7 @@ def _save_anomaly_evidence(
     pdf_bytes: bytes,
     record: PrescriptionRecord,
     anomalies: list[AnomalyResult],
-    bucket: str,
-    key: str,
+    source_id: str,
 ) -> str:
     run_id = datetime.now(UTC).strftime("%Y%m%d")
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
@@ -46,7 +52,7 @@ def _save_anomaly_evidence(
             feature="prescription",
             run_id=run_id,
             evidence_id=_evidence_id(record),
-            source_record_id=f"{bucket}/{key}",
+            source_record_id=source_id,
             artifact_path=tmp_path,
             metadata={
                 "patient_id": record.patient_id,
@@ -61,52 +67,65 @@ def _save_anomaly_evidence(
     return evidence.evidence_id
 
 
-def process(pdf_bytes: bytes, bucket: str, key: str, etag: str) -> ProcessResult:
-    """Processa um PDF de prescrição: extrai, parseia, aplica regras, persiste."""
-    # Idempotente — só garante que "local" está no registro, mesmo se um teste
-    # anterior tiver isolado/limpo o dict (aws.adapters._TEXT_EXTRACTORS).
-    register_local_adapters()
+def _ensure_extractor_registrado() -> None:
+    """Garante que o extrator de texto do modo ativo está registrado (idempotente)."""
+    if resolve_env() == "aws":
+        register_cloud_adapters()
+    else:
+        register_local_adapters()
 
-    dedup = history.dedup_key(bucket, key, etag)
 
-    extracted = get_text_extractor().extract(pdf_bytes)
-    parsed = parse_prescription(extracted)
-    if isinstance(parsed, ParseFailure):
-        log.warning("falha de parsing em %s/%s: %s", bucket, key, parsed.reason)
+def process(
+    pdf_bytes: bytes,
+    source_id: str,
+    previous_record: PrescriptionRecord | None = None,
+) -> ProcessResult:
+    """Processa um PDF de prescrição: extrai, parseia, aplica regras, gera evidência.
+
+    ``source_id`` identifica a origem do documento (ex.: nome do arquivo), só para
+    rastrear a evidência. ``previous_record`` é a prescrição anterior do mesmo
+    paciente/medicamento, usada pela regra de variação abrupta; ``None`` quando não
+    há histórico.
+    """
+    _ensure_extractor_registrado()
+
+    try:
+        extracted = get_text_extractor().extract(pdf_bytes)
+    except Exception as exc:
+        log.warning("documento ilegível %s: %s", source_id, exc)
         return ProcessResult(
             record=None,
             anomalies=[],
             evidence_id=None,
-            deduplicated=False,
-            parse_failure=parsed,
+            parse_failure=ParseFailure(reason="documento ilegível", field="documento"),
         )
 
-    previous = history.get_latest(parsed.patient_id, parsed.drug)
-    saved = history.save_record(parsed, dedup)
-    if not saved:
-        log.info("evento %s/%s já processado (dedup)", bucket, key)
+    parsed = parse_prescription(extracted)
+    if isinstance(parsed, ParseFailure):
+        log.warning("falha ao ler a prescrição %s: %s", source_id, parsed.reason)
         return ProcessResult(
-            record=parsed,
+            record=None,
             anomalies=[],
             evidence_id=None,
-            deduplicated=True,
-            parse_failure=None,
+            parse_failure=parsed,
         )
 
     anomalies = [
         result
-        for result in (check_dose_range(parsed), check_abrupt_change(parsed, previous))
+        for result in (
+            check_dose_range(parsed),
+            check_abrupt_change(parsed, previous_record),
+        )
         if result.kind != "normal"
     ]
 
     evidence_id = None
     if anomalies:
-        evidence_id = _save_anomaly_evidence(pdf_bytes, parsed, anomalies, bucket, key)
+        evidence_id = _save_anomaly_evidence(pdf_bytes, parsed, anomalies, source_id)
 
     return ProcessResult(
         record=parsed,
         anomalies=anomalies,
         evidence_id=evidence_id,
-        deduplicated=False,
         parse_failure=None,
     )

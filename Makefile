@@ -5,7 +5,7 @@ PY := .venv/bin/python
 MODEL_HF_REPO := AnaPRodrigues/endoscapes-surgical-detector
 MODEL_HF_FILE := best.pt
 
-.PHONY: install data demo test test-unit lint fmt clean localstack-up localstack-down infra-local infra-cloud infra-prescription-local infra-prescription-cloud infra-video-local infra-video-cloud models-fetch
+.PHONY: install data demo test test-unit lint fmt clean models-fetch serve-api serve-front
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -24,6 +24,28 @@ models-fetch:
 demo:
 	PYTHONPATH=backend $(PY) -m pipelines.vitals.cli --config backend/pipelines/vitals/configs/demo.yaml
 
+# --- Painel (dashboard) -- dois processos, um por terminal ---
+# 1) suba a API:      make serve-api      (fica em http://localhost:8000)
+# 2) suba o painel:   make serve-front    (abre em http://localhost:8501)
+# O painel só fala HTTP com a API; sem a API de pé, ele mostra erro de conexão.
+# API_HOST/API_PORT/FRONT_PORT são sobrescrevíveis: `make serve-api API_PORT=9000`.
+API_HOST ?= 127.0.0.1
+API_PORT ?= 8000
+FRONT_PORT ?= 8501
+
+# Sobe a API de fusão (FastAPI/uvicorn). `--reload` recarrega ao salvar código.
+# É `app.routes:app` (não `app.main:app`): routes.py registra as 4 rotas sobre o
+# app instanciado em main.py -- apontar para main sobe a API sem rota nenhuma.
+serve-api:
+	PYTHONPATH=backend $(PY) -m uvicorn app.routes:app --app-dir backend \
+	  --host $(API_HOST) --port $(API_PORT) --reload
+
+# Sobe o painel Streamlit. Lê a URL da API de API_BASE_URL (default coincide com
+# serve-api); ajuste se subir a API noutra porta: `make serve-front API_PORT=9000`.
+serve-front:
+	API_BASE_URL=http://$(API_HOST):$(API_PORT) \
+	  $(PY) -m streamlit run frontend/app.py --server.port $(FRONT_PORT)
+
 test:
 	$(PY) -m pytest -q
 
@@ -35,46 +57,6 @@ lint:
 
 fmt:
 	$(PY) -m ruff format backend
-
-# --- Simulador local da nuvem (LocalStack) -- roda tudo sem precisar de uma conta AWS ---
-localstack-up:
-	docker compose up -d localstack
-
-localstack-down:
-	docker compose down
-
-# --- Provisiona os recursos de nuvem compartilhados (bucket, tópico de alerta, tabela) ---
-# Sourcing do .env.* é opcional: se ausente, usa o que já estiver no ambiente
-# (útil em testes que exportam as variáveis diretamente).
-infra-local:
-	bash -c 'set -a; [ -f .env.local ] && source .env.local; set +a; \
-	  PYTHONPATH=backend ENV=local $(PY) -m aws.provision'
-
-infra-cloud:
-	bash -c 'set -a; [ -f .env.cloud ] && source .env.cloud; set +a; \
-	  PYTHONPATH=backend ENV=cloud $(PY) -m aws.provision'
-
-# --- Função de nuvem da análise de prescrições + gatilho de upload (sobre a infra acima) ---
-infra-prescription-local:
-	bash -c 'set -a; [ -f .env.local ] && source .env.local; set +a; \
-	  PYTHONPATH=backend ENV=local $(PY) -m aws.provision && \
-	  PYTHONPATH=backend ENV=local $(PY) -m pipelines.prescription.infra'
-
-infra-prescription-cloud:
-	bash -c 'set -a; [ -f .env.cloud ] && source .env.cloud; set +a; \
-	  PYTHONPATH=backend ENV=cloud $(PY) -m aws.provision && \
-	  PYTHONPATH=backend ENV=cloud $(PY) -m pipelines.prescription.infra'
-
-# --- Função de nuvem complementar da análise de vídeo + gatilho de upload (sobre a infra acima) ---
-infra-video-local:
-	bash -c 'set -a; [ -f .env.local ] && source .env.local; set +a; \
-	  PYTHONPATH=backend ENV=local $(PY) -m aws.provision && \
-	  PYTHONPATH=backend ENV=local $(PY) -m pipelines.video.infra'
-
-infra-video-cloud:
-	bash -c 'set -a; [ -f .env.cloud ] && source .env.cloud; set +a; \
-	  PYTHONPATH=backend ENV=cloud $(PY) -m aws.provision && \
-	  PYTHONPATH=backend ENV=cloud $(PY) -m pipelines.video.infra'
 
 clean:
 	rm -rf output/* .pytest_cache
