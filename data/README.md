@@ -4,6 +4,11 @@ Pasta onde ficam os conjuntos de dados públicos usados pelo sistema. **Não é
 versionada no Git** — só este README fica no repositório; os dados em si são baixados
 sob demanda, pois são grandes demais para viver num repositório de código.
 
+Além dos datasets, esta pasta guarda dois artefatos de execução, também fora do Git:
+- `app.db` — o banco local de pacientes (SQLite), criado automaticamente na primeira
+  execução da API;
+- `uploads/<paciente>/<modalidade>/` — os arquivos enviados de cada paciente.
+
 ## Como baixar
 
 ```bash

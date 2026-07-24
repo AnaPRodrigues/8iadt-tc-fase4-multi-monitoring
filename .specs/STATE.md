@@ -386,6 +386,14 @@
 - **Date**: 2026-07-24
 - **Status**: active
 
+### AD-049
+- **Decision**: Bloco 2 da reformulação — banco local de pacientes (SQLite em `data/app.db`, gitignored) e nova superfície de API por paciente real, substituindo a abordagem antiga de "paciente-demo" curado por YAML. Quatro tabelas: `pacientes`, `uploads` (modalidade video|audio|documento|sinais_vitais, situação recebido|processando|concluido|erro), `analises` (resultado JSON + pontuação), `alertas` (nível + motivo clínico + referências de evidência). Arquivos enviados vivem em `data/uploads/<paciente>/<modalidade>/`; o banco guarda só o caminho. Novos módulos em `backend/app/`: `db.py` (esquema idempotente), `repositorio.py` (CRUD), `armazenamento.py` (arquivos), `analise.py` (despacho por modalidade — **compõe** as funções públicas de cada pipeline sobre um único arquivo, sem reescrever detecção), `servico.py` (orquestra análise + monta a linha do tempo de risco a partir do banco reusando o motor de fusão existente `risk_engine`/`hysteresis`, e registra alerta ao cruzar o limiar). Endpoints: CRUD de pacientes, upload multipart + listagem, disparo/consulta de análise, timeline consolidada, alertas por paciente + lista geral, evidência por id. `python-multipart` adicionado às dependências. Campo morto `sns_topic` removido de `PatientDemoConfig`.
+- **Reason**: O sistema passa a operar sobre pacientes reais persistidos, não uma composição curada em YAML. A linha do tempo e os alertas passam a ser derivados das análises reais de cada paciente. O despacho por composição honra "reaproveitar os pipelines sem reescrevê-los".
+- **Trade-off**: Para reusar os pipelines (orientados a dataset) sobre um único arquivo, os uploads têm o **formato dos datasets de origem** (sequência de quadros URFD para vídeo, gravação+anotação ICBHI para áudio, registro wfdb para vitais, PDF para documento) — documentado como restrição da demonstração. A posição de cada evento na linha do tempo vem de `instante_s` (curado pela carga de demonstração do bloco 6) ou do intervalo real desde o início do monitoramento. Os módulos de fusão da abordagem antiga (`loader.py` de config curada, `alert.py`, `transitions.py` e a YAML `configs/demo.yaml`) ficaram **órfãos em produção** (ainda testados, verdes) — remoção adiada para decisão do usuário, não feita neste bloco para não desestabilizá-lo.
+- **Scope**: `backend/app/` (novos módulos + rotas reescritas), `backend/pipelines/fusion/config.py` (limpeza de `sns_topic`), `pyproject.toml`, `.gitignore` (já cobria `data/*`), documentação. Bloco 2 de 6.
+- **Date**: 2026-07-24
+- **Status**: active
+
 ## Rastreabilidade de Requisitos Obrigatórios
 
 Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) às features.

@@ -93,7 +93,8 @@ para PDF, Rekognition para imagem), com o resultado voltando ao processamento lo
 
 ```
 backend/
-├── app/          API REST (FastAPI): rotas, contratos (schemas), ponto de entrada
+├── app/          API REST (FastAPI) + banco local de pacientes (SQLite): pacientes,
+│                 envios de arquivo, análises, linha do tempo de risco e alertas
 ├── common/       Compartilhado: contrato de evidência, métricas, config, log
 ├── pipelines/
 │   ├── video/        Postura (MediaPipe) + detecção de objetos (YOLOv8)
@@ -108,7 +109,7 @@ backend/
 frontend/     Painel Streamlit — consome só a API, sem lógica de processamento própria
 training/     Treino do detector YOLOv8 (roda à parte, numa GPU; ver training/README.md)
 models/       Pesos treinados prontos para uso (baixados, não versionados)
-data/         Datasets públicos (baixados sob demanda, não versionados)
+data/         Datasets públicos + banco local (app.db) e arquivos enviados (uploads/) — não versionados
 docs/         Enunciado do desafio e relatório técnico
 .specs/       Especificações, decisões de arquitetura (AD-NNN) e relatórios de verificação
 ```

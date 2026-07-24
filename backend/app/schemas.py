@@ -1,10 +1,13 @@
-"""Schemas Pydantic de resposta da API -- espelham os campos de
-`pipelines.fusion.models` relevantes para o consumo HTTP pela interface web.
+"""Schemas Pydantic de entrada/saída da API.
+
+Traduzem as entidades do banco local e o resultado do motor de fusão para o
+formato HTTP consumido pela interface web.
 """
 
 from pydantic import BaseModel
 
 
+# --- Motor de fusão (linha do tempo de risco) ---
 class FusionEventSchema(BaseModel):
     modality: str
     demo_timestamp_s: float
@@ -22,20 +25,48 @@ class RiskPointSchema(BaseModel):
     contributing_events: list[FusionEventSchema]
 
 
-class AlertSchema(BaseModel):
-    """Uma transição de nível que cruzou o nível de disparo configurado -- é
-    quando um alerta automático é gerado para a equipe. Cada contribuição é uma
-    tripla (modalidade, resumo em linguagem clínica, link da evidência)."""
-
-    t: float
-    previous_level: str
-    new_level: str
-    contributions: list[tuple[str, str, str]]
+# --- Pacientes ---
+class PacienteEntrada(BaseModel):
+    nome: str
+    data_inicio: str | None = None
+    observacoes: str | None = None
 
 
-class EvidenceSchema(BaseModel):
-    evidence_id: str
-    feature: str
-    run_id: str
-    source_record_id: str
-    metadata: dict
+class PacienteSchema(BaseModel):
+    id: str
+    nome: str
+    data_inicio: str
+    observacoes: str | None
+    nivel_atual: str
+
+
+# --- Uploads ---
+class UploadSchema(BaseModel):
+    id: str
+    paciente_id: str
+    modalidade: str
+    nome_original: str
+    criado_em: str
+    situacao: str
+
+
+# --- Análises ---
+class AnaliseSchema(BaseModel):
+    id: str
+    upload_id: str
+    modalidade: str
+    resumo: str
+    pontuacao: float | None
+    evidencia_id: str | None
+    criado_em: str
+
+
+# --- Alertas ---
+class AlertaSchema(BaseModel):
+    id: str
+    paciente_id: str
+    nivel: str
+    pontuacao: float
+    criado_em: str
+    motivo: str
+    referencias: list[str]

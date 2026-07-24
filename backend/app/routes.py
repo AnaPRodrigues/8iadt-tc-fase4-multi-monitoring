@@ -1,49 +1,156 @@
-"""Rotas HTTP da API — expõe o motor de fusão de risco (`pipelines/fusion/`)
-para a interface web.
+"""Rotas HTTP da API — pacientes, arquivos enviados, análises, linha do tempo de
+risco, alertas e evidências.
 
-Importa `app` de `main.py` e decora as rotas diretamente nele (sem `APIRouter`
--- poucas rotas, não justifica a camada extra). Este módulo precisa ser
-importado (ex.: `from app import routes`) para que as rotas sejam de fato
-registradas no `app` compartilhado -- `main.py` só instancia o app, não importa
-`routes.py` de volta (evita import circular).
+Importa `app` de `main.py` e decora as rotas diretamente nele. Este módulo precisa
+ser importado (ex.: `from app import routes`) para que as rotas sejam registradas.
 """
 
 import json
 import mimetypes
-from dataclasses import replace
 from pathlib import Path
 
-from fastapi import HTTPException
+from fastapi import File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from app import armazenamento, repositorio, servico
 from app.main import app
-from app.schemas import AlertSchema, FusionEventSchema, RiskPointSchema
+from app.schemas import (
+    AlertaSchema,
+    AnaliseSchema,
+    FusionEventSchema,
+    PacienteEntrada,
+    PacienteSchema,
+    RiskPointSchema,
+    UploadSchema,
+)
 from common.logging import get_logger
-from pipelines.fusion.alert import build_payload
-from pipelines.fusion.config import PatientDemoConfig, load_patient_demo_config
-from pipelines.fusion.hysteresis import VERDE, HysteresisClassifier
-from pipelines.fusion.loader import load_events
-from pipelines.fusion.models import FusionEvent, RiskPoint, Transition
-from pipelines.fusion.risk_engine import compute_timeline
-from pipelines.fusion.transitions import record_transition
+from pipelines.fusion.models import FusionEvent, RiskPoint
 
 log = get_logger("app.routes")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_CONFIGS_DIR = _REPO_ROOT / "backend" / "pipelines" / "fusion" / "configs"
 _OUTPUT_ROOT = _REPO_ROOT / "output"
 
 
-def _load_config_or_404(patient_demo_id: str) -> PatientDemoConfig:
-    config_path = _CONFIGS_DIR / f"{patient_demo_id}.yaml"
-    if not config_path.is_file():
+# --------------------------------------------------------------------------- #
+# Pacientes
+# --------------------------------------------------------------------------- #
+def _para_paciente_schema(p: repositorio.Paciente) -> PacienteSchema:
+    return PacienteSchema(
+        id=p.id,
+        nome=p.nome,
+        data_inicio=p.data_inicio,
+        observacoes=p.observacoes,
+        nivel_atual=servico.nivel_atual(p.id),
+    )
+
+
+@app.get("/patients", response_model=list[PacienteSchema])
+def listar_pacientes() -> list[PacienteSchema]:
+    return [_para_paciente_schema(p) for p in repositorio.listar_pacientes()]
+
+
+@app.post("/patients", response_model=PacienteSchema, status_code=201)
+def criar_paciente(entrada: PacienteEntrada) -> PacienteSchema:
+    if not entrada.nome.strip():
+        raise HTTPException(status_code=422, detail="nome do paciente é obrigatório")
+    p = repositorio.criar_paciente(entrada.nome, entrada.data_inicio, entrada.observacoes)
+    return _para_paciente_schema(p)
+
+
+@app.get("/patients/{paciente_id}", response_model=PacienteSchema)
+def obter_paciente(paciente_id: str) -> PacienteSchema:
+    p = repositorio.obter_paciente(paciente_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail=f"paciente inexistente: {paciente_id}")
+    return _para_paciente_schema(p)
+
+
+@app.delete("/patients/{paciente_id}", status_code=204)
+def remover_paciente(paciente_id: str) -> None:
+    if not repositorio.remover_paciente(paciente_id):
+        raise HTTPException(status_code=404, detail=f"paciente inexistente: {paciente_id}")
+
+
+# --------------------------------------------------------------------------- #
+# Uploads
+# --------------------------------------------------------------------------- #
+def _para_upload_schema(u: repositorio.Upload) -> UploadSchema:
+    return UploadSchema(
+        id=u.id,
+        paciente_id=u.paciente_id,
+        modalidade=u.modalidade,
+        nome_original=u.nome_original,
+        criado_em=u.criado_em,
+        situacao=u.situacao,
+    )
+
+
+@app.post("/patients/{paciente_id}/uploads", response_model=UploadSchema, status_code=201)
+async def enviar_arquivo(
+    paciente_id: str, modalidade: str, arquivo: UploadFile = File(...)  # noqa: B008
+) -> UploadSchema:
+    if repositorio.obter_paciente(paciente_id) is None:
+        raise HTTPException(status_code=404, detail=f"paciente inexistente: {paciente_id}")
+    if modalidade not in repositorio.MODALIDADES:
         raise HTTPException(
-            status_code=404, detail=f"paciente-demo inexistente: {patient_demo_id}"
+            status_code=422,
+            detail=f"modalidade inválida: {modalidade!r} "
+            f"(esperado uma de {', '.join(repositorio.MODALIDADES)})",
         )
-    return load_patient_demo_config(config_path)
+    conteudo = await arquivo.read()
+    caminho = armazenamento.salvar_arquivo(
+        paciente_id, modalidade, arquivo.filename or "arquivo", conteudo
+    )
+    u = repositorio.criar_upload(
+        paciente_id, modalidade, str(caminho), arquivo.filename or "arquivo"
+    )
+    return _para_upload_schema(u)
 
 
-def _to_event_schema(event: FusionEvent) -> FusionEventSchema:
+@app.get("/patients/{paciente_id}/uploads", response_model=list[UploadSchema])
+def listar_uploads(paciente_id: str) -> list[UploadSchema]:
+    if repositorio.obter_paciente(paciente_id) is None:
+        raise HTTPException(status_code=404, detail=f"paciente inexistente: {paciente_id}")
+    return [_para_upload_schema(u) for u in repositorio.listar_uploads(paciente_id)]
+
+
+# --------------------------------------------------------------------------- #
+# Análises
+# --------------------------------------------------------------------------- #
+def _para_analise_schema(a: repositorio.Analise) -> AnaliseSchema:
+    return AnaliseSchema(
+        id=a.id,
+        upload_id=a.upload_id,
+        modalidade=a.modalidade,
+        resumo=a.resultado.get("resumo", ""),
+        pontuacao=a.pontuacao,
+        evidencia_id=a.resultado.get("evidencia_id"),
+        criado_em=a.criado_em,
+    )
+
+
+@app.post("/uploads/{upload_id}/analyze", response_model=AnaliseSchema)
+def analisar_upload(upload_id: str) -> AnaliseSchema:
+    if repositorio.obter_upload(upload_id) is None:
+        raise HTTPException(status_code=404, detail=f"envio inexistente: {upload_id}")
+    return _para_analise_schema(servico.analisar_upload(upload_id))
+
+
+@app.get("/uploads/{upload_id}/analysis", response_model=AnaliseSchema)
+def resultado_da_analise(upload_id: str) -> AnaliseSchema:
+    if repositorio.obter_upload(upload_id) is None:
+        raise HTTPException(status_code=404, detail=f"envio inexistente: {upload_id}")
+    a = repositorio.obter_analise_de_upload(upload_id)
+    if a is None:
+        raise HTTPException(status_code=404, detail="envio ainda não foi analisado")
+    return _para_analise_schema(a)
+
+
+# --------------------------------------------------------------------------- #
+# Linha do tempo de risco
+# --------------------------------------------------------------------------- #
+def _para_event_schema(event: FusionEvent) -> FusionEventSchema:
     return FusionEventSchema(
         modality=event.modality,
         demo_timestamp_s=event.demo_timestamp_s,
@@ -53,91 +160,55 @@ def _to_event_schema(event: FusionEvent) -> FusionEventSchema:
     )
 
 
-def _to_point_schema(point: RiskPoint) -> RiskPointSchema:
+def _para_point_schema(point: RiskPoint) -> RiskPointSchema:
     return RiskPointSchema(
         t=point.t,
         score=point.score,
         level=point.level,
         contributions=point.contributions,
         missing_modalities=point.missing_modalities,
-        contributing_events=[_to_event_schema(e) for e in point.contributing_events],
+        contributing_events=[_para_event_schema(e) for e in point.contributing_events],
     )
 
 
-def _classified_timeline(cfg: PatientDemoConfig) -> list[RiskPoint]:
-    """Roda loader+risk_engine+hysteresis de ponta a ponta.
-
-    `RiskPoint.level` bruto do `risk_engine` sai `""` -- a classificação com
-    memória de estado entre janelas é responsabilidade exclusiva do
-    `HysteresisClassifier` (ver docstring de `pipelines/fusion/risk_engine.py`),
-    aplicado aqui em sequência sobre a timeline ordenada.
-    """
-    events, failures = load_events(cfg, _OUTPUT_ROOT)
-    for failure in failures:
-        log.warning("referência de evidência não resolvida: %s", failure)
-
-    points = compute_timeline(events, cfg)
-    classifier = HysteresisClassifier(cfg.threshold_amarelo, cfg.threshold_vermelho, cfg.hysteresis)
-    return [replace(point, level=classifier.update(point.score)) for point in points]
+@app.get("/patients/{paciente_id}/timeline", response_model=list[RiskPointSchema])
+def timeline_do_paciente(paciente_id: str) -> list[RiskPointSchema]:
+    if repositorio.obter_paciente(paciente_id) is None:
+        raise HTTPException(status_code=404, detail=f"paciente inexistente: {paciente_id}")
+    return [_para_point_schema(p) for p in servico.linha_do_tempo(paciente_id)]
 
 
-@app.get("/patients/{patient_demo_id}/timeline", response_model=list[RiskPointSchema])
-def get_timeline(patient_demo_id: str) -> list[RiskPointSchema]:
-    """Timeline completa do paciente-demo: um `RiskPoint` classificado por janela."""
-    cfg = _load_config_or_404(patient_demo_id)
-    return [_to_point_schema(point) for point in _classified_timeline(cfg)]
-
-
-@app.get("/analyze", response_model=RiskPointSchema)
-def analyze(patient_demo_id: str) -> RiskPointSchema:
-    """Estado atual do paciente-demo -- nível, score e modalidades ausentes do
-    ponto mais recente da timeline (mesmo motor de `/patients/{id}/timeline`)."""
-    cfg = _load_config_or_404(patient_demo_id)
-    timeline = _classified_timeline(cfg)
-    if not timeline:
-        raise HTTPException(
-            status_code=404, detail=f"paciente-demo sem eventos resolvidos: {patient_demo_id}"
-        )
-    return _to_point_schema(timeline[-1])
-
-
-def _alert_transitions(points: list[RiskPoint], alert_level: str) -> list[Transition]:
-    """Deriva as transições de nível a partir da timeline já classificada (o nível
-    muda entre pontos consecutivos), filtrando só as que atingem `alert_level` --
-    são essas que geram um alerta automático à equipe."""
-    transitions: list[Transition] = []
-    previous_level = VERDE  # mesmo nível inicial do classificador
-    for point in points:
-        if point.level != previous_level:
-            transitions.append(record_transition(previous_level, point.level, point))
-        previous_level = point.level
-    return [t for t in transitions if t.new_level == alert_level]
-
-
-def _to_alert_schema(patient_demo_id: str, transition: Transition) -> AlertSchema:
-    payload = build_payload(transition.point, patient_demo_id)
-    return AlertSchema(
-        t=transition.t,
-        previous_level=transition.previous_level,
-        new_level=transition.new_level,
-        contributions=payload.contributions,
+# --------------------------------------------------------------------------- #
+# Alertas
+# --------------------------------------------------------------------------- #
+def _para_alerta_schema(al: repositorio.Alerta) -> AlertaSchema:
+    return AlertaSchema(
+        id=al.id,
+        paciente_id=al.paciente_id,
+        nivel=al.nivel,
+        pontuacao=al.pontuacao,
+        criado_em=al.criado_em,
+        motivo=al.motivo,
+        referencias=al.referencias,
     )
 
 
-@app.get("/alerts", response_model=list[AlertSchema])
-def get_alerts(patient_demo_id: str) -> list[AlertSchema]:
-    """Transições que cruzaram o nível de disparo configurado -- é quando um
-    alerta automático é gerado para a equipe."""
-    cfg = _load_config_or_404(patient_demo_id)
-    points = _classified_timeline(cfg)
-    transitions = _alert_transitions(points, cfg.alert_level)
-    return [_to_alert_schema(patient_demo_id, t) for t in transitions]
+@app.get("/patients/{paciente_id}/alerts", response_model=list[AlertaSchema])
+def alertas_do_paciente(paciente_id: str) -> list[AlertaSchema]:
+    if repositorio.obter_paciente(paciente_id) is None:
+        raise HTTPException(status_code=404, detail=f"paciente inexistente: {paciente_id}")
+    return [_para_alerta_schema(al) for al in repositorio.listar_alertas_do_paciente(paciente_id)]
 
 
-def _find_evidence_sidecar(evidence_id: str) -> Path | None:
-    """Busca `<evidence_id>.json` em qualquer `output/<feature>/<run_id>/` -- a
-    rota só recebe o `evidence_id` (sem feature/run_id, mesmo contrato do design),
-    então a busca é por nome de arquivo em toda a árvore de evidências."""
+@app.get("/alerts", response_model=list[AlertaSchema])
+def todos_os_alertas() -> list[AlertaSchema]:
+    return [_para_alerta_schema(al) for al in repositorio.listar_todos_os_alertas()]
+
+
+# --------------------------------------------------------------------------- #
+# Evidência
+# --------------------------------------------------------------------------- #
+def _achar_sidecar(evidence_id: str) -> Path | None:
     if not _OUTPUT_ROOT.is_dir():
         return None
     for sidecar in sorted(_OUTPUT_ROOT.glob(f"*/*/{evidence_id}.json")):
@@ -146,12 +217,10 @@ def _find_evidence_sidecar(evidence_id: str) -> Path | None:
 
 
 @app.get("/evidence/{evidence_id}")
-def get_evidence(evidence_id: str) -> FileResponse:
-    """Serve o artefato real da evidência (imagem/texto/etc., pelo `content-type`
-    inferido da extensão) com os metadados do sidecar embutidos como headers --
-    é o proxy fino sobre `common/evidence.py` que resolve o drill-down por
-    evento (FUSION-12)."""
-    sidecar_path = _find_evidence_sidecar(evidence_id)
+def obter_evidencia(evidence_id: str) -> FileResponse:
+    """Serve o artefato real da evidência (imagem/gráfico/documento) pelo seu
+    identificador, com os metadados como cabeçalhos HTTP."""
+    sidecar_path = _achar_sidecar(evidence_id)
     if sidecar_path is None:
         raise HTTPException(status_code=404, detail=f"evidência inexistente: {evidence_id}")
 

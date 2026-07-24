@@ -26,7 +26,6 @@ DEFAULTS: dict[str, Any] = {
     "hysteresis": 0.05,
     "window_size_s": 60.0,
     "alert_level": "vermelho",
-    "sns_topic": "mm-alerts",
 }
 
 
@@ -41,7 +40,6 @@ class PatientDemoConfig:
     hysteresis: float
     window_size_s: float
     alert_level: str
-    sns_topic: str
 
 
 def _parse_event(raw: dict[str, Any]) -> CuratedEventRef:
@@ -95,5 +93,4 @@ def load_patient_demo_config(path: Path) -> PatientDemoConfig:
         hysteresis=float(merged["hysteresis"]),
         window_size_s=float(merged["window_size_s"]),
         alert_level=str(merged["alert_level"]),
-        sns_topic=str(merged["sns_topic"]),
     )

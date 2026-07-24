@@ -29,19 +29,22 @@ def test_config_minima_aplica_todos_os_defaults_documentados(tmp_path):
 
     cfg = load_patient_demo_config(p)
 
-    assert cfg.weights == DEFAULTS["weights"] == {
-        "video": 0.25,
-        "audio": 0.25,
-        "vitals": 0.25,
-        "prescription": 0.25,
-    }
+    assert (
+        cfg.weights
+        == DEFAULTS["weights"]
+        == {
+            "video": 0.25,
+            "audio": 0.25,
+            "vitals": 0.25,
+            "prescription": 0.25,
+        }
+    )
     assert cfg.decay_half_life_s == DEFAULTS["decay_half_life_s"] == 600.0
     assert cfg.threshold_amarelo == DEFAULTS["threshold_amarelo"] == 0.3
     assert cfg.threshold_vermelho == DEFAULTS["threshold_vermelho"] == 0.7
     assert cfg.hysteresis == DEFAULTS["hysteresis"] == 0.05
     assert cfg.window_size_s == DEFAULTS["window_size_s"] == 60.0
     assert cfg.alert_level == DEFAULTS["alert_level"] == "vermelho"
-    assert cfg.sns_topic == DEFAULTS["sns_topic"] == "mm-alerts"
 
 
 def test_config_completa_preserva_todos_os_valores_e_converte_events(tmp_path):
@@ -66,7 +69,6 @@ def test_config_completa_preserva_todos_os_valores_e_converte_events(tmp_path):
             "hysteresis": 0.1,
             "window_size_s": 30.0,
             "alert_level": "amarelo",
-            "sns_topic": "outro-topico",
         },
     )
 
@@ -90,7 +92,6 @@ def test_config_completa_preserva_todos_os_valores_e_converte_events(tmp_path):
     assert cfg.hysteresis == 0.1
     assert cfg.window_size_s == 30.0
     assert cfg.alert_level == "amarelo"
-    assert cfg.sns_topic == "outro-topico"
 
 
 def test_evento_sem_severity_aplica_default_1_0(tmp_path):

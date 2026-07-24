@@ -14,8 +14,12 @@ indicador de risco ao longo do tempo, disparando um alerta explicável quando o 
 cruza um limiar. As quatro análises são independentes entre si e só se comunicam por um
 contrato comum de **evidência** (um artefato visual + um descritor JSON gravados em
 disco). Uma camada de **fusão** lê essas evidências, calcula um risk score ponderado com
-decaimento temporal, classifica em verde/amarelo/vermelho com histerese e publica o
-alerta. Uma **API REST** expõe o resultado e um **painel** o apresenta.
+decaimento temporal, classifica em verde/amarelo/vermelho com histerese e registra o
+alerta. Um **banco local** (SQLite) guarda os pacientes, os arquivos enviados, os
+resultados de análise e os alertas; uma **API REST** expõe tudo isso e um **painel** o
+apresenta. Cada arquivo enviado a um paciente é analisado pelo pipeline da sua modalidade
+(o disparo reaproveita os pipelines existentes), e a linha do tempo de risco do paciente
+é derivada das suas análises reais.
 
 Decisão de projeto transversal: **toda anomalia é reproduzível**. Nenhuma análise
 reporta um risco sem gravar a evidência que o justifica (imagem anotada, gráfico da

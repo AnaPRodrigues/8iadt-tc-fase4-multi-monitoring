@@ -40,7 +40,6 @@ def _cfg(events: list[CuratedEventRef]) -> PatientDemoConfig:
         hysteresis=0.05,
         window_size_s=60.0,
         alert_level="vermelho",
-        sns_topic="mm-alerts",
     )
 
 

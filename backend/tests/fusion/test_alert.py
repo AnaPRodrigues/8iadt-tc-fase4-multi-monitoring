@@ -60,9 +60,7 @@ def test_dedup_key_mesmo_conjunto_em_ordem_diferente_gera_a_mesma_chave():
 
 def test_dedup_key_conjuntos_diferentes_geram_chaves_diferentes():
     ponto_a = _ponto(t=10.0, level="vermelho", contributing_events=[_evento("video", "fall-01")])
-    ponto_b = _ponto(
-        t=10.0, level="vermelho", contributing_events=[_evento("video", "fall-02")]
-    )
+    ponto_b = _ponto(t=10.0, level="vermelho", contributing_events=[_evento("video", "fall-02")])
 
     assert dedup_key(ponto_a) != dedup_key(ponto_b)
 

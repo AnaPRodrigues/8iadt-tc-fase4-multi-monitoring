@@ -8,9 +8,9 @@ consome a API e não tem lógica própria.
 
 | Pasta | Conteúdo |
 | --- | --- |
-| `app/` | API (FastAPI): rotas, contratos de entrada/saída, ponto de entrada do servidor. Rotas: timeline do paciente, análise, alertas, evidência de um evento |
+| `app/` | API (FastAPI) e o **banco local de pacientes** (SQLite): `db.py`/`repositorio.py` (pacientes, envios, análises, alertas), `armazenamento.py` (arquivos enviados), `analise.py` (dispara a análise da modalidade reusando os pipelines), `servico.py` (monta a linha do tempo de risco e registra alertas), `routes.py` (endpoints). Endpoints: pacientes (CRUD), envio de arquivo, disparo/consulta de análise, timeline consolidada, alertas, evidência por id |
 | `common/` | Código compartilhado por todas as análises: formato de evidência (como cada anomalia detectada é registrada com seu artefato visual), métricas, configuração, log |
-| `pipelines/vitals/` | Análise de sinais vitais (frequência cardíaca, oxigenação, batimentos) e detecção de anomalias |
+| `pipelines/vitals/` | Análise de sinais vitais em séries temporais (frequência cardíaca) e detecção de anomalias |
 | `pipelines/audio/` | Análise de áudio: dificuldade respiratória, transcrição, termos clínicos críticos, sinais de fadiga vocal |
 | `pipelines/video/` | Análise de vídeo: postura e padrões de movimentação (quedas), detecção de estruturas críticas em cirurgia |
 | `pipelines/prescription/` | Leitura de prescrições médicas (PDF) e checagem de dose/variação anômala |

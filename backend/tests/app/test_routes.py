@@ -1,230 +1,225 @@
-"""Testes de integração (FastAPI `TestClient`) das rotas de timeline/análise do
-paciente-demo -- FUSION-10 (parte)."""
+"""Testes de integração da API (FastAPI `TestClient`): pacientes, envios,
+análises, linha do tempo, alertas e evidências.
 
-import yaml
+Banco e uploads em diretórios temporários; o despacho de análise é substituído
+por um dublê, então nenhum teste depende dos conjuntos de dados ou dos pipelines
+pesados.
+"""
+
+import pytest
 from fastapi.testclient import TestClient
 
-from app import routes
+from app import routes, servico
+from app.analise import ResultadoAnalise
 from common.evidence import save_evidence
-
-
-def _grava_evidencia(output_root, feature, run_id, evidence_id, metadata):
-    tmp_dir = output_root / "_staging"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    artifact = tmp_dir / f"{evidence_id}.txt"
-    artifact.write_text("conteudo de evidência de teste")
-    return save_evidence(
-        feature=feature,
-        run_id=run_id,
-        evidence_id=evidence_id,
-        source_record_id="rec-1",
-        artifact_path=artifact,
-        metadata=metadata,
-        root=output_root,
-    )
-
-
-def _escreve_config(configs_dir, patient_demo_id, events, **overrides):
-    config = {"patient_demo_id": patient_demo_id, "events": events, **overrides}
-    (configs_dir / f"{patient_demo_id}.yaml").write_text(yaml.safe_dump(config))
-
-
-def _fixture_ambiente(tmp_path, monkeypatch):
-    configs_dir = tmp_path / "configs"
-    configs_dir.mkdir()
-    output_root = tmp_path / "output"
-    monkeypatch.setattr(routes, "_CONFIGS_DIR", configs_dir)
-    monkeypatch.setattr(routes, "_OUTPUT_ROOT", output_root)
-    return configs_dir, output_root
-
 
 client = TestClient(routes.app)
 
 
-# ---------- GET /patients/{id}/timeline ----------
+@pytest.fixture(autouse=True)
+def _ambiente(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_DB_PATH", str(tmp_path / "app.db"))
+    monkeypatch.setenv("APP_UPLOADS_DIR", str(tmp_path / "uploads"))
+    output_root = tmp_path / "output"
+    monkeypatch.setattr(servico, "_OUTPUT_ROOT", output_root)
+    monkeypatch.setattr(routes, "_OUTPUT_ROOT", output_root)
+    return output_root
 
 
-def test_get_timeline_devolve_pontos_classificados_rodando_o_motor_de_ponta_a_ponta(
-    tmp_path, monkeypatch
-):
-    configs_dir, output_root = _fixture_ambiente(tmp_path, monkeypatch)
-    _grava_evidencia(output_root, "video", "run-1", "fall-01", {"queda": "detectada"})
-    _escreve_config(
-        configs_dir,
-        "demo-teste",
-        [
-            {
-                "modality": "video",
-                "feature": "video",
-                "run_id": "run-1",
-                "evidence_id": "fall-01",
-                "demo_timestamp_s": 0.0,
-                "severity": 1.0,
-            }
-        ],
+# --------------------------------------------------------------------------- #
+# Pacientes
+# --------------------------------------------------------------------------- #
+def test_criar_listar_obter_e_remover_paciente():
+    criado = client.post("/patients", json={"nome": "Paciente Um", "observacoes": "UTI"})
+    assert criado.status_code == 201
+    pid = criado.json()["id"]
+    assert criado.json()["nivel_atual"] == "verde"
+
+    assert len(client.get("/patients").json()) == 1
+    assert client.get(f"/patients/{pid}").json()["nome"] == "Paciente Um"
+
+    assert client.delete(f"/patients/{pid}").status_code == 204
+    assert client.get(f"/patients/{pid}").status_code == 404
+
+
+def test_criar_paciente_sem_nome_recusa():
+    assert client.post("/patients", json={"nome": "   "}).status_code == 422
+
+
+def test_obter_paciente_inexistente_404():
+    assert client.get("/patients/nao-existe").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Uploads
+# --------------------------------------------------------------------------- #
+def test_enviar_arquivo_e_listar_uploads():
+    pid = client.post("/patients", json={"nome": "P"}).json()["id"]
+
+    envio = client.post(
+        f"/patients/{pid}/uploads",
+        params={"modalidade": "documento"},
+        files={"arquivo": ("receita.pdf", b"conteudo", "application/pdf")},
     )
+    assert envio.status_code == 201
+    assert envio.json()["situacao"] == "recebido"
+    assert envio.json()["modalidade"] == "documento"
 
-    response = client.get("/patients/demo-teste/timeline")
-
-    assert response.status_code == 200
-    pontos = response.json()
-    assert len(pontos) >= 1
-    assert pontos[0]["contributing_events"][0]["evidence_id"] == "fall-01"
-    assert pontos[0]["contributing_events"][0]["summary"] == "queda=detectada"
-    # o nível vem classificado pelo HysteresisClassifier, não fica "" (bruto do risk_engine)
-    assert pontos[0]["level"] in ("verde", "amarelo", "vermelho")
+    uploads = client.get(f"/patients/{pid}/uploads").json()
+    assert len(uploads) == 1
+    assert uploads[0]["nome_original"] == "receita.pdf"
 
 
-def test_get_timeline_paciente_demo_inexistente_devolve_404(tmp_path, monkeypatch):
-    _fixture_ambiente(tmp_path, monkeypatch)
+def test_enviar_arquivo_modalidade_invalida_recusa():
+    pid = client.post("/patients", json={"nome": "P"}).json()["id"]
 
-    response = client.get("/patients/nao-existe/timeline")
-
-    assert response.status_code == 404
-    assert "nao-existe" in response.json()["detail"]
-
-
-# ---------- GET /analyze ----------
-
-
-def test_analyze_devolve_nivel_score_e_modalidades_ausentes_do_ponto_mais_recente(
-    tmp_path, monkeypatch
-):
-    configs_dir, output_root = _fixture_ambiente(tmp_path, monkeypatch)
-    _grava_evidencia(output_root, "video", "run-1", "fall-01", {"queda": "detectada"})
-    _escreve_config(
-        configs_dir,
-        "demo-teste",
-        [
-            {
-                "modality": "video",
-                "feature": "video",
-                "run_id": "run-1",
-                "evidence_id": "fall-01",
-                "demo_timestamp_s": 0.0,
-                "severity": 1.0,
-            }
-        ],
-        window_size_s=60.0,
+    resp = client.post(
+        f"/patients/{pid}/uploads",
+        params={"modalidade": "raio-x"},
+        files={"arquivo": ("x.bin", b"x", "application/octet-stream")},
     )
-
-    timeline = client.get("/patients/demo-teste/timeline").json()
-    response = client.get("/analyze", params={"patient_demo_id": "demo-teste"})
-
-    assert response.status_code == 200
-    ponto = response.json()
-    # /analyze devolve exatamente o último ponto da mesma timeline (mesmo motor)
-    assert ponto["t"] == timeline[-1]["t"]
-    assert ponto["level"] == timeline[-1]["level"]
-    assert set(ponto["missing_modalities"]) == {"audio", "vitals", "prescription"}
+    assert resp.status_code == 422
 
 
-def test_analyze_paciente_demo_inexistente_devolve_404(tmp_path, monkeypatch):
-    _fixture_ambiente(tmp_path, monkeypatch)
-
-    response = client.get("/analyze", params={"patient_demo_id": "nao-existe"})
-
-    assert response.status_code == 404
-    assert "nao-existe" in response.json()["detail"]
-
-
-# ---------- GET /alerts ----------
-
-
-def _config_que_dispara_vermelho(configs_dir, patient_demo_id="demo-alerta"):
-    # peso 1.0 só em vídeo -- severidade 1.0 no evento cruza vermelho+histerese (0.75)
-    # já no primeiro ponto da timeline (score_at(0, ...) = 1.0 * 1.0 * decay(0) = 1.0).
-    _escreve_config(
-        configs_dir,
-        patient_demo_id,
-        [
-            {
-                "modality": "video",
-                "feature": "video",
-                "run_id": "run-1",
-                "evidence_id": "fall-01",
-                "demo_timestamp_s": 0.0,
-                "severity": 1.0,
-            }
-        ],
-        weights={"video": 1.0},
-        window_size_s=60.0,
+def test_enviar_arquivo_para_paciente_inexistente_404():
+    resp = client.post(
+        "/patients/nao-existe/uploads",
+        params={"modalidade": "documento"},
+        files={"arquivo": ("x.pdf", b"x", "application/pdf")},
     )
+    assert resp.status_code == 404
 
 
-def test_get_alerts_lista_transicao_que_cruza_o_nivel_de_disparo(tmp_path, monkeypatch):
-    configs_dir, output_root = _fixture_ambiente(tmp_path, monkeypatch)
-    _grava_evidencia(output_root, "video", "run-1", "fall-01", {"queda": "detectada"})
-    _config_que_dispara_vermelho(configs_dir)
+# --------------------------------------------------------------------------- #
+# Análise
+# --------------------------------------------------------------------------- #
+def _upload(pid, modalidade="documento"):
+    return client.post(
+        f"/patients/{pid}/uploads",
+        params={"modalidade": modalidade},
+        files={"arquivo": ("f.pdf", b"x", "application/pdf")},
+    ).json()["id"]
 
-    response = client.get("/alerts", params={"patient_demo_id": "demo-alerta"})
 
-    assert response.status_code == 200
-    alertas = response.json()
+def test_disparar_analise_reaproveita_o_despacho_e_grava_resultado(_ambiente, monkeypatch):
+    pid = client.post("/patients", json={"nome": "P"}).json()["id"]
+    uid = _upload(pid)
+
+    def _dublê(upload, caminho):
+        return ResultadoAnalise(
+            resumo="Losartana 100 mg — aumento de 100% em relação à dose anterior",
+            pontuacao=1.0,
+            evidencia_id=None,
+            detalhes={},
+        )
+
+    monkeypatch.setattr(servico, "_despachar", _dublê)
+
+    resp = client.post(f"/uploads/{uid}/analyze")
+    assert resp.status_code == 200
+    assert "aumento de 100%" in resp.json()["resumo"]
+
+    # e o resultado fica consultável
+    consulta = client.get(f"/uploads/{uid}/analysis")
+    assert consulta.status_code == 200
+    assert consulta.json()["upload_id"] == uid
+
+
+def test_consultar_analise_antes_de_analisar_404():
+    pid = client.post("/patients", json={"nome": "P"}).json()["id"]
+    uid = _upload(pid)
+
+    assert client.get(f"/uploads/{uid}/analysis").status_code == 404
+
+
+def test_analisar_envio_inexistente_404():
+    assert client.post("/uploads/nao-existe/analyze").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Linha do tempo e alertas
+# --------------------------------------------------------------------------- #
+def _semear_evento(_ambiente, pid, modalidade, feature, evidence_id, instante_s, monkeypatch):
+    """Cria um upload + análise com achado e evidência real, via o despacho dublê."""
+    artefato = _ambiente / "_stage" / f"{evidence_id}.txt"
+    artefato.parent.mkdir(parents=True, exist_ok=True)
+    artefato.write_text("evid")
+    save_evidence(
+        feature=feature,
+        run_id="r",
+        evidence_id=evidence_id,
+        source_record_id="rec",
+        artifact_path=artefato,
+        metadata={},
+        root=_ambiente,
+    )
+    uid = _upload(pid, modalidade)
+
+    def _dublê(upload, caminho):
+        return ResultadoAnalise(
+            resumo=f"achado em {modalidade}",
+            pontuacao=1.0,
+            evidencia_id=evidence_id,
+            detalhes={"instante_s": instante_s},
+        )
+
+    monkeypatch.setattr(servico, "_despachar", _dublê)
+    client.post(f"/uploads/{uid}/analyze")
+
+
+def test_timeline_e_alertas_do_paciente(_ambiente, monkeypatch):
+    pid = client.post("/patients", json={"nome": "P"}).json()["id"]
+    for mod, feat, ev in [
+        ("video", "video_pose", "ev-v"),
+        ("audio", "audio", "ev-a"),
+        ("sinais_vitais", "vitals", "ev-s"),
+        ("documento", "prescription", "ev-d"),
+    ]:
+        _semear_evento(_ambiente, pid, mod, feat, ev, 0.0, monkeypatch)
+
+    timeline = client.get(f"/patients/{pid}/timeline")
+    assert timeline.status_code == 200
+    assert len(timeline.json()) >= 1
+    assert timeline.json()[-1]["level"] == "vermelho"
+
+    # o alerta foi registrado automaticamente ao cruzar o limiar
+    alertas = client.get(f"/patients/{pid}/alerts").json()
     assert len(alertas) == 1
-    assert alertas[0]["previous_level"] == "verde"
-    assert alertas[0]["new_level"] == "vermelho"
-    # cada contribuição é (modalidade, resumo clínico, link da evidência)
-    assert alertas[0]["contributions"][0][0] == "video"
-    assert alertas[0]["contributions"][0][2] == "/evidence/fall-01"
+    assert alertas[0]["nivel"] == "vermelho"
+
+    # e o paciente agora reporta nível atual vermelho
+    assert client.get(f"/patients/{pid}").json()["nivel_atual"] == "vermelho"
+
+    # lista geral de alertas inclui este
+    assert len(client.get("/alerts").json()) == 1
 
 
-def test_get_alerts_sem_transicao_de_disparo_devolve_lista_vazia(tmp_path, monkeypatch):
-    configs_dir, output_root = _fixture_ambiente(tmp_path, monkeypatch)
-    _grava_evidencia(output_root, "video", "run-1", "fall-01", {"queda": "detectada"})
-    # pesos default (0.25 cada) -- score máximo 0.25, nunca cruza nenhum limiar
-    _escreve_config(
-        configs_dir,
-        "demo-sem-alerta",
-        [
-            {
-                "modality": "video",
-                "feature": "video",
-                "run_id": "run-1",
-                "evidence_id": "fall-01",
-                "demo_timestamp_s": 0.0,
-                "severity": 1.0,
-            }
-        ],
+def test_timeline_paciente_inexistente_404():
+    assert client.get("/patients/nao-existe/timeline").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Evidência
+# --------------------------------------------------------------------------- #
+def test_obter_evidencia_serve_o_artefato(_ambiente):
+    artefato = _ambiente / "_stage" / "ev-1.txt"
+    artefato.parent.mkdir(parents=True, exist_ok=True)
+    artefato.write_text("conteudo da evidência")
+    save_evidence(
+        feature="video_pose",
+        run_id="r",
+        evidence_id="ev-1",
+        source_record_id="rec",
+        artifact_path=artefato,
+        metadata={},
+        root=_ambiente,
     )
 
-    response = client.get("/alerts", params={"patient_demo_id": "demo-sem-alerta"})
-
-    assert response.status_code == 200
-    assert response.json() == []
-
-
-def test_get_alerts_paciente_demo_inexistente_devolve_404(tmp_path, monkeypatch):
-    _fixture_ambiente(tmp_path, monkeypatch)
-
-    response = client.get("/alerts", params={"patient_demo_id": "nao-existe"})
-
-    assert response.status_code == 404
-    assert "nao-existe" in response.json()["detail"]
+    resp = client.get("/evidence/ev-1")
+    assert resp.status_code == 200
+    assert resp.text == "conteudo da evidência"
+    assert resp.headers["x-evidence-feature"] == "video_pose"
 
 
-# ---------- GET /evidence/{id} ----------
-
-
-def test_get_evidence_serve_o_artefato_real_com_content_type_e_metadados_no_header(
-    tmp_path, monkeypatch
-):
-    _, output_root = _fixture_ambiente(tmp_path, monkeypatch)
-    _grava_evidencia(output_root, "video", "run-1", "fall-01", {"queda": "detectada"})
-
-    response = client.get("/evidence/fall-01")
-
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/plain")
-    assert response.text == "conteudo de evidência de teste"
-    assert response.headers["x-evidence-feature"] == "video"
-    assert response.headers["x-evidence-run-id"] == "run-1"
-
-
-def test_get_evidence_id_inexistente_devolve_404(tmp_path, monkeypatch):
-    _fixture_ambiente(tmp_path, monkeypatch)
-
-    response = client.get("/evidence/nao-existe")
-
-    assert response.status_code == 404
-    assert "nao-existe" in response.json()["detail"]
+def test_obter_evidencia_inexistente_404():
+    assert client.get("/evidence/nao-existe").status_code == 404
