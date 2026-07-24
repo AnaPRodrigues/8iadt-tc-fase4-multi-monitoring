@@ -93,9 +93,14 @@ def _prescricao_anterior(paciente_id: str, upload_atual_id: str):
     return None
 
 
-def analisar_upload(upload_id: str) -> repositorio.Analise:
+def analisar_upload(upload_id: str, *, instante_s: float | None = None) -> repositorio.Analise:
     """Roda a análise da modalidade do arquivo enviado, grava o resultado e
-    reavalia os alertas do paciente. Marca a situação do upload ao longo do caminho."""
+    reavalia os alertas do paciente. Marca a situação do upload ao longo do caminho.
+
+    ``instante_s`` fixa explicitamente a posição do evento na linha do tempo (em
+    segundos desde o início do monitoramento) — usado pela carga inicial de
+    demonstração para compor uma narrativa; sem ele, `_instante_s` cai no tempo
+    real decorrido entre o início do monitoramento e a análise."""
     upload = repositorio.obter_upload(upload_id)
     if upload is None:
         raise ValueError(f"upload inexistente: {upload_id}")
@@ -116,6 +121,9 @@ def analisar_upload(upload_id: str) -> repositorio.Analise:
             upload_id, upload.modalidade, _para_dict(resultado), None
         )
         return registro
+
+    if instante_s is not None:
+        resultado = replace(resultado, detalhes=resultado.detalhes | {"instante_s": instante_s})
 
     atividade.analise_concluida(upload.modalidade, time.monotonic() - inicio, resultado.resumo)
     registro = repositorio.criar_analise(

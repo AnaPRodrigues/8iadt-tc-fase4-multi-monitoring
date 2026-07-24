@@ -6,6 +6,7 @@ caminho. A raiz é sobrescrevível por `APP_UPLOADS_DIR` (usado nos testes).
 
 import os
 import re
+import shutil
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -46,3 +47,16 @@ def copiar_arquivo(paciente_id: str, modalidade: str, origem: Path) -> Path:
     área de uploads do paciente. Usado pela carga inicial de demonstração."""
     origem = Path(origem)
     return salvar_arquivo(paciente_id, modalidade, origem.name, origem.read_bytes())
+
+
+def copiar_diretorio(paciente_id: str, modalidade: str, origem: Path) -> Path:
+    """Copia um diretório inteiro (ex.: uma sequência de quadros de vídeo, padrão
+    UR Fall) para a área de uploads do paciente, preservando o nome — a análise de
+    vídeo espera o diretório da sequência, não um arquivo único. Ignora arquivos
+    soltos que não fazem parte do conteúdo da sequência (ex.: o zip original).
+    Usado pela carga inicial de demonstração."""
+    origem = Path(origem)
+    destino = uploads_dir() / paciente_id / modalidade / origem.name
+    if not destino.exists():
+        shutil.copytree(origem, destino, ignore=shutil.ignore_patterns("*.zip", ".complete"))
+    return destino

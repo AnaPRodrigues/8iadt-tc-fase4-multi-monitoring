@@ -5,7 +5,7 @@ PY := .venv/bin/python
 MODEL_HF_REPO := AnaPRodrigues/endoscapes-surgical-detector
 MODEL_HF_FILE := best.pt
 
-.PHONY: install data demo bidmc-scan test test-unit lint fmt clean models-fetch serve-api serve-front frontend-install
+.PHONY: install data demo bidmc-scan seed-demo test test-unit lint fmt clean models-fetch serve-api serve-front frontend-install
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -28,6 +28,13 @@ demo:
 # (HR fora de 60-100 bpm; SpO2 sustentada < 90%) -- útil para escolher casos de demo.
 bidmc-scan:
 	PYTHONPATH=backend $(PY) -m pipelines.vitals.bidmc --dataset-dir data/bidmc
+
+# Cria pacientes de demonstração no banco local, vinculados a arquivos reais dos
+# conjuntos de dados já baixados + uma prescrição sintética. Idempotente --
+# rodar de novo não duplica. Requer `make data` (e, para a raia cirúrgica de
+# vídeo, `make models-fetch`).
+seed-demo:
+	PYTHONPATH=backend $(PY) -m scripts.seed_demo_patients
 
 # --- Painel web -- dois processos, um por terminal ---
 # 1) suba a API:      make serve-api      (fica em http://localhost:8000)
