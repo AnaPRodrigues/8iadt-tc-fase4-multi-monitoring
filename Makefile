@@ -5,7 +5,7 @@ PY := .venv/bin/python
 MODEL_HF_REPO := AnaPRodrigues/endoscapes-surgical-detector
 MODEL_HF_FILE := best.pt
 
-.PHONY: install data demo test test-unit lint fmt clean models-fetch serve-api serve-front
+.PHONY: install data demo test test-unit lint fmt clean models-fetch serve-api serve-front frontend-install
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -24,27 +24,31 @@ models-fetch:
 demo:
 	PYTHONPATH=backend $(PY) -m pipelines.vitals.cli --config backend/pipelines/vitals/configs/demo.yaml
 
-# --- Painel (dashboard) -- dois processos, um por terminal ---
+# --- Painel web -- dois processos, um por terminal ---
 # 1) suba a API:      make serve-api      (fica em http://localhost:8000)
-# 2) suba o painel:   make serve-front    (abre em http://localhost:8501)
+# 2) suba o painel:   make serve-front    (abre em http://localhost:5173)
+# Na primeira vez, instale as dependências do painel: make frontend-install
 # O painel só fala HTTP com a API; sem a API de pé, ele mostra erro de conexão.
 # API_HOST/API_PORT/FRONT_PORT são sobrescrevíveis: `make serve-api API_PORT=9000`.
 API_HOST ?= 127.0.0.1
 API_PORT ?= 8000
-FRONT_PORT ?= 8501
+FRONT_PORT ?= 5173
 
-# Sobe a API de fusão (FastAPI/uvicorn). `--reload` recarrega ao salvar código.
-# É `app.routes:app` (não `app.main:app`): routes.py registra as 4 rotas sobre o
+# Sobe a API (FastAPI/uvicorn). `--reload` recarrega ao salvar código.
+# É `app.routes:app` (não `app.main:app`): routes.py registra as rotas sobre o
 # app instanciado em main.py -- apontar para main sobe a API sem rota nenhuma.
 serve-api:
 	PYTHONPATH=backend $(PY) -m uvicorn app.routes:app --app-dir backend \
 	  --host $(API_HOST) --port $(API_PORT) --reload
 
-# Sobe o painel Streamlit. Lê a URL da API de API_BASE_URL (default coincide com
-# serve-api); ajuste se subir a API noutra porta: `make serve-front API_PORT=9000`.
+# Instala as dependências do painel web (só na primeira vez).
+frontend-install:
+	cd frontend && npm install
+
+# Sobe o painel web (React/Vite). O Vite faz proxy das chamadas de API para a API
+# local (API_BASE_URL). Ajuste se subir a API noutra porta: `make serve-front API_PORT=9000`.
 serve-front:
-	API_BASE_URL=http://$(API_HOST):$(API_PORT) \
-	  $(PY) -m streamlit run frontend/app.py --server.port $(FRONT_PORT)
+	cd frontend && API_BASE_URL=http://$(API_HOST):$(API_PORT) FRONT_PORT=$(FRONT_PORT) npm run dev
 
 test:
 	$(PY) -m pytest -q

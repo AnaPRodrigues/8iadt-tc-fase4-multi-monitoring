@@ -42,24 +42,24 @@ prescrição (PDF)     → extração + regras de dose  → output/prescr./  ┘
                                                                                            vermelho)
                                                                           │
                                                                           └→ alerta explicável (gerado localmente) → equipe médica
-                                                                          └→ API REST → painel Streamlit
+                                                                          └→ API REST → painel web (React)
 ```
 
 Cada análise roda isoladamente (pode rodar em máquinas/momentos diferentes) e grava sua
-evidência. A fusão é orientada por uma **config curada do paciente-demo**
-(`backend/pipelines/fusion/configs/demo.yaml`), que referencia uma evidência real de
-cada modalidade e atribui a cada uma um instante na linha do tempo da demonstração.
+evidência. Cada paciente tem seus arquivos enviados e analisados; o motor de fusão roda
+sobre os achados reais do paciente (guardados no banco local) para montar a sua linha
+do tempo de risco.
 
-### Por que a linha do tempo é curada manualmente
+### Sobre os pacientes de demonstração
 
 Os quatro datasets usados são reais, públicos e **de pacientes diferentes** — não existe
 um paciente real que apareça simultaneamente no vídeo, no áudio, nos vitais e nas
-prescrições. Além disso, os formatos de tempo de cada fonte são incompatíveis entre si.
-Portanto, o *paciente-demo* é uma **composição didática documentada** (decisão AD-024):
-ele demonstra o **mecanismo** de fusão multimodal — peso por modalidade, decaimento
-temporal, histerese e explicabilidade — não uma correlação clínica real entre as quatro
-fontes. Cada evento referenciado é, ainda assim, uma anomalia **real** detectada pela
-sua análise de origem sobre dado real.
+prescrições. Por isso, os pacientes de demonstração (criados pela carga inicial) são uma
+**composição didática documentada**: cada um agrupa achados reais de datasets distintos,
+com o instante de cada evento curado para compor uma narrativa. Isso demonstra o
+**mecanismo** de fusão multimodal — peso por modalidade, decaimento temporal, histerese e
+explicabilidade — não uma correlação clínica real entre as quatro fontes. Cada evento é,
+ainda assim, uma anomalia **real** detectada pela sua análise de origem sobre dado real.
 
 ---
 
@@ -277,7 +277,7 @@ PYTHONPATH=backend .venv/bin/python -m pipelines.audio.cli --config <config>   #
 
 # 4. Subir o painel (dois terminais)
 make serve-api      # http://localhost:8000
-make serve-front    # http://localhost:8501
+make serve-front    # http://localhost:5173  (make frontend-install na 1a vez)
 
 # 5. Testes
 make test

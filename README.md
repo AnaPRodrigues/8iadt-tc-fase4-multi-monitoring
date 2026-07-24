@@ -20,7 +20,7 @@ equipe automaticamente quando algo preocupante é detectado.
 | **Sinais vitais** | Séries temporais contínuas (frequência cardíaca), detectando anomalias em tempo quase real | z-score móvel + Isolation Forest sobre janelas |
 | **Prescrições** | Lê receitas em PDF e verifica dose fora da faixa segura ou variação abrupta no histórico | Extração de texto (PDF/Textract) + regras clínicas |
 | **Fusão e alerta** | Combina as quatro análises num indicador de risco (verde/amarelo/vermelho) e dispara alerta por e-mail com links para a evidência | Late fusion ponderada com decaimento temporal + histerese |
-| **Painel** | Linha do tempo unificada do paciente, replay do cenário e drill-down por evento | Streamlit sobre a API |
+| **Painel** | Pacientes, envios, linha do tempo de risco, alertas e drill-down de evidência | React + Vite sobre a API |
 
 **Princípio central — evidência sempre reproduzível.** Cada anomalia detectada gera um
 artefato (imagem anotada, trecho de áudio, gráfico da janela, PDF marcado) junto de um
@@ -39,7 +39,7 @@ grava em `output/<análise>/<execução>/`, e que a fusão depois lê.
 ```mermaid
 flowchart TB
     subgraph FE["Apresentação"]
-        ST["Painel Streamlit<br/>(frontend/)"]
+        ST["Painel React<br/>(frontend/)"]
     end
 
     subgraph API["API (FastAPI — backend/app/)"]
@@ -79,15 +79,16 @@ flowchart TB
     V -.modo aws.-> RK
 ```
 
-**Fluxo de dados**: cada análise roda de forma isolada e grava evidência real em disco.
-A config curada do *paciente-demo* (`backend/pipelines/fusion/configs/demo.yaml`)
-referencia uma evidência real de cada modalidade; o motor de fusão as carrega, calcula
-um risk score por janela de tempo (soma ponderada com decaimento exponencial),
-classifica em verde/amarelo/vermelho com histerese e, ao cruzar o limiar de disparo,
-gera um alerta explicável **localmente** (exibido pela interface — não há envio por
-serviço de notificação). A API expõe esse resultado; o painel só consome a API por HTTP.
-As análises são 100% locais; só o modo `aws` chama dois serviços gerenciados (Textract
-para PDF, Rekognition para imagem), com o resultado voltando ao processamento local.
+**Fluxo de dados**: cada arquivo enviado a um paciente é analisado pelo pipeline da sua
+modalidade, que grava evidência real em disco; o resultado (achado em linguagem clínica
++ pontuação + evidência) fica no banco local. O motor de fusão carrega os achados do
+paciente, calcula um risk score por janela de tempo (soma ponderada com decaimento
+exponencial), classifica em verde/amarelo/vermelho com histerese e, ao cruzar o limiar
+de disparo, gera um alerta explicável **localmente** (registrado no banco e exibido pela
+interface — não há envio por serviço de notificação). A API expõe esse resultado; o
+painel só consome a API por HTTP. As análises são 100% locais; só o modo `aws` chama
+dois serviços gerenciados (Textract para PDF, Rekognition para imagem), com o resultado
+voltando ao processamento local.
 
 ### Estrutura de pastas
 
@@ -106,7 +107,7 @@ backend/
 ├── scripts/      Utilitários (download de datasets)
 └── tests/        Testes automatizados (unitários + integração)
 
-frontend/     Painel Streamlit — consome só a API, sem lógica de processamento própria
+frontend/     Painel web (React + Vite) — consome só a API, sem lógica de processamento própria
 training/     Treino do detector YOLOv8 (roda à parte, numa GPU; ver training/README.md)
 models/       Pesos treinados prontos para uso (baixados, não versionados)
 data/         Datasets públicos + banco local (app.db) e arquivos enviados (uploads/) — não versionados
@@ -183,7 +184,7 @@ O painel são **dois processos**, cada um num terminal:
 # Terminal 1 — a API (fica em http://localhost:8000)
 make serve-api
 
-# Terminal 2 — o painel (abre em http://localhost:8501)
+# Terminal 2 — o painel (abre em http://localhost:5173; rode make frontend-install antes na 1a vez)
 make serve-front
 ```
 
@@ -237,7 +238,7 @@ YOLOv8n vs. YOLOv8s e publicando o melhor), veja
 | `make data` | Baixa os datasets públicos (retomável, idempotente) |
 | `make models-fetch` | Baixa o detector YOLOv8 já treinado do Hugging Face |
 | `make serve-api` | Sobe a API (FastAPI) em `http://localhost:8000` |
-| `make serve-front` | Sobe o painel (Streamlit) em `http://localhost:8501` |
+| `make serve-front` | Sobe o painel (React/Vite) em `http://localhost:5173` |
 | `make demo` | Roda a análise de sinais vitais ponta a ponta |
 | `make test` / `make test-unit` | Roda a suíte completa / só os testes rápidos |
 | `make lint` / `make fmt` | Checagem / formatação de estilo |

@@ -394,6 +394,14 @@
 - **Date**: 2026-07-24
 - **Status**: active
 
+### AD-050
+- **Decision**: Bloco 3 — o painel Streamlit (`frontend/app.py`) foi substituído por uma aplicação de página única em `frontend/`: **React + Vite + react-router + Recharts**, JavaScript, chamadas por `fetch`, dependências enxutas (sem SSR, sem biblioteca de componentes pesada). Só consome a API por HTTP; nenhuma lógica de processamento no frontend. Três telas: Pacientes (lista com indicador de risco colorido + cadastro/remoção), Detalhe do paciente (cabeçalho com nível em destaque, área de envio por modalidade com situação, quatro painéis por modalidade com o último achado em **linguagem clínica**, linha do tempo de risco com eixo em tempo legível + linhas de atenção/alerta + marcadores por evento, painel de alertas do paciente, drill-down de evidência por evento) e Alertas (lista geral com filtro por paciente e por nível). Nenhum identificador técnico ou número com muitas casas aparece na tela (pontuações em %). O Vite faz proxy das rotas de API para o backend em desenvolvimento. `streamlit` removido das dependências Python; `make serve-front` agora roda o Vite; novo alvo `make frontend-install`. `frontend/README.md` reescrito com passo a passo.
+- **Reason**: Pedido explícito do usuário — interface web em JavaScript no lugar do Streamlit, mais adequada para apresentação e para as telas por paciente introduzidas no bloco 2.
+- **Trade-off**: Introduz uma toolchain Node/npm ao projeto (antes 100% Python); em troca, uma UI mais controlável e apresentável. Verificação: `npm run build` compila sem erros (842 módulos) e um smoke test ponta a ponta confirmou o Vite servindo o painel e fazendo proxy correto para a API real (paciente criado e listado via proxy). Inspeção visual detalhada no navegador continua sendo um passo humano recomendado antes de gravar o vídeo.
+- **Scope**: `frontend/` inteiro (novo app React; `app.py` Streamlit removido), `Makefile` (serve-front + frontend-install), `pyproject.toml` (remove streamlit), `.gitignore` (já cobria node_modules/dist), documentação. Bloco 3 de 6.
+- **Date**: 2026-07-24
+- **Status**: active
+
 ## Rastreabilidade de Requisitos Obrigatórios
 
 Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) às features.
