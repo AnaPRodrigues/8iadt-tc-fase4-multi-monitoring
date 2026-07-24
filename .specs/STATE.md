@@ -272,7 +272,7 @@
 - **Trade-off**: Exige rodar LocalStack (Docker) localmente e manter a IaC agnóstica de endpoint; LocalStack Community não cobre todos os serviços (ver AD-035).
 - **Scope**: Todas as features com AWS (F1, F4, F5); `backend/aws/`, `infra/`, `docker-compose.yml`.
 - **Date**: 2026-07-21
-- **Status**: active
+- **Status**: superseded by AD-048
 
 ### AD-035
 - **Decision**: Textract e Rekognition **não existem no LocalStack Community** (são Pro). Resolver com padrão **ADAPTER**: interfaces únicas `TextExtractor` e `ImageAnalyzer` em `backend/aws/adapters/`, cada uma com dois adaptadores — **cloud** (Textract / Rekognition reais) e **local** (OSS: Tesseract/pdfplumber para OCR de prescrição em F4; YOLOv8 local para labels de imagem em F1). O resto do pipeline depende só da interface, nunca do serviço concreto.
@@ -280,7 +280,7 @@
 - **Trade-off**: Os resultados dos adaptadores local e cloud diferem (Tesseract ≠ Textract); o relatório precisa deixar claro qual ambiente gerou cada métrica.
 - **Scope**: F4 (TextExtractor), F1 (ImageAnalyzer); `backend/aws/adapters/`.
 - **Date**: 2026-07-21
-- **Status**: active
+- **Status**: active (reafirmada por AD-048 — o padrão adapter é mantido; só o motivo muda: já não é "contornar o LocalStack Community", passa a ser "trocar entre processamento 100% local e serviço gerenciado por `ENV`")
 
 ### AD-036
 - **Decision**: F1 usa **apenas datasets abertos** já discutidos (e eventualmente outros abertos encontrados no futuro) — **sem nenhuma gravação de vídeo pelo próprio grupo**. A âncora de vídeo/frames **permanece o Endoscapes2023** (AD-033, já baixado em `data/endoscapes/`): YOLOv8 sobre os frames anotados (bbox COCO) + `ImageAnalyzer` na nuvem para keyframes (AD-035). O **MediaPipe Pose** fica **condicionado** a encontrar um dataset **aberto** de vídeo de corpo inteiro (nenhum identificado até agora); sem essa fonte, o ângulo postura/queda **não entra no caminho crítico**. O **Cholec80-CVS** (anotações XLSX, sem vídeo) segue como enriquecimento opcional.
@@ -296,7 +296,7 @@
 - **Trade-off**: Mais superfície de configuração (dois `.env`, docker-compose, quatro alvos novos de Make).
 - **Scope**: `backend/aws/`, `infra/`, raiz do repo. Refina AD-030.
 - **Date**: 2026-07-21
-- **Status**: active
+- **Status**: superseded by AD-048
 
 ### AD-038
 - **Decision**: A fundação AWS (factory de cliente boto3 por `ENV`, adapters `TextExtractor`/`ImageAnalyzer`, IaC idempotente que provisiona os recursos nos dois ambientes) é uma **feature dedicada `aws-foundation`**, construída **antes** de F4/F1/F5, que passam a depender dela. Os **testes de integração usam LocalStack real** (Docker), conforme escolha do usuário — não moto. Docker é pré-requisito do Execute desta feature.
@@ -304,7 +304,7 @@
 - **Trade-off**: Adiciona uma feature ao caminho antes de entregar valor de F4; e o Execute fica bloqueado por Docker (instalação de sistema, sudo).
 - **Scope**: nova feature `aws-foundation`; pré-requisito de F4, F1, F5.
 - **Date**: 2026-07-21
-- **Status**: active
+- **Status**: superseded by AD-048 (a fundação AWS deixa de depender de LocalStack/Docker; testes de integração de nuvem passam a usar o cliente boto3 substituído por dublê, AD-048 ponto 6)
 
 ### AD-039
 - **Decision**: A raia de **pose/movimento** de F1 usa o **UR Fall Detection Dataset (URFD)** — dado real aberto, sem credenciamento e sem gravação do grupo. Fonte: `https://fenix.ur.edu.pl/~mkepski/ds/uf.html`; zips por sequência em `https://fenix.ur.edu.pl/~mkepski/ds/data/<seq>-cam0-rgb.zip` (verificado: HTTP 206, `application/zip`, magic `PK`). Conteúdo: 70 sequências (30 quedas + 40 ADL), RGB corpo inteiro 640×480 em PNG + acelerômetro. **MediaPipe Pose** extrai keypoints por frame → assimetria, amplitude, velocidade, detecção de queda (variação brusca do centro de massa); classificação **queda vs ADL** com métricas precision/recall contra o rótulo real. Isso **fecha o Requisito 1 (análise postural)** e o **Requisito 3 (padrões de movimentação do paciente)**. F1 passa a ter **duas raias**: pose (URFD + MediaPipe) e objeto/área crítica (Endoscapes/Cholec80 + YOLOv8/`ImageAnalyzer`). **Supersede a AD-036** (MediaPipe deixa de ser condicional — URFD é a fonte).
@@ -352,7 +352,7 @@
 - **Trade-off**: Aumenta o escopo de F5 (motor de fusão + API + dashboard, não só fusão/alerta); aceito porque sem a API não há como demonstrar P3 dentro da arquitetura já decidida.
 - **Scope**: F5 (fusion-and-alerting); `backend/app/`, `frontend/`. Concretiza a AD-029/030.
 - **Date**: 2026-07-22
-- **Status**: active
+- **Status**: superseded by AD-050 (a parte da API fina em `backend/app/` continua válida; a escolha de Streamlit para `frontend/` foi substituída por React + Vite)
 
 ### AD-045
 - **Decision**: Refina a AD-024. (a) **Timeline cross-modal do paciente-demo é curada manualmente, evento a evento** — o config do paciente-demo não só linka um registro por modalidade, mas declara explicitamente um subconjunto pequeno de eventos reais já detectados por F1–F4 (via `evidence_id`/`source_record_id`) e o instante de cada um na linha do tempo da demo. Isso decorre diretamente do already-active "associação... nunca inferida algoritmicamente" da AD-024 — investigação nesta sessão confirmou que os metadados de evidência reais de F1–F4 não compartilham um formato de tempo comparável entre si (F3 tem `start_s` real; F1-pose só índice de frame; F1-objeto/Endoscapes e F2 não expõem tempo nenhum; F4 tem timestamp real embutido no `evidence_id`), então não há como derivar uma linha do tempo única sem uma decisão de curadoria explícita. (b) **O paciente-demo usa só a raia pose/queda de F1** (URFD), não a raia objeto/estrutura crítica (Endoscapes) — a raia cirúrgica não compõe uma história narrativa coerente com queda/vitais/prescrição de um mesmo paciente-demo, mas continua demonstrável isoladamente fora do paciente-demo.
@@ -410,6 +410,14 @@
 - **Date**: 2026-07-24
 - **Status**: active
 
+### AD-052
+- **Decision**: Bloco 5 — segundo caso de sinais vitais (internação adulta, BIDMC), fechando a cobertura de **oxigenação (SpO2)** e frequência cardíaca (HR) de adulto, antes um gap real. Novo `pipelines/vitals/bidmc.py`: lê os registros numéricos do BIDMC (os com sufixo `n`, ex.: `bidmc01n`, a 1 Hz, que não constam da listagem principal), expõe HR e SpO2, e **reaproveita os detectores existentes** (escore móvel + floresta de isolamento) e a extração de features por janela — não reimplementa detecção. Como o BIDMC não vem com desfecho anotado, a avaliação usa **critérios clínicos publicados** como referência (num único lugar, `CriteriosClinicos`): SpO2 sustentada < 90% = hipoxemia; HR fora de 60–100 bpm = bradicardia/taquicardia. Gera evidência no mesmo contrato (gráfico da janela anômala destacada) e reporta métricas (precision/recall/f1) contra os critérios. Varredura utilitária `varrer()` + `python -m pipelines.vitals.bidmc` (alvo `make bidmc-scan`) lista quais dos 53 registros têm eventos (para escolher casos de demo; seleciona, não altera sinais). O despacho de análise (`app/analise._analisar_sinais_vitais`) passa a rotear pelos canais do registro: FHR → cardiotocografia (CTU-UHB); HR/SpO2 → internação (BIDMC).
+- **Reason**: Pedido explícito do usuário (bloco 5) e fechamento do gap de SpO2. Reusar os detectores mantém a coerência com o caso CTG e evita reimplementar lógica de detecção.
+- **Trade-off**: As features por janela foram calibradas para cardiotocografia (baseline/variabilidade/decelerações em bpm); aplicadas ao HR são clinicamente análogas, e ao SpO2 servem como descritores estatísticos genéricos para a floresta de isolamento (a referência de avaliação do SpO2 é o critério clínico de hipoxemia, não a feature CTG). 1 dos 53 registros (`bidmc19n`) é pulado por ter o cabeçalho do canal SpO2 corrompido — tratamento gracioso, não bug. Verificação: 8 testes de BIDMC (unit dos critérios/métricas + integração com dados reais) + teste de roteamento do despacho, todos verdes; `make bidmc-scan` lista 13 registros com evento.
+- **Scope**: `pipelines/vitals/bidmc.py` (novo), `app/analise.py` (roteamento CTG vs internação), `Makefile` (`bidmc-scan`), documentação. Bloco 5 de 6.
+- **Date**: 2026-07-24
+- **Status**: active
+
 ## Rastreabilidade de Requisitos Obrigatórios
 
 Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) às features.
@@ -423,8 +431,8 @@ Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) �
 | Req.2 — Áudio: transcrição (Azure STT → faster-whisper) | F2 (AD-003) — **FECHADO, Verifier PASS** | ✅ Substituído |
 | Req.2 — Áudio: termos críticos + sentimento (Text Analytics → local) | F2 (AD-003) — **FECHADO, Verifier PASS** | ✅ Substituído |
 | Req.2 — Áudio: disartria | Trabalho futuro (sem dataset aberto rotulado, AD-020) | ⚠️ Deferido |
-| Req.3 — Vitais: batimentos (HR) | F3 caso CTG: FHR do CTU-UHB (`pipelines/vitals/`, implementado e testado) | ✅ Coberto |
-| Req.3 — Vitais: oxigenação (SpO2) | ⚠️ **Correção nesta sessão**: AD-040 decidiu usar BIDMC pra isso e F0 já baixa o dataset (`data/bidmc/`), mas **nenhum pipeline processa BIDMC ainda** — `pipelines/vitals/{loader,features,detectors}.py` são inteiramente específicos de CTU-UHB/CTG (rótulo por pH fetal), não HR/SpO2. Descoberto ao decidir o caso de vitais do paciente-demo de F5 (ver bullet F5 no Handoff) — a tabela antiga marcava "✅ Coberto" por engano, baseada na decisão/dataset, não no código real. | ❌ **Não coberto — gap real, trabalho futuro** |
+| Req.3 — Vitais: batimentos (HR) | F3 caso CTG: FHR do CTU-UHB **e** caso internação: HR do BIDMC (`pipelines/vitals/bidmc.py`, AD-052) | ✅ Coberto |
+| Req.3 — Vitais: oxigenação (SpO2) | **Coberto na reformulação (bloco 5, AD-052)**: `pipelines/vitals/bidmc.py` lê os registros numéricos do BIDMC (HR/SpO2 a 1 Hz) e detecta hipoxemia (SpO2 sustentada < 90%) reusando os detectores existentes, com referência clínica publicada. O gap real que eu havia flagrado antes está fechado. | ✅ Coberto |
 | Req.3 — Vitais: pressão arterial (PA) | Trabalho futuro — fonte aberta identificada: VitalDB (AD-041) | ⚠️ Deferido |
 | Req.3 — Prescrições: evolução | F4: Textract/adapter + regras — **FECHADO, Verifier PASS** (AD-022/035) | ✅ Coberto |
 | Req.3 — Padrões de movimentação do paciente | F1 raia pose: URFD fall/ADL (AD-039) — **FECHADO, Verifier PASS** | ✅ Coberto |
@@ -435,9 +443,28 @@ Mapeamento dos requisitos do enunciado (`docs/8IADT-Fase-4-Tech-challenge.md`) �
 | Entregável — Relatório técnico | Pendente (escrever ao final) | ⏳ Pendente |
 | Entregável — Vídeo demo ≤15 min | Pendente (gravar ao final) | ⏳ Pendente |
 
-Lacunas obrigatórias remanescentes: **nenhuma bloqueadora** — o enunciado lista "séries temporais de sinais vitais (batimentos, pressão arterial, oxigenação)" como um único requisito com exemplos, não 3 itens obrigatórios independentes; `batimentos` já está coberto (FHR real, F3). PA, disartria e agora SpO2/oxigenação (gap descoberto nesta sessão, ver linha acima) ficam deferidos com justificativa (sem pipeline de processamento pronto/dataset aberto sem barreira, respectivamente) — mesmo tratamento já dado a PA e disartria, não requisitos-lista obrigatórios estritos isolados. Entregáveis (relatório + vídeo) pendentes por natureza (fase final).
+Lacunas obrigatórias remanescentes: **nenhuma bloqueadora**. Sinais vitais: `batimentos` (HR — FHR do CTU-UHB e HR do BIDMC) e `oxigenação` (SpO2 do BIDMC, AD-052) cobertos; `pressão arterial` deferida com justificativa (sem dataset aberto em waveform sem credenciamento). `disartria` (áudio) deferida (sem dataset aberto rotulado). Entregáveis (relatório + vídeo) pendentes por natureza (fase final).
 
 ## Handoff
+
+### Estado atual — Reformulação pós-MVP (AD-048 a AD-052), retomada em 2026-07-24
+
+O MVP original (F0-F5, spec-driven, ver histórico abaixo) foi fechado com Streamlit + LocalStack + arquitetura serverless (S3/Lambda/SNS/DynamoDB). O usuário pediu uma reformulação em **6 blocos**, executados em ordem, cada um parando para aprovação antes do próximo (ver pedido original do usuário para o texto completo de cada bloco). Regras transversais: vocabulário interno do método (F0-F5, AD-NNN, nomes de fase) só dentro de `.specs/`; texto voltado ao usuário em linguagem de domínio, compreensível sem contexto do projeto; `training/` e os pesos treinados não são tocados; suíte verde ao final de cada bloco.
+
+- **Bloco 1 — remove LocalStack/serverless, nuvem = só Textract+Rekognition síncronos** (AD-048). **Commitado** (`e02949b`). Verificado nesta sessão: `docker-compose.yml` não existe mais; `backend/aws/clients.py` só cria cliente para `textract`/`rekognition`, recusa qualquer outro serviço; modo `local` (padrão) não chama nenhum SDK de nuvem.
+- **Bloco 2 — banco local de pacientes (SQLite) + endpoints por paciente** (AD-049). **Commitado** (`959c717`). `backend/app/{db,repositorio,armazenamento,analise,servico}.py` + rotas novas.
+- **Bloco 3 — frontend React + Vite substituindo o Streamlit** (AD-050). **Commitado** (`a0f403d`). Verificado nesta sessão: `frontend/package.json` confirma `react`/`react-router-dom`/`recharts`/`vite`; sem `streamlit` no projeto.
+- **Bloco 4 — registro de atividade legível no terminal, com origem `[LOCAL]`/`[AWS]`** (AD-051). **Commitado** (`243a109`). `backend/common/atividade.py` confirmado presente.
+- **Bloco 5 — segundo caso de sinais vitais (BIDMC: HR + SpO2 de internação adulta)** (AD-052). **Commitado nesta sessão** (ver hash abaixo). Estava com código pronto mas não commitado no início desta sessão (retomando de uma pausa anterior) — verificado e commitado agora: `backend/pipelines/vitals/bidmc.py` (novo) + roteamento em `backend/app/analise.py` (CTG vs. internação pelos canais do registro) + 8 testes novos (`backend/tests/vitals/test_bidmc.py` + 1 de roteamento em `test_analise.py`) + `make bidmc-scan`. Gate rodado nesta sessão: `make test` (`pytest backend/tests`) **469 passando, 3 skipped (pré-existentes, evidência de demo ausente — nada relacionado a este bloco), 0 falhas**; `ruff check backend` limpo.
+- **Higiene de rastreabilidade feita nesta sessão**: AD-034/037/038 (perfil LocalStack, estrutura `docker-compose`, `aws-foundation` com testes de integração via LocalStack) marcadas `superseded by AD-048`; AD-035 (padrão adapter) mantida `active`, mas anotada como reafirmada por AD-048 com motivo atualizado; AD-044 (Streamlit como frontend de F5) marcada `superseded by AD-050`. Nenhuma dessas ADs tinha sido atualizada quando os blocos 1/3 foram commitados — a tabela de decisões estava desalinhada do código real até esta sessão.
+- **Bloco 6 — dados de demonstração e teste — NÃO INICIADO.** Três itens pendentes, na ordem do pedido original do usuário: (1) script de carga inicial que cria 2-3 pacientes de demo no banco local vinculados a arquivos reais já baixados (URFD, Endoscapes, ICBHI, CTU-UHB, BIDMC), exposto como alvo do Makefile; (2) gerador de prescrições em PDF sintéticas (casos normais + anômalos: dose fora de faixa, variação abrupta), com faixas terapêuticas reais como referência documentada; (3) áudio de consulta em português — o único item sem substituto automático, precisa de fala humana real (decisão/gravação do usuário, ver texto original do bloco 6 que foi cortado no meio — confirmar com o usuário o que falta exatamente desse item 3 antes de iniciar).
+- **Next step**: apresentar ao usuário o plano por bloco (este resumo + Bloco 6 detalhado) e aguardar aprovação explícita antes de iniciar o Bloco 6 — por instrução do próprio usuário, cada bloco para para revisão antes do próximo.
+- **Branch**: `feat/f3-vitals-anomaly`; `main` só tem o commit inicial — estratégia de merge/rename para `main` continua em aberto (ver "Aberto" no histórico abaixo).
+- **Ambiente**: ativar `.venv` (`source .venv/bin/activate`) antes de `pytest`/`ruff`/`python`; `PYTHONPATH=backend` necessário fora do pytest. Sem Docker/LocalStack nesta reformulação — não é mais pré-requisito.
+
+### Histórico — MVP original (F0-F5, spec-driven), antes da reformulação
+
+As entradas abaixo descrevem o estado em 2026-07-22/23, **antes** dos blocos 1-6 acima. Streamlit, LocalStack, S3/SNS/DynamoDB/Lambda e o "paciente-demo" curado por YAML citados aqui foram removidos ou substituídos pela reformulação — não presumir que ainda existem no código. Mantido só para rastreabilidade histórica das decisões de F1-F5.
 
 - **PAUSA a pedido do usuário (2026-07-22, fim de sessão)** — usuário vai desligar a máquina, retoma amanhã. Nada em andamento, working tree limpa, tudo commitado (último commit `a0842b6`). Antes de retomar: reler este Handoff inteiro (não presumir contexto).
 - **Feature**: **F1 (video-analysis) — FECHADA** (Verifier PASS; nota: `object_finetune.py` foi removida de `backend/pipelines/video/` na emenda AD-046 — treino não é mais responsabilidade do backend, ver abaixo; nenhum outro arquivo de F1 mudou). **F2 (audio-analysis) — FECHADA** (Verifier PASS na iteração 2). **F5 (fusion-and-alerting) — FECHADA** (Verifier PASS após fix de 2 gaps, ver bullet dedicado abaixo). Emendas transversais concluídas: camada de treino desacoplada (`training/`, AD-042/043), limpeza de jargão interno fora de `.specs/` (AD-046), publicação do peso treinado no Hugging Face Hub (AD-047, ver bullet dedicado abaixo). Único item não iniciado do escopo original: **`frontend/`** já existe como parte de F5 (`frontend/app.py`, Streamlit, AD-044) — falta só a inspeção visual humana num navegador (ver bullet de F5).

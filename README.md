@@ -17,7 +17,7 @@ equipe automaticamente quando algo preocupante é detectado.
 | --- | --- | --- |
 | **Vídeo** | Postura e padrões de movimentação (quedas) e, em contexto cirúrgico, estruturas anatômicas críticas | MediaPipe Pose (postura) + YOLOv8 fine-tuned (detecção de objetos) |
 | **Áudio** | Dificuldade respiratória em ausculta, transcrição de consultas, termos clínicos críticos e sinais de fadiga vocal | Random Forest sobre features acústicas + faster-whisper (transcrição) |
-| **Sinais vitais** | Séries temporais contínuas (frequência cardíaca), detectando anomalias em tempo quase real | z-score móvel + Isolation Forest sobre janelas |
+| **Sinais vitais** | Séries temporais contínuas: frequência cardíaca (fetal, CTU-UHB) e frequência cardíaca + oxigenação (SpO2) de internação adulta (BIDMC), detectando anomalias | z-score móvel + Isolation Forest sobre janelas |
 | **Prescrições** | Lê receitas em PDF e verifica dose fora da faixa segura ou variação abrupta no histórico | Extração de texto (PDF/Textract) + regras clínicas |
 | **Fusão e alerta** | Combina as quatro análises num indicador de risco (verde/amarelo/vermelho) e dispara alerta por e-mail com links para a evidência | Late fusion ponderada com decaimento temporal + histerese |
 | **Painel** | Pacientes, envios, linha do tempo de risco, alertas e drill-down de evidência | React + Vite sobre a API |

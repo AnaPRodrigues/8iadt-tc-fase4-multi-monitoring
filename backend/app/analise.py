@@ -194,7 +194,57 @@ def _analisar_audio(
 # --------------------------------------------------------------------------- #
 # Sinais vitais
 # --------------------------------------------------------------------------- #
+def _canais_do_registro(base: Path) -> list[str]:
+    """Nomes dos canais do registro wfdb (sem a vírgula final do cabeçalho BIDMC)."""
+    import wfdb
+
+    header = wfdb.rdheader(str(base))
+    return [n.strip().rstrip(",") for n in (header.sig_name or [])]
+
+
 def _analisar_sinais_vitais(caminho: Path, run_id: str) -> ResultadoAnalise:
+    caminho = Path(caminho)
+    # O wfdb identifica o registro pelo caminho-base (sem extensão).
+    base = caminho.with_suffix("") if caminho.suffix in (".hea", ".dat") else caminho
+
+    try:
+        canais = _canais_do_registro(base)
+    except Exception as exc:
+        raise ErroDeAnalise(f"registro de sinais vitais ilegível: {exc}") from exc
+
+    # Dois casos: cardiotocografia (CTU-UHB, canal FHR) e internação adulta
+    # (BIDMC, canais HR/SpO2). O caso é escolhido pelos canais presentes.
+    if "HR" in canais and "SpO2" in canais:
+        return _analisar_internacao(base, run_id)
+    if "FHR" in canais:
+        return _analisar_cardiotocografia(base, run_id)
+    raise ErroDeAnalise(
+        f"registro de sinais vitais não reconhecido (canais: {', '.join(canais) or 'nenhum'})"
+    )
+
+
+def _analisar_internacao(base: Path, run_id: str) -> ResultadoAnalise:
+    """Caso de internação adulta (BIDMC): HR e SpO2."""
+    from pipelines.vitals import bidmc
+    from pipelines.vitals.loader import InvalidRecordError
+
+    try:
+        record = bidmc.load_numeric_record(base)
+    except InvalidRecordError as exc:
+        raise ErroDeAnalise(f"registro de internação ilegível: {exc}") from exc
+
+    atividade.local("sinais_vitais", "avaliando HR e SpO2 contra critérios clínicos (BIDMC)")
+    achado = bidmc.analisar(record, run_id)
+    return ResultadoAnalise(
+        resumo=achado.resumo,
+        pontuacao=achado.pontuacao,
+        evidencia_id=achado.evidencia_id,
+        detalhes={"caso": "internacao"},
+    )
+
+
+def _analisar_cardiotocografia(base: Path, run_id: str) -> ResultadoAnalise:
+    """Caso de cardiotocografia (CTU-UHB): frequência cardíaca fetal."""
     import dataclasses
 
     from common.evidence import evidence_dir, save_evidence
@@ -206,9 +256,6 @@ def _analisar_sinais_vitais(caminho: Path, run_id: str) -> ResultadoAnalise:
     from pipelines.vitals.preprocess import interpolate_gaps, mark_signal_loss
     from pipelines.vitals.windowing import make_windows
 
-    caminho = Path(caminho)
-    # O wfdb identifica o registro pelo caminho-base (sem extensão).
-    base = caminho.with_suffix("") if caminho.suffix in (".hea", ".dat") else caminho
     try:
         record = load_record(base)
     except InvalidRecordError as exc:

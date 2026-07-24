@@ -91,6 +91,21 @@ def test_sinais_vitais_registro_real_produz_resumo(tmp_path):
 # Áudio (integração — gravação ICBHI real; treina o classificador sob demanda)
 # --------------------------------------------------------------------------- #
 @pytest.mark.integration
+def test_sinais_vitais_roteia_bidmc_para_o_caso_de_internacao(tmp_path):
+    bidmc = _REPO_ROOT / "data" / "bidmc"
+    if not (bidmc / "bidmc32n.hea").is_file():
+        pytest.skip("registro BIDMC ausente — rode `make data`")
+
+    # o despacho reconhece o registro pelos canais (HR/SpO2) e roteia p/ internação
+    r = analise._analisar_sinais_vitais(bidmc / "bidmc32n.hea", run_id="teste-internacao")
+
+    assert r.detalhes.get("caso") == "internacao"
+    assert r.resumo
+    if r.pontuacao == 1.0:
+        assert r.evidencia_id is not None
+
+
+@pytest.mark.integration
 def test_audio_gravacao_real_produz_resumo_respiratorio(tmp_path, monkeypatch):
     icbhi = _REPO_ROOT / "data" / "icbhi" / "ICBHI_final_database"
     if not icbhi.is_dir():
