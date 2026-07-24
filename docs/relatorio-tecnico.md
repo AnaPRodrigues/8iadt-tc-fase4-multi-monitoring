@@ -141,22 +141,28 @@ Campo ausente ou não numérico é **sinalizado**, nunca inferido por suposiçã
 
 ---
 
-## 4. Exemplo de anomalias detectadas (paciente-demo)
+## 4. Exemplo de anomalias detectadas (pacientes de demonstração)
 
-A config curada compõe uma narrativa de deterioração com **quatro anomalias reais**, uma
-por modalidade:
+O sistema opera sobre um **banco real de pacientes** (SQLite) — não existe mais um único
+"paciente-demo" com narrativa fixa. `make seed-demo` cria 3 pacientes reais, cada um
+vinculado a arquivos reais de duas modalidades diferentes, e dispara a análise real de
+cada envio (mesmo caminho de código do endpoint HTTP). A tabela abaixo é o resultado de
+uma execução real do script:
 
-| Tempo | Modalidade | Evidência real | Anomalia detectada |
+| Paciente | Modalidade | Evidência real | Anomalia detectada |
 | --- | --- | --- | --- |
-| t = 0 s | Vídeo (URFD `fall-01`) | frame anotado da queda | Queda detectada pela raia de pose (score de movimento 0.31) |
-| t = 300 s | Vitais (CTU-UHB reg. 1001) | gráfico da janela anômala | Janela anômala pelo Isolation Forest; pH real do registro = 7.14 (acidose fetal) |
-| t = 600 s | Prescrição (paciente p3) | PDF anotado | Mudança abrupta de dose de losartana (50 mg → 100 mg, +100%) |
-| t = 900 s | Áudio (ICBHI) | trecho do ciclo respiratório | Sibilo (wheeze) detectado em ciclo respiratório real |
+| A — Queda e monitoramento fetal | Vídeo (URFD `fall-01`) | frame anotado da queda | Queda detectada pela raia de pose (score de movimento 0.31) |
+| A — Queda e monitoramento fetal | Vitais (CTU-UHB reg. 1001) | gráfico da janela anômala | Janela anômala pelo Isolation Forest; pH real do registro = 7.14 (acidose fetal) |
+| B — Pós-operatório e prescrição | Vídeo (Endoscapes, quadro cirúrgico) | quadro com as estruturas identificadas | Artéria cística, ducto cístico e placa cística identificados (visão crítica de segurança) |
+| B — Pós-operatório e prescrição | Prescrição (sintética) | PDF anotado | Digoxina 1,5 mg — dose fora da faixa terapêutica [0,125; 0,5] mg |
+| C — Ausculta e internação | Áudio (ICBHI) | trecho do ciclo respiratório | Estertor e sibilo detectados em ciclo respiratório real (confiança 98%) |
+| C — Ausculta e internação | Vitais (BIDMC `bidmc32n`) | gráfico da janela anômala | Saturação de oxigênio abaixo de 90% (hipoxemia) entre 0 e 1 minuto |
 
-Ao alimentar a fusão com essa sequência, o risk score sobe a cada evento, o nível
-escala de verde a vermelho, e o cruzamento do limiar de disparo gera o alerta explicável
-à equipe. Esse é exatamente o cenário reproduzido no painel (replay controlado) e no
-vídeo de demonstração.
+Cada par de eventos do mesmo paciente alimenta a fusão de risco (peso por modalidade,
+decaimento temporal, histerese); o painel mostra a linha do tempo e o drill-down para a
+evidência real de cada evento. A raia de vídeo cirúrgico (paciente B) e a de sinais
+vitais de internação (BIDMC, paciente C) só existem desde a reformulação pós-MVP — ver
+`.specs/STATE.md` (AD-052/AD-053).
 
 ---
 
@@ -195,8 +201,10 @@ confirma que os testes os detectam). Relatórios completos em
 | Prescrições | ✅ PASS | 2 lacunas menores de precisão de teste, documentadas |
 | Fusão e alerta | ✅ PASS | Fechado após corrigir 2 lacunas de cobertura apontadas pelo verificador |
 
-**Suíte de testes**: 435 testes passando (unitários + integração), zero falhas, sem
-depender de Docker nem de credencial de nuvem; checagem de estilo limpa.
+**Suíte de testes**: 478 testes (unitários + integração), zero falhas, sem depender de
+Docker nem de credencial de nuvem; checagem de estilo limpa. Número medido após a
+reformulação pós-MVP (remoção do LocalStack, banco local de pacientes, painel React,
+segundo caso de sinais vitais via BIDMC) — cresce a cada bloco novo.
 
 ---
 
@@ -277,10 +285,8 @@ python3 -m venv .venv && source .venv/bin/activate && make install
 make data
 make models-fetch
 
-# 3. Rodar as análises (produzem evidência real em output/) — modo local, sem nuvem
-make demo                                                   # sinais vitais
-PYTHONPATH=backend .venv/bin/python -m pipelines.video.cli --config <config>   # vídeo
-PYTHONPATH=backend .venv/bin/python -m pipelines.audio.cli --config <config>   # áudio
+# 3. Criar pacientes de demonstração com dados reais (idempotente)
+make seed-demo
 
 # 4. Subir o painel (dois terminais)
 make serve-api      # http://localhost:8000
@@ -290,8 +296,9 @@ make serve-front    # http://localhost:5173  (make frontend-install na 1a vez)
 make test
 ```
 
-O painel abre no paciente-demo já configurado; o replay percorre a narrativa da seção 4,
-com drill-down para a evidência real de cada evento.
+O painel lista os pacientes criados por `make seed-demo`; a tela de detalhe de cada um
+mostra a linha do tempo de risco com drill-down para a evidência real de cada evento (ver
+seção 4).
 
 ---
 
@@ -305,5 +312,6 @@ com drill-down para a evidência real de cada evento.
 | [`data/README.md`](../data/README.md) | Origem exata de cada dataset |
 | [`models/README.md`](../models/README.md) | Proveniência do modelo treinado |
 | [`training/README.md`](../training/README.md) | Passo a passo do treino do YOLOv8 |
+| [`docs/roteiro-audio-consulta.md`](roteiro-audio-consulta.md) | Roteiro para gravar o áudio de consulta (transcrição/termos/sentimento/fadiga) |
 | `.specs/STATE.md` | Decisões de arquitetura (AD-NNN) e estado do projeto |
 | `.specs/features/<nome>/validation.md` | Relatórios de verificação por funcionalidade |
