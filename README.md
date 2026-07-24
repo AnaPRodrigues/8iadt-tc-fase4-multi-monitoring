@@ -104,7 +104,7 @@ backend/
 │   ├── prescription/ Leitura de PDF + regras de dose
 │   └── fusion/       Motor de fusão de risco + alerta explicável (local)
 ├── aws/          Modo aws: só Textract e Rekognition; adapters intercambiáveis por ENV
-├── scripts/      Utilitários (download de datasets)
+├── scripts/      Utilitários (download de datasets, carga de pacientes de demonstração)
 └── tests/        Testes automatizados (unitários + integração)
 
 frontend/     Painel web (React + Vite) — consome só a API, sem lógica de processamento própria
@@ -188,10 +188,11 @@ make serve-api
 make serve-front
 ```
 
-Abra `http://localhost:5173`, cadastre um paciente e envie arquivos para ele — ou use a
-carga inicial de demonstração (ver `make seed`, quando disponível) para já ter pacientes
-com dados. As portas são ajustáveis: `make serve-api API_PORT=9000` e
-`make serve-front API_PORT=9000` sobem o par noutra porta.
+Abra `http://localhost:5173`, cadastre um paciente e envie arquivos para ele — ou rode
+`make seed-demo` para já ter 3 pacientes com dados reais (queda + monitoramento fetal,
+cirurgia + prescrição, ausculta + internação), sem precisar cadastrar nada na mão. As
+portas são ajustáveis: `make serve-api API_PORT=9000` e `make serve-front API_PORT=9000`
+sobem o par noutra porta.
 
 **Log de atividade no terminal.** Enquanto a API roda, o terminal mostra, de forma
 legível, o que o sistema está fazendo — arquivo recebido, início/fim de cada análise,
@@ -252,7 +253,9 @@ YOLOv8n vs. YOLOv8s e publicando o melhor), veja
 | `make models-fetch` | Baixa o detector YOLOv8 já treinado do Hugging Face |
 | `make serve-api` | Sobe a API (FastAPI) em `http://localhost:8000` |
 | `make serve-front` | Sobe o painel (React/Vite) em `http://localhost:5173` |
+| `make seed-demo` | Cria 3 pacientes de demonstração com dados reais (idempotente) |
 | `make demo` | Roda a análise de sinais vitais ponta a ponta |
+| `make bidmc-scan` | Lista registros de internação (BIDMC) com evento clínico |
 | `make test` / `make test-unit` | Roda a suíte completa / só os testes rápidos |
 | `make lint` / `make fmt` | Checagem / formatação de estilo |
 | `make clean` | Limpa `output/`, caches e `__pycache__` |

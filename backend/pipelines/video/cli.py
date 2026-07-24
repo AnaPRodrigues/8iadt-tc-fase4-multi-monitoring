@@ -2,9 +2,11 @@
 `pose_features.py` -> `pose_detector.py`, gravando evidência real via `common.evidence`
 e métricas via `pose_evaluate.py` sob ``output/video_pose/<run_id>/``.
 
-Pré-requisito operacional de F5 (não um `FUSION-NN`): sem este driver não existe
-`evidence_id` real de F1 para a config do paciente-demo referenciar. Escopo restrito à
-raia pose (URFD) -- a raia objeto/Endoscapes não compõe o paciente-demo (AD-045b).
+Escopo restrito à raia pose (URFD), avaliada em lote contra várias sequências de uma vez.
+A raia de estrutura crítica cirúrgica (Endoscapes) opera sobre um quadro único por vez e
+é acionada pelo despacho de análise da API (`app/analise.py`), não por este driver de
+lote — a métrica de detecção dessa raia (`object_evaluate.py`) é usada pelos testes e
+pelo notebook de treino, não por um CLI próprio.
 
 Mesmo esqueleto de `pipelines/vitals/cli.py`/`pipelines/audio/cli.py`:
 `run(config_path, run_id)`/`main(argv)`, mesma dica de `make data` em `FileNotFoundError`.
