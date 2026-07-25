@@ -144,10 +144,10 @@ def max_vertical_velocity(
     maiores valores positivos; se não houver 5 acima do piso, devolve 0.0.
     """
     valid = [v for v in velocities if v is not None]
-    positive = sorted([v for v in valid if v > 0.15], reverse=True)
-    if len(positive) < 10:
+    positive = sorted([v for v in valid if v > 0.10], reverse=True)
+    if len(positive) < 5:
         return 0.0
-    return sum(positive[:10]) / 10.0
+    return sum(positive[:5]) / 5.0
 def _min_visibility(frame: PoseFrame, indices: list[int]) -> float:
     """Menor visibilidade entre os landmarks pedidos — gate de qualidade.
 
@@ -165,30 +165,51 @@ def select_ground_person(
 ) -> list[PoseFrame | None]:
     """Seleciona, por frame, a pessoa com maior Y médio (mais próxima do chão).
 
-    Filtra deteções de baixa qualidade (visibilidade média < 0.7) que são
-    tipicamente alucinações do MediaPipe em objetos (impressoras, móveis).
-    Frames sem pessoa válida → ``None``.
+    Aplica dois filtros anti-alucinação:
+    1. Visibilidade média ≥ 0.7 (pessoa real vs. objeto)
+    2. Consistência temporal: ignora "pessoas" que só aparecem em frames
+       isolados (< 3 frames consecutivos). Uma pessoa real é detetada
+       de forma contínua; uma impressora gera deteções esporádicas.
     """
-    result: list[PoseFrame | None] = []
+    n = len(all_poses)
+    result: list[PoseFrame | None] = [None] * n
+
+    # Primeiro, computa a "qualidade" de cada pose por frame
+    scored: list[list[tuple[PoseFrame, float, float]]] = []
     for poses in all_poses:
-        valid = [p for p in poses if p is not None]
-        # Filtra alucinações: pessoa real tem landmarks bem visíveis
-        human_like = [
-            p for p in valid
-            if sum(lm[3] for lm in p.landmarks) / len(p.landmarks) >= 0.7
-        ]
-        if not human_like:
-            # Se só há deteções de baixa qualidade, usa a melhor delas
-            # (fallback — melhor que nada)
-            if not valid:
-                result.append(None)
+        frame_scores: list[tuple[PoseFrame, float, float]] = []
+        for p in poses:
+            if p is None:
                 continue
-            human_like = valid
-        # Pessoa com maior Y médio = mais abaixo na imagem = nível do solo
-        best = max(human_like, key=lambda p: sum(
-            lm[1] for lm in p.landmarks
-        ) / len(p.landmarks))
-        result.append(best)
+            avg_vis = sum(lm[3] for lm in p.landmarks) / len(p.landmarks)
+            avg_y = sum(lm[1] for lm in p.landmarks) / len(p.landmarks)
+            if avg_vis >= 0.7:
+                frame_scores.append((p, avg_y, avg_vis))
+        scored.append(frame_scores)
+
+    # Filtro temporal: só considera poses que aparecem em ≥ 3 frames consecutivos
+    for i in range(n):
+        if not scored[i]:
+            continue
+        # Verifica se esta "pessoa" aparece em pelo menos 3 frames consecutivos
+        streak = 0
+        for j in range(max(0, i - 5), min(n, i + 6)):
+            if scored[j]:
+                streak += 1
+                if streak >= 3:
+                    break
+            else:
+                streak = 0
+        if streak < 3:
+            scored[i] = []  # descarta — deteção esporádica
+
+    # Seleciona a pessoa com maior Y em cada frame
+    for i in range(n):
+        if not scored[i]:
+            result[i] = None
+        else:
+            result[i] = max(scored[i], key=lambda x: x[1])[0]
+
     return result
 
 

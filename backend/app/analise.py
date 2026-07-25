@@ -251,7 +251,7 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
     _FALL_THRESHOLD = 0.55
     _PERSISTENCE_FRAMES = 1
     _NUM_POSES = 3
-    _MIN_VERTICAL_VELOCITY = 0.25
+    _MIN_VERTICAL_VELOCITY = 0.15
 
     # Extrai frames para um diretório temporário — o pipeline de pose
     # espera PNGs em disco (extract_all_keypoints usa cv2.imread).

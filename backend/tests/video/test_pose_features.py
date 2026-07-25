@@ -241,33 +241,31 @@ def test_joint_angles_per_frame_multi_joint():
 # select_ground_person
 # --------------------------------------------------------------------------- #
 def test_select_ground_person_single_person():
-    """Com uma única pessoa → devolve essa pessoa."""
+    """Com uma única pessoa em ≥3 frames consecutivos → devolve essa pessoa."""
     frame = _make_full_frame()
-    all_poses = [[frame]]
+    # Precisa de 3+ frames consecutivos para passar no filtro temporal
+    all_poses = [[frame], [frame], [frame], [frame]]
 
     result = select_ground_person(all_poses)
 
-    assert result == [frame]
+    assert len(result) == 4
+    assert all(r is not None for r in result)
+    assert result[0] == frame
 
 
 def test_select_ground_person_picks_lowest_y():
     """Pessoa com Y maior (mais abaixo na imagem) deve ser selecionada."""
-    person_floor = _make_full_frame()  # todos os landmarks em y=0.9 (ajustar abaixo)
-    person_stand = _make_full_frame()
-
-    # Pessoa no chão: landmarks com Y grande (perto do fundo da imagem)
     floor_landmarks = [(0.5, 0.9, 0.0, 0.9) for _ in range(33)]
     stand_landmarks = [(0.5, 0.3, 0.0, 0.9) for _ in range(33)]
-
     person_floor = PoseFrame(landmarks=floor_landmarks)
     person_stand = PoseFrame(landmarks=stand_landmarks)
 
-    all_poses = [[person_stand, person_floor]]  # standing first, floor second
+    # 4 frames consecutivos com 2 pessoas
+    all_poses = [[person_stand, person_floor]] * 4
 
     result = select_ground_person(all_poses)
 
-    assert len(result) == 1
-    # Deve escolher a pessoa no chão (Y médio maior = mais abaixo)
+    assert len(result) == 4
     assert result[0] is not None
     avg_y = sum(lm[1] for lm in result[0].landmarks) / 33
     assert avg_y == pytest.approx(0.9, abs=0.01)
@@ -275,24 +273,39 @@ def test_select_ground_person_picks_lowest_y():
 
 def test_select_ground_person_all_none():
     """Frame sem nenhuma pessoa → None."""
-    all_poses = [[None, None]]
+    all_poses = [[None, None]] * 4
 
     result = select_ground_person(all_poses)
 
-    assert result == [None]
+    assert result == [None, None, None, None]
 
 
 def test_select_ground_person_mixed_frames():
-    """Alguns frames com pessoa, outros sem."""
+    """Alguns frames com pessoa, outros sem — streak de 3+ mantém a pessoa."""
     frame_a = _make_full_frame()
-    all_poses = [[frame_a], [None], [frame_a]]
+    all_poses = [[frame_a], [frame_a], [frame_a], [None], [frame_a], [frame_a], [frame_a]]
 
     result = select_ground_person(all_poses)
 
-    assert len(result) == 3
+    assert len(result) == 7
     assert result[0] is not None
-    assert result[1] is None
+    assert result[1] is not None
     assert result[2] is not None
+    assert result[3] is None  # frame vazio
+    assert result[4] is not None  # streak de 3 retoma
+    assert result[5] is not None
+    assert result[6] is not None
+
+
+def test_select_ground_person_sporadic_ignored():
+    """Deteção esporádica (< 3 frames consecutivos) → ignorada."""
+    frame = _make_full_frame()
+    # Apenas 2 frames — não atinge o mínimo de 3 consecutivos
+    all_poses = [[frame], [frame], [None], [None], [None]]
+
+    result = select_ground_person(all_poses)
+
+    assert result == [None, None, None, None, None]
 
 
 # --------------------------------------------------------------------------- #

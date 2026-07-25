@@ -245,7 +245,7 @@ def validate_fall_dynamic(
     fall_verdict: str,
     fall_frame_idx: int | None,
     velocities: list[float | None],
-    min_vertical_velocity: float = 0.25,
+    min_vertical_velocity: float = 0.15,
 ) -> tuple[str, int | None, float, str]:
     """Validação dinâmica de queda: exige pico de velocidade vertical.
 
