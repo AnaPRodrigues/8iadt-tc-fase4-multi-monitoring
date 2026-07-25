@@ -241,6 +241,47 @@ _TRADUCAO_ARTICULACAO = {
 }
 
 
+def validate_fall_dynamic(
+    fall_verdict: str,
+    fall_frame_idx: int | None,
+    velocities: list[float | None],
+    min_vertical_velocity: float = 0.15,
+) -> tuple[str, int | None, float, str]:
+    """Validação dinâmica de queda: exige pico de velocidade vertical.
+
+    Uma pessoa já sentada/reclinada desde o frame 0 tem o torso horizontal
+    mas $V_y \\approx 0$ — não é queda. Só confirma ``FALL_DETECTED`` se
+    houve um pico de velocidade acima do limiar **antes** da horizontalização.
+
+    Devolve ``(verdict, frame_idx, velocity_score, description)``.
+    """
+    if fall_verdict != "queda":
+        return (fall_verdict, fall_frame_idx, 0.0, "")
+
+    from pipelines.video.pose_features import max_vertical_velocity
+
+    max_vy = max_vertical_velocity(velocities, window_frames=15)
+
+    if max_vy < min_vertical_velocity:
+        # Posição horizontal mas sem o pico dinâmico → postura estática
+        return (
+            "adl",
+            None,
+            round(max_vy, 3),
+            "Postura reclinada/estática detectada — sem evidência de queda "
+            f"(Vy max = {max_vy:.3f}/frame, abaixo do limiar {min_vertical_velocity}).",
+        )
+
+    # Queda confirmada: pico de velocidade + horizontalização
+    return (
+        "queda",
+        fall_frame_idx,
+        round(max_vy, 3),
+        f"Queda abrupta detectada no frame {fall_frame_idx} "
+        f"(variação de velocidade vertical Vy = {max_vy:.3f}/frame).",
+    )
+
+
 def sumarizar_achados_video(
     postural_findings: list[PosturalFinding],
     tilt_findings: list[PosturalFinding],

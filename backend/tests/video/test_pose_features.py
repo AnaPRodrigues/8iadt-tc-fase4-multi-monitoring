@@ -9,8 +9,10 @@ from pipelines.video.models import JointTarget, PoseFrame
 from pipelines.video.pose_features import (
     joint_angle,
     joint_angles_per_frame,
+    max_vertical_velocity,
     select_ground_person,
     trunk_tilt,
+    vertical_velocity,
     windowed_features,
 )
 
@@ -291,3 +293,42 @@ def test_select_ground_person_mixed_frames():
     assert result[0] is not None
     assert result[1] is None
     assert result[2] is not None
+
+
+# --------------------------------------------------------------------------- #
+# vertical_velocity / max_vertical_velocity
+# --------------------------------------------------------------------------- #
+def test_vertical_velocity_queda_produz_pico_positivo():
+    """Queda real: quadril desce → Vy positivo (eixo Y invertido no MediaPipe)."""
+    # Frame 1: quadril em y=0.4 (alto), frame 2: y=0.8 (baixo) → Vy = +0.4
+    f1 = _make_full_frame({23: (0.50, 0.40, 0.0, 0.9), 24: (0.52, 0.40, 0.0, 0.9)})
+    f2 = _make_full_frame({23: (0.50, 0.80, 0.0, 0.9), 24: (0.52, 0.80, 0.0, 0.9)})
+
+    vy = vertical_velocity([f1, f2])
+
+    assert len(vy) == 2
+    assert vy[0] is None  # primeiro frame sem referência
+    assert vy[1] == pytest.approx(0.40, abs=0.01)
+
+
+def test_vertical_velocity_estatico_produz_zero():
+    """Pessoa parada → Vy ≈ 0."""
+    f = _make_full_frame({23: (0.50, 0.50, 0.0, 0.9), 24: (0.52, 0.50, 0.0, 0.9)})
+    vy = vertical_velocity([f, f, f])
+
+    assert vy[1] == pytest.approx(0.0, abs=0.01)
+    assert vy[2] == pytest.approx(0.0, abs=0.01)
+
+
+def test_max_vertical_velocity_ignora_none():
+    """max_vertical_velocity ignora frames None."""
+    vy = [None, 0.3, None, 0.1, 0.05]
+    max_v = max_vertical_velocity(vy, window_frames=3)
+    # Janela [0.3, None, 0.1] → max = 0.3; [None, 0.1, 0.05] → max = 0.1
+    assert max_v == pytest.approx(0.3, abs=0.01)
+
+
+def test_max_vertical_velocity_empty():
+    """Sem dados → 0.0."""
+    assert max_vertical_velocity([], window_frames=15) == 0.0
+    assert max_vertical_velocity([None, None], window_frames=15) == 0.0

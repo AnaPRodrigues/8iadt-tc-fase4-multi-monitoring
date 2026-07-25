@@ -240,12 +240,18 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         save_fall_evidence,
         save_postural_evidence,
         sumarizar_achados_video,
+        validate_fall_dynamic,
     )
-    from pipelines.video.pose_features import select_ground_person, windowed_features
+    from pipelines.video.pose_features import (
+        select_ground_person,
+        vertical_velocity,
+        windowed_features,
+    )
 
     _FALL_THRESHOLD = 0.55
     _PERSISTENCE_FRAMES = 1
     _NUM_POSES = 3
+    _MIN_VERTICAL_VELOCITY = 0.15
 
     # Extrai frames para um diretório temporário — o pipeline de pose
     # espera PNGs em disco (extract_all_keypoints usa cv2.imread).
@@ -289,10 +295,20 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
             windows, _FALL_THRESHOLD, _PERSISTENCE_FRAMES,
         )
 
+        # Validação dinâmica: exige pico de velocidade vertical para
+        # distinguir queda real de postura reclinada estática (falso positivo)
+        velocities = vertical_velocity(frames)
+        fall_verdict, fall_frame_idx, vy_score, vy_description = (
+            validate_fall_dynamic(
+                fall_verdict, fall_frame_idx, velocities, _MIN_VERTICAL_VELOCITY,
+            )
+        )
+
         todos_detalhes: dict = {
             "quadros_analisados": len(frame_paths),
             "formato": "video",
             "pessoas_detectadas": n_pessoas,
+            "vy_max": round(vy_score, 3),
         }
         fall_detected = fall_verdict == "queda" and fall_frame_idx is not None
 
@@ -323,10 +339,17 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         todos_detalhes["n_tilt"] = len(tilt_findings)
         todos_detalhes["n_consolidated"] = len(consolidated)
 
+        # Se a queda foi rejeitada pelo filtro de velocidade, reporta como postura estática
+        postural_rest_note: str | None = None
+        if vy_description and fall_verdict != "queda":
+            postural_rest_note = vy_description
+            todos_detalhes["postural_rest"] = True
+
         if not consolidated and not fall_detected:
             razao = _razao_sem_queda(windows, len(frame_paths))
+            nota = f" {postural_rest_note}" if postural_rest_note else ""
             return ResultadoAnalise(
-                resumo=f"Sem alterações detectadas no período monitorado.{razao}",
+                resumo=f"Sem alterações detectadas no período monitorado.{razao}{nota}",
                 pontuacao=0.0,
                 detalhes=todos_detalhes,
             )

@@ -76,17 +76,77 @@ def windowed_features(frames: list[PoseFrame | None], window_size: int) -> list[
 
 
 # --------------------------------------------------------------------------- #
-# Multi-person + ângulos articulares + inclinação de tronco
+# Constantes compartilhadas
 # --------------------------------------------------------------------------- #
 _MIN_VISIBILITY = 0.5
-
-# Landmark indices (MediaPipe Pose, 33 pontos)
 _SHOULDER_LEFT = 11
 _SHOULDER_RIGHT = 12
 _HIP_LEFT = 23
 _HIP_RIGHT = 24
 
 
+# --------------------------------------------------------------------------- #
+# Velocidade vertical do centro de massa (filtro anti-estático de queda)
+# --------------------------------------------------------------------------- #
+def vertical_velocity(
+    frames: list[PoseFrame | None],
+) -> list[float | None]:
+    """Velocidade vertical do centro de massa (quadril) por frame.
+
+    Calcula $V_y = (Y_{atual} - Y_{anterior}) / 1$ frame. O eixo Y do
+    MediaPipe cresce para baixo — uma queda real produz um pico positivo
+    de $V_y$ (o quadril desce rapidamente na imagem).
+
+    Devolve ``None`` para frames sem pessoa ou sem frame anterior válido.
+    """
+    velocities: list[float | None] = []
+    prev_y: float | None = None
+
+    for frame in frames:
+        if frame is None:
+            velocities.append(None)
+            prev_y = None
+            continue
+
+        # Centro de massa: ponto médio dos quadris (23, 24)
+        ly = frame.landmarks[23][1]
+        ry = frame.landmarks[24][1]
+        lv = frame.landmarks[23][3]
+        rv = frame.landmarks[24][3]
+        if lv < _MIN_VISIBILITY or rv < _MIN_VISIBILITY:
+            velocities.append(None)
+            prev_y = None
+            continue
+
+        current_y = (ly + ry) / 2.0
+
+        if prev_y is not None:
+            vy = current_y - prev_y  # positivo = descendo (queda)
+        else:
+            vy = None
+
+        velocities.append(vy)
+        prev_y = current_y
+
+    return velocities
+
+
+def max_vertical_velocity(
+    velocities: list[float | None], window_frames: int = 15
+) -> float:
+    """Maior velocidade vertical encontrada em qualquer janela de N frames.
+
+    Ignora frames ``None``. Se não houver dados suficientes, devolve 0.0.
+    """
+    valid = [v for v in velocities if v is not None]
+    if not valid:
+        return 0.0
+    # Máximo em janela deslizante
+    max_vy = 0.0
+    for i in range(len(valid) - window_frames + 1):
+        window_max = max(valid[i:i + window_frames])
+        max_vy = max(max_vy, window_max)
+    return max_vy
 def _min_visibility(frame: PoseFrame, indices: list[int]) -> float:
     """Menor visibilidade entre os landmarks pedidos — gate de qualidade.
 
