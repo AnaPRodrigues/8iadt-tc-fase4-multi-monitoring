@@ -134,19 +134,18 @@ def vertical_velocity(
 def max_vertical_velocity(
     velocities: list[float | None], window_frames: int = 15
 ) -> float:
-    """Maior velocidade vertical encontrada em qualquer janela de N frames.
+    """Maior velocidade vertical **sustentada** no sinal.
 
-    Ignora frames ``None``. Se não houver dados suficientes, devolve 0.0.
+    Exige pelo menos 3 valores acima de 0.05 (não necessariamente
+    consecutivos, mas presentes no sinal) para considerar movimento real.
+    Filtra jitter de tracking e picos isolados. Devolve a média dos 3
+    maiores — se não houver 3 acima do piso, devolve 0.0.
     """
     valid = [v for v in velocities if v is not None]
-    if not valid:
+    above = sorted([v for v in valid if v > 0.05], reverse=True)
+    if len(above) < 3:
         return 0.0
-    # Máximo em janela deslizante
-    max_vy = 0.0
-    for i in range(len(valid) - window_frames + 1):
-        window_max = max(valid[i:i + window_frames])
-        max_vy = max(max_vy, window_max)
-    return max_vy
+    return sum(above[:3]) / 3.0
 def _min_visibility(frame: PoseFrame, indices: list[int]) -> float:
     """Menor visibilidade entre os landmarks pedidos — gate de qualidade.
 
