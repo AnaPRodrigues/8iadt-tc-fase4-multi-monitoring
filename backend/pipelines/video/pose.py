@@ -48,22 +48,28 @@ def ensure_pose_model(cache_dir: Path) -> Path:
     return model_path
 
 
-def create_landmarker(model_path: Path) -> vision.PoseLandmarker:
-    """Cria o `PoseLandmarker` (Task API) a partir do modelo já em cache."""
+def create_landmarker(model_path: Path, num_poses: int = 3) -> vision.PoseLandmarker:
+    """Cria o `PoseLandmarker` (Task API) a partir do modelo já em cache.
+
+    ``num_poses`` controla quantos esqueletos o MediaPipe tenta detetar por frame
+    (default 3 — cobre paciente + 2 profissionais no quarto).
+    """
     base_options = mp_python.BaseOptions(model_asset_path=str(model_path))
     options = vision.PoseLandmarkerOptions(
         base_options=base_options,
         running_mode=vision.RunningMode.IMAGE,
-        num_poses=1,
+        num_poses=num_poses,
     )
     return vision.PoseLandmarker.create_from_options(options)
 
 
-def extract_keypoints(frame_path: Path, landmarker: vision.PoseLandmarker) -> PoseFrame | None:
-    """Roda o `PoseLandmarker` num frame real; `None` se nenhuma pessoa detectada.
+def extract_all_keypoints(
+    frame_path: Path, landmarker: vision.PoseLandmarker
+) -> list[PoseFrame]:
+    """Roda o `PoseLandmarker` e devolve **todos** os esqueletos detetados.
 
-    Nunca lança exceção nem inventa landmarks para um frame sem pessoa
-    detectável -- o chamador decide o que fazer com a ausência.
+    Devolve lista vazia se nenhuma pessoa for detetada. Cada elemento corresponde
+    a um esqueleto completo (33 landmarks).
     """
     frame = cv2.imread(str(frame_path))
     if frame is None:
@@ -74,7 +80,19 @@ def extract_keypoints(frame_path: Path, landmarker: vision.PoseLandmarker) -> Po
     result = landmarker.detect(mp_image)
 
     if not result.pose_landmarks:
-        return None
+        return []
 
-    landmarks = [(lm.x, lm.y, lm.z, lm.visibility) for lm in result.pose_landmarks[0]]
-    return PoseFrame(landmarks=landmarks)
+    return [
+        PoseFrame(landmarks=[(lm.x, lm.y, lm.z, lm.visibility) for lm in pose_landmarks])
+        for pose_landmarks in result.pose_landmarks
+    ]
+
+
+def extract_keypoints(frame_path: Path, landmarker: vision.PoseLandmarker) -> PoseFrame | None:
+    """Wrapper retrocompatível: devolve o primeiro esqueleto ou ``None``.
+
+    Delegar a ``extract_all_keypoints`` mantém a semântica original (1 pessoa =
+    primeiro elemento; 0 pessoas = ``None``) sem duplicar a lógica de inferência.
+    """
+    all_poses = extract_all_keypoints(frame_path, landmarker)
+    return all_poses[0] if all_poses else None
