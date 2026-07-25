@@ -408,7 +408,7 @@ def _analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
     from aws.adapters import get_image_analyzer
     from aws.adapters.cloud import register_cloud_adapters
     from aws.clients import resolve_env
-    from common.evidence import save_evidence
+    from common.evidence import evidence_dir, save_evidence
     from pipelines.video.adapters import register_local_adapters
     from pipelines.video.object_detector import CRITICAL_STRUCTURES
 
@@ -489,13 +489,33 @@ def _analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
     primeiro_kf = min(estruturas_por_keyframe.keys())
     instante = round(primeiro_kf / video_fps, 1)
 
-    # Evidência: guarda o primeiro keyframe com estruturas como artefato anotado.
+    # Evidência: extrai o primeiro keyframe com estruturas como PNG.
+    primeiro_kf_com_estrutura = min(estruturas_por_keyframe.keys())
+    cap2 = cv2.VideoCapture(str(caminho))
+    keyframe_png: Path | None = None
+    try:
+        cap2.set(cv2.CAP_PROP_POS_FRAMES, primeiro_kf_com_estrutura)
+        ret, frame = cap2.read()
+        if ret:
+            destino_kf = evidence_dir("video_object", run_id)
+            destino_kf.mkdir(parents=True, exist_ok=True)
+            keyframe_png = destino_kf / f"{caminho.stem}-keyframe-{primeiro_kf_com_estrutura}.png"
+            cv2.imwrite(str(keyframe_png), frame)
+    finally:
+        cap2.release()
+
+    if keyframe_png is None or not keyframe_png.is_file():
+        return ResultadoAnalise(
+            resumo="Não foi possível extrair keyframe para evidência do vídeo cirúrgico.",
+            pontuacao=None,
+        )
+
     evidencia = save_evidence(
         feature="video_object",
         run_id=run_id,
         evidence_id=f"{caminho.stem}-cirurgico-video",
         source_record_id=caminho.stem,
-        artifact_path=caminho,
+        artifact_path=keyframe_png,
         metadata={
             "estruturas": [
                 {"nome": e, "keyframes": [k for k, v in estruturas_por_keyframe.items() if e in v]}
