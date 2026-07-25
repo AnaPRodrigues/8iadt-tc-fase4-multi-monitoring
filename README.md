@@ -15,11 +15,12 @@ equipe automaticamente quando algo preocupante é detectado.
 
 | Modalidade | O que analisa | Técnica / modelo |
 | --- | --- | --- |
-| **Vídeo** | Postura e padrões de movimentação (quedas) e, em contexto cirúrgico, estruturas anatômicas críticas | MediaPipe Pose (postura) + YOLOv8 fine-tuned (detecção de objetos) |
-| **Áudio** | Dificuldade respiratória em ausculta, transcrição de consultas, termos clínicos críticos e sinais de fadiga vocal | Random Forest sobre features acústicas + faster-whisper (transcrição) |
-| **Sinais vitais** | Séries temporais contínuas: frequência cardíaca (fetal, CTU-UHB) e frequência cardíaca + oxigenação (SpO2) de internação adulta (BIDMC), detectando anomalias | z-score móvel + Isolation Forest sobre janelas |
-| **Prescrições** | Lê receitas em PDF e verifica dose fora da faixa segura ou variação abrupta no histórico | Extração de texto (PDF/Textract) + regras clínicas |
-| **Fusão e alerta** | Combina as quatro análises num indicador de risco (verde/amarelo/vermelho) e dispara alerta por e-mail com links para a evidência | Late fusion ponderada com decaimento temporal + histerese |
+| **Vídeo — movimentação** | Postura, quedas (com filtro dinâmico de velocidade), desvios posturais, ângulos articulares, inclinação de tronco | MediaPipe Pose + YOLOv8n (crop de pessoa) + filtro temporal $V_y$ anti-falso-positivo |
+| **Vídeo — cirurgia** | Estruturas anatômicas críticas em vídeo cirúrgico (keyframes a cada 2s) | YOLOv8 fine-tuned (Endoscapes) com evidência anotada (bboxes) |
+| **Áudio** | Sons respiratórios (com anotação ICBHI) ou consultas (transcrição, termos críticos, fadiga vocal) — dispatch automático | Random Forest + faster-whisper + Parselmouth (jitter/shimmer/HNR) |
+| **Sinais vitais** | Séries temporais: cardiotocografia fetal (CTU-UHB) e internação adulta com HR/SpO2 (BIDMC) | z-score móvel + Isolation Forest sobre janelas |
+| **Prescrições** | Lê receitas em PDF, verifica dose fora da faixa e variação abrupta; geração avulsa de prescrições sintéticas | Extração de texto (pdfplumber/Textract) + regras clínicas + gerador standalone |
+| **Fusão e alerta** | Combina as análises num indicador de risco (verde/amarelo/vermelho) com alerta explicável local | Late fusion ponderada com decaimento temporal + histerese |
 | **Painel** | Pacientes, envios, linha do tempo de risco, alertas e drill-down de evidência | React + Vite sobre a API |
 
 **Princípio central — evidência sempre reproduzível.** Cada anomalia detectada gera um
@@ -254,6 +255,7 @@ YOLOv8n vs. YOLOv8s e publicando o melhor), veja
 | `make serve-api` | Sobe a API (FastAPI) em `http://localhost:8000` |
 | `make serve-front` | Sobe o painel (React/Vite) em `http://localhost:5173` |
 | `make seed-demo` | Cria 3 pacientes de demonstração com dados reais (idempotente) |
+| `make gen-presc` | Gera uma prescrição avulsa em PDF (ex.: `make gen-presc ARGS="--drug paracetamol --dose 500"`) |
 | `make demo` | Roda a análise de sinais vitais ponta a ponta |
 | `make bidmc-scan` | Lista registros de internação (BIDMC) com evento clínico |
 | `make test` / `make test-unit` | Roda a suíte completa / só os testes rápidos |
