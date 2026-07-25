@@ -57,17 +57,35 @@ def generate_prescription(
 
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer)
-    lines = [
+    y = 800
+
+    # Cabeçalho institucional
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawString(45, y, "Hospital 8IADT — Prescrição Médica")
+    pdf.line(45, y - 12, 550, y - 12)
+
+    # Campos core (formato compatível com o parser: "Label: valor" por linha)
+    pdf.setFont("Helvetica", 11)
+    y -= 28
+    for line in [
         f"Paciente: {patient_id}",
         f"Medicamento: {drug}",
         f"Dose: {dose} {unit}",
         f"Frequência: {frequency}",
         f"Data: {timestamp}",
-    ]
-    y = 800
-    for line in lines:
-        pdf.drawString(72, y, line)
-        y -= 20
+    ]:
+        pdf.drawString(45, y, line)
+        y -= 18
+
+    # Médico responsável (campo informativo, não parseado)
+    y -= 10
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(45, y, "Nome Completo: Dr(a). Médico Responsável")
+    y -= 14
+    pdf.drawString(45, y, "CRM/CRO: 123456/SP  |  Telefone: (11) 3456-7890")
+    y -= 14
+    pdf.drawString(45, y, "Endereço: Av. Paulista, 1000, Bloco B - São Paulo/SP")
+
     pdf.save()
     return buffer.getvalue()
 
