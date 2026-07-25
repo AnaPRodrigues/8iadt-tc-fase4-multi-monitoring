@@ -459,6 +459,7 @@ def _analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
 
     # Extrai e analisa cada keyframe.
     cap = cv2.VideoCapture(str(caminho))
+    bboxes_por_keyframe: dict[int, list[dict]] = {}
     try:
         estruturas_por_keyframe: dict[int, list[str]] = {}
         for kf_idx in keyframe_indices:
@@ -476,6 +477,11 @@ def _analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
             ]
             if criticas:
                 estruturas_por_keyframe[kf_idx] = criticas
+                # Guarda as bboxes das estruturas críticas para desenho
+                bboxes_por_keyframe[kf_idx] = [
+                    b for b in analise_imagem.raw.get("bboxes", [])
+                    if b["class"] in CRITICAL_STRUCTURES
+                ]
     finally:
         cap.release()
 
@@ -498,7 +504,7 @@ def _analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
     primeiro_kf = min(estruturas_por_keyframe.keys())
     instante = round(primeiro_kf / video_fps, 1)
 
-    # Evidência: extrai o primeiro keyframe com estruturas como PNG.
+    # Evidência: extrai o primeiro keyframe com estruturas, desenha as bboxes.
     primeiro_kf_com_estrutura = min(estruturas_por_keyframe.keys())
     cap2 = cv2.VideoCapture(str(caminho))
     keyframe_png: Path | None = None
@@ -506,6 +512,16 @@ def _analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
         cap2.set(cv2.CAP_PROP_POS_FRAMES, primeiro_kf_com_estrutura)
         ret, frame = cap2.read()
         if ret:
+            # Desenha as bounding boxes no frame
+            for bbox_info in bboxes_por_keyframe.get(primeiro_kf_com_estrutura, []):
+                x, y, w, h = [int(v) for v in bbox_info["bbox"]]
+                nome = _TRADUCAO_ESTRUTURA_CRITICA.get(bbox_info["class"], bbox_info["class"])
+                conf = bbox_info["confidence"]
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(
+                    frame, f"{nome} ({conf:.0%})",
+                    (x, max(y - 8, 16)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1,
+                )
             destino_kf = evidence_dir("video_object", run_id)
             destino_kf.mkdir(parents=True, exist_ok=True)
             keyframe_png = destino_kf / f"{caminho.stem}-keyframe-{primeiro_kf_com_estrutura}.png"

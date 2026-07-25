@@ -29,7 +29,16 @@ class YoloImageAnalyzer:
             detections = self._detector.detect(Path(tmp.name))
 
         labels = [ImageLabel(name=d.class_name, confidence=d.confidence) for d in detections]
-        return ImageAnalysis(labels=labels, raw={"detection_count": len(detections)})
+        return ImageAnalysis(
+            labels=labels,
+            raw={
+                "detection_count": len(detections),
+                "bboxes": [
+                    {"class": d.class_name, "confidence": d.confidence, "bbox": list(d.bbox)}
+                    for d in detections
+                ],
+            },
+        )
 
 
 def register_local_adapters(weights_path: Path) -> None:
