@@ -142,10 +142,10 @@ def max_vertical_velocity(
     maiores — se não houver 3 acima do piso, devolve 0.0.
     """
     valid = [v for v in velocities if v is not None]
-    above = sorted([v for v in valid if v > 0.05], reverse=True)
-    if len(above) < 3:
+    above = sorted([v for v in valid if v > 0.10], reverse=True)
+    if len(above) < 5:
         return 0.0
-    return sum(above[:3]) / 3.0
+    return sum(above[:5]) / 5.0
 def _min_visibility(frame: PoseFrame, indices: list[int]) -> float:
     """Menor visibilidade entre os landmarks pedidos — gate de qualidade.
 

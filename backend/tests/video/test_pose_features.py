@@ -320,26 +320,25 @@ def test_vertical_velocity_estatico_produz_zero():
     assert vy[2] == pytest.approx(0.0, abs=0.01)
 
 
-def test_max_vertical_velocity_sustained_requer_3_frames():
-    """Top 3 acima de 0.05 → média dos 3 maiores."""
-    vy = [0.3, 0.3, 0.3, 0.2, 0.01, 0.01]
-    max_v = max_vertical_velocity(vy, window_frames=6)
-    # top 3 = [0.3, 0.3, 0.3] → média = 0.3
+def test_max_vertical_velocity_sustained_requer_5_frames():
+    """Top 5 acima de 0.10 → média dos 5 maiores."""
+    vy = [0.3, 0.3, 0.3, 0.3, 0.3, 0.2, 0.01, 0.01]
+    max_v = max_vertical_velocity(vy, window_frames=8)
     assert max_v == pytest.approx(0.3, abs=0.01)
 
 
 def test_max_vertical_velocity_pico_isolado_ignorado():
-    """Menos de 3 frames acima de 0.05 → 0.0."""
-    vy = [0.0, 0.0, 0.25, 0.0, 0.0, 0.0]
+    """Menos de 5 frames acima de 0.10 → 0.0."""
+    vy = [0.0, 0.0, 0.25, 0.0, 0.11, 0.0]
     max_v = max_vertical_velocity(vy, window_frames=6)
     assert max_v == 0.0
 
 
 def test_max_vertical_velocity_ignora_none():
-    """max_vertical_velocity ignora frames None."""
-    vy = [None, 0.3, 0.3, 0.3, None, 0.1]
-    max_v = max_vertical_velocity(vy, window_frames=6)
-    # válidos: 0.3, 0.3, 0.3, 0.1 → top 3 acima de 0.05 → 0.3
+    """max_vertical_velocity ignora frames None — mas exige 5 acima de 0.10."""
+    vy = [None, 0.3, 0.3, 0.3, 0.3, 0.3, None, 0.1]
+    max_v = max_vertical_velocity(vy, window_frames=8)
+    # válidos: 0.3, 0.3, 0.3, 0.3, 0.3, 0.1 → top 5 acima de 0.10 → 0.3
     assert max_v == pytest.approx(0.3, abs=0.01)
 
 
