@@ -7,7 +7,11 @@ import pytest
 
 from pipelines.video.models import MovementWindow
 from pipelines.video.pose import create_landmarker, ensure_pose_model, extract_keypoints
-from pipelines.video.pose_detector import classify_sequence, save_fall_evidence
+from pipelines.video.pose_detector import (
+    classify_sequence,
+    classify_with_persistence,
+    save_fall_evidence,
+)
 
 _URFD_FRAME = (
     Path(__file__).resolve().parents[3]
@@ -81,3 +85,75 @@ def test_save_fall_evidence_gera_artefato_real_e_sidecar_no_disco(tmp_path, land
     assert sidecar["metadata"]["seq_id"] == "fall-01"
     assert sidecar["metadata"]["event_frame"] == 50
     assert sidecar["metadata"]["score"] == 0.87
+
+
+# --------------------------------------------------------------------------- #
+# classify_with_persistence — filtro temporal
+# --------------------------------------------------------------------------- #
+def test_persistence_all_above_threshold_confirms_fall():
+    """30 janelas todas acima do limiar → queda confirmada."""
+    windows = [_window(0.7, start=i * 10, end=i * 10 + 9) for i in range(30)]
+
+    verdict, frame_idx = classify_with_persistence(windows, 0.55, persistence_frames=30)
+
+    assert verdict == "queda"
+    assert frame_idx == 0  # first window of the streak
+
+
+def test_persistence_counter_resets_on_below_threshold():
+    """20 acima, 1 abaixo, depois 40 acima → reset, queda no segundo streak."""
+    windows = (
+        [_window(0.7) for _ in range(20)]
+        + [_window(0.3)]  # reset!
+        + [_window(0.7, start=22, end=31) for _ in range(40)]
+    )
+
+    verdict, frame_idx = classify_with_persistence(windows, 0.55, persistence_frames=30)
+
+    assert verdict == "queda"
+    assert frame_idx == 22  # start of second streak
+
+
+def test_persistence_all_below_threshold_no_fall():
+    """Todas as janelas abaixo do limiar → adl."""
+    windows = [_window(0.1) for _ in range(50)]
+
+    verdict, frame_idx = classify_with_persistence(windows, 0.55, persistence_frames=30)
+
+    assert verdict == "adl"
+    assert frame_idx is None
+
+
+def test_persistence_agachamento_nao_dispara():
+    """Amplitude 0.50 com threshold 0.55 → não é queda (filtra agachamento)."""
+    windows = [_window(0.50) for _ in range(60)]
+
+    verdict, frame_idx = classify_with_persistence(windows, 0.55, persistence_frames=30)
+
+    assert verdict == "adl"
+
+
+def test_persistence_empty_windows():
+    """Lista vazia → dados insuficientes."""
+    verdict, frame_idx = classify_with_persistence([], 0.55, persistence_frames=30)
+
+    assert verdict == "dados_insuficientes"
+    assert frame_idx is None
+
+
+def test_persistence_exactly_at_threshold_no_fall():
+    """Amplitude igual ao limiar não dispara queda (comportamento >, não >=)."""
+    windows = [_window(0.55) for _ in range(60)]
+
+    verdict, frame_idx = classify_with_persistence(windows, 0.55, persistence_frames=30)
+
+    assert verdict == "adl"
+
+
+def test_classify_sequence_unchanged_backward_compat():
+    """classify_sequence original deve continuar a funcionar."""
+    windows = [_window(0.6)]
+
+    assert classify_sequence(windows, threshold=0.3) == "queda"
+    assert classify_sequence([_window(0.1)], threshold=0.3) == "adl"
+    assert classify_sequence([], threshold=0.3) == "dados_insuficientes"

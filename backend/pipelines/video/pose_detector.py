@@ -21,6 +21,7 @@ log = get_logger("video.pose_detector")
 # como ABRUPT_CHANGE_THRESHOLD): não é um valor fixado pela
 # spec, ajustável ao rodar o pipeline completo sobre o subconjunto curado.
 DEFAULT_FALL_THRESHOLD = 0.3
+DEFAULT_FALL_THRESHOLD_V2 = 0.55
 
 _MIN_VISIBILITY = 0.5
 
@@ -38,6 +39,39 @@ def classify_sequence(windows: list[MovementWindow], threshold: float) -> str:
     if any(w.center_of_mass_amplitude > threshold for w in windows):
         return "queda"
     return "adl"
+
+
+def classify_with_persistence(
+    windows: list[MovementWindow], threshold: float, persistence_frames: int,
+) -> tuple[str, int | None]:
+    """Classifica a sequência com filtro temporal de persistência.
+
+    O alerta de queda só é confirmado se ``persistence_frames`` janelas
+    consecutivas excederem o limiar. Se uma janela cair abaixo do limiar antes
+    disso, o contador reseta — evita falsos positivos em agachamentos e
+    inclinações momentâneas.
+
+    Devolve ``("queda", frame_index)`` com o frame da primeira janela da
+    sequência confirmada, ``("adl", None)`` ou ``("dados_insuficientes", None)``.
+    """
+    if not windows:
+        return ("dados_insuficientes", None)
+
+    consecutive = 0
+    first_frame: int | None = None
+
+    for w in windows:
+        if w.center_of_mass_amplitude > threshold:
+            if consecutive == 0:
+                first_frame = w.start_frame
+            consecutive += 1
+            if consecutive >= persistence_frames:
+                return ("queda", first_frame)
+        else:
+            consecutive = 0
+            first_frame = None
+
+    return ("adl", None)
 
 
 def draw_keypoints(frame_path: Path, pose_frame: PoseFrame, output_path: Path) -> Path:
