@@ -262,6 +262,7 @@ def validate_fall_dynamic(
     from pipelines.video.pose_features import (
         lateral_displacement,
         max_vertical_velocity,
+        trunk_tilt,
         vertical_velocity_robust,
     )
 
@@ -269,6 +270,7 @@ def validate_fall_dynamic(
     best_vy = 0.0
     best_description = ""
     best_frame = fall_frame_idx
+    _MIN_TILT_FOR_FALL = 25.0  # tronco precisa inclinar pelo menos 25° para considerar queda
 
     # Lista de velocidades por pessoa: cada elemento é list[float | None]
     all_vy: list[list[float | None]] = [velocities]
@@ -284,16 +286,30 @@ def validate_fall_dynamic(
                 ]
                 all_vy.append(vertical_velocity_robust(person_frames))
 
-    for vy_list in all_vy:
+    for p_idx, vy_list in enumerate(all_vy):
+        # Obtém os frames desta pessoa para verificar inclinação do tronco
+        person_frames: list[PoseFrame | None] = []
+        if all_poses_per_frame and p_idx < len(all_vy):
+            person_frames = [
+                poses[p_idx] if poses and p_idx < len(poses) else None
+                for poses in all_poses_per_frame
+            ]
+
+        # Verifica se o tronco alguma vez inclina o suficiente para ser queda.
+        # Um médico de pé tem tronco vertical (~0-10°); uma queda real atinge >30°.
+        tilts = [trunk_tilt(f) for f in person_frames if f is not None]
+        max_tilt = max(tilts) if tilts else 0.0
+
         # Velocidade robusta (fallback para upper body se quadril ocluído)
         max_vy = max_vertical_velocity(vy_list)
 
-        if max_vy >= min_vertical_velocity:
+        if max_vy >= min_vertical_velocity and max_tilt >= _MIN_TILT_FOR_FALL:
             if max_vy > best_vy:
                 best_vy = max_vy
                 best_description = (
                     f"Queda abrupta detectada no frame {fall_frame_idx} "
-                    f"(variação de velocidade vertical Vy = {max_vy:.3f}/frame)."
+                    f"(variação de velocidade vertical Vy = {max_vy:.3f}/frame, "
+                    f"inclinação do tronco = {max_tilt:.0f}°)."
                 )
                 best_frame = fall_frame_idx
             continue
