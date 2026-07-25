@@ -79,10 +79,14 @@ def windowed_features(frames: list[PoseFrame | None], window_size: int) -> list[
 # Constantes compartilhadas
 # --------------------------------------------------------------------------- #
 _MIN_VISIBILITY = 0.5
+_MIN_OCCLUSION_VIS = 0.4  # tolerância para oclusão parcial (lençóis)
 _SHOULDER_LEFT = 11
 _SHOULDER_RIGHT = 12
 _HIP_LEFT = 23
 _HIP_RIGHT = 24
+_NOSE = 0
+_EAR_LEFT = 7
+_EAR_RIGHT = 8
 
 
 # --------------------------------------------------------------------------- #
@@ -120,15 +124,124 @@ def vertical_velocity(
 
         current_y = (ly + ry) / 2.0
 
-        if prev_y is not None:
-            vy = current_y - prev_y  # positivo = descendo (queda)
-        else:
-            vy = None
+        vy = current_y - prev_y if prev_y is not None else None
 
         velocities.append(vy)
         prev_y = current_y
 
     return velocities
+
+
+def _upper_body_center(frame: PoseFrame) -> tuple[float, float] | None:
+    """Centro da parte superior do corpo (cabeça + ombros).
+
+    Usado como fallback quando pernas/quadril estão ocluídos por lençóis.
+    Requer pelo menos cabeça (nariz) e ombros com visibilidade mínima.
+    """
+    nose_v = frame.landmarks[_NOSE][3]
+    sl_v = frame.landmarks[_SHOULDER_LEFT][3]
+    sr_v = frame.landmarks[_SHOULDER_RIGHT][3]
+    if nose_v < _MIN_OCCLUSION_VIS or sl_v < _MIN_OCCLUSION_VIS or sr_v < _MIN_OCCLUSION_VIS:
+        return None
+    cx = (
+        frame.landmarks[_NOSE][0] + frame.landmarks[_SHOULDER_LEFT][0]
+        + frame.landmarks[_SHOULDER_RIGHT][0]
+    ) / 3.0
+    cy = (
+        frame.landmarks[_NOSE][1] + frame.landmarks[_SHOULDER_LEFT][1]
+        + frame.landmarks[_SHOULDER_RIGHT][1]
+    ) / 3.0
+    return (cx, cy)
+
+
+def hip_center(frame: PoseFrame) -> tuple[float, float] | None:
+    """Centro do quadril (ponto médio dos landmarks 23/24).
+
+    Devolve ``None`` se visibilidade insuficiente (oclusão por lençóis).
+    """
+    lv = frame.landmarks[_HIP_LEFT][3]
+    rv = frame.landmarks[_HIP_RIGHT][3]
+    if lv < _MIN_VISIBILITY or rv < _MIN_VISIBILITY:
+        return None
+    return (
+        (frame.landmarks[_HIP_LEFT][0] + frame.landmarks[_HIP_RIGHT][0]) / 2.0,
+        (frame.landmarks[_HIP_LEFT][1] + frame.landmarks[_HIP_RIGHT][1]) / 2.0,
+    )
+
+
+def vertical_velocity_robust(
+    frames: list[PoseFrame | None],
+) -> list[float | None]:
+    """Velocidade vertical com fallback para oclusão parcial.
+
+    Tenta usar o quadril primeiro. Se o quadril estiver ocluído (lençóis),
+    usa a parte superior do corpo (cabeça + ombros). Devolve ``None`` se
+    nenhuma das duas estiver disponível.
+
+    Uma transição rápida da cabeça/ombro para a borda inferior da imagem
+    é suficiente para disparar a queda (Requisito 2).
+    """
+    velocities: list[float | None] = []
+    prev_y: float | None = None
+
+    for frame in frames:
+        if frame is None:
+            velocities.append(None)
+            prev_y = None
+            continue
+
+        # Tenta quadril primeiro; fallback para upper body
+        center = hip_center(frame)
+        if center is None:
+            center = _upper_body_center(frame)
+
+        if center is None:
+            velocities.append(None)
+            prev_y = None
+            continue
+
+        current_y = center[1]
+        if prev_y is not None:
+            vy = current_y - prev_y
+        else:
+            vy = None
+        velocities.append(vy)
+        prev_y = current_y
+
+    return velocities
+
+
+def lateral_displacement(
+    frames: list[PoseFrame | None],
+) -> list[float | None]:
+    """Deslocamento lateral ($\\Delta X$) do centro de massa por frame.
+
+    Usado para detectar rolamento/escorregamento: o corpo desliza para fora
+    do leito enquanto o tronco inclina.
+    """
+    displacements: list[float | None] = []
+    prev_x: float | None = None
+
+    for frame in frames:
+        if frame is None:
+            displacements.append(None)
+            prev_x = None
+            continue
+        center = hip_center(frame)
+        if center is None:
+            center = _upper_body_center(frame)
+        if center is None:
+            displacements.append(None)
+            prev_x = None
+            continue
+        current_x = center[0]
+        if prev_x is not None:
+            displacements.append(abs(current_x - prev_x))
+        else:
+            displacements.append(None)
+        prev_x = current_x
+
+    return displacements
 
 
 def max_vertical_velocity(

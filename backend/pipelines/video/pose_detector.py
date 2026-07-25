@@ -245,41 +245,83 @@ def validate_fall_dynamic(
     fall_verdict: str,
     fall_frame_idx: int | None,
     velocities: list[float | None],
-    min_vertical_velocity: float = 0.15,
+    min_vertical_velocity: float = 0.10,
+    all_poses_per_frame: list[list[PoseFrame | None]] | None = None,
 ) -> tuple[str, int | None, float, str]:
-    """Validação dinâmica de queda: exige pico de velocidade vertical.
+    """Validação dinâmica de queda multi-pessoa com fallback para oclusão.
 
-    Uma pessoa já sentada/reclinada desde o frame 0 tem o torso horizontal
-    mas $V_y \\approx 0$ — não é queda. Só confirma ``FALL_DETECTED`` se
-    houve um pico de velocidade acima do limiar **antes** da horizontalização.
+    Itera sobre **todas** as poses detetadas no frame. Se qualquer pessoa
+    satisfizer as condições de queda, o evento é registado. Suporta fallback
+    para parte superior do corpo quando pernas/quadril estão ocluídos.
 
     Devolve ``(verdict, frame_idx, velocity_score, description)``.
     """
     if fall_verdict != "queda":
         return (fall_verdict, fall_frame_idx, 0.0, "")
 
-    from pipelines.video.pose_features import max_vertical_velocity
+    from pipelines.video.pose_features import (
+        lateral_displacement,
+        max_vertical_velocity,
+        vertical_velocity_robust,
+    )
 
-    max_vy = max_vertical_velocity(velocities, window_frames=15)
+    # Verifica todas as pessoas no frame (não só a selecionada)
+    best_vy = 0.0
+    best_description = ""
+    best_frame = fall_frame_idx
 
-    if max_vy < min_vertical_velocity:
-        # Posição horizontal mas sem o pico dinâmico → postura estática
+    # Lista de velocidades por pessoa: cada elemento é list[float | None]
+    all_vy: list[list[float | None]] = [velocities]
+
+    if all_poses_per_frame:
+        max_people = max((len(p) for p in all_poses_per_frame if p), default=0)
+        if max_people > 1:
+            all_vy = []
+            for p_idx in range(max_people):
+                person_frames: list[PoseFrame | None] = [
+                    poses[p_idx] if poses and p_idx < len(poses) else None
+                    for poses in all_poses_per_frame
+                ]
+                all_vy.append(vertical_velocity_robust(person_frames))
+
+    for vy_list in all_vy:
+        # Velocidade robusta (fallback para upper body se quadril ocluído)
+        max_vy = max_vertical_velocity(vy_list)
+
+        if max_vy >= min_vertical_velocity:
+            if max_vy > best_vy:
+                best_vy = max_vy
+                best_description = (
+                    f"Queda abrupta detectada no frame {fall_frame_idx} "
+                    f"(variação de velocidade vertical Vy = {max_vy:.3f}/frame)."
+                )
+                best_frame = fall_frame_idx
+            continue
+
+        # Verifica rolamento/escorregamento: ΔX + inclinação do tronco
+        dx_list = lateral_displacement(person_frames)
+        valid_dx = [v for v in dx_list if v is not None]
+        max_dx = max(valid_dx) if len(valid_dx) >= 5 else 0.0
+
+        if max_dx > 0.05 and max_vy > 0.05:
+            # Movimento lateral com queda vertical moderada → rolamento
+            combined = (max_dx + max_vy) / 2.0
+            if combined > best_vy:
+                best_vy = combined
+                best_description = (
+                    f"Queda por rolamento/escorregamento detectada no frame {fall_frame_idx} "
+                    f"(deslocamento lateral ΔX = {max_dx:.3f}, Vy = {max_vy:.3f})."
+                )
+                best_frame = fall_frame_idx
+
+    if best_vy < min_vertical_velocity:
         return (
-            "adl",
-            None,
-            round(max_vy, 3),
+            "adl", None, round(best_vy, 3),
             "Postura reclinada/estática detectada — sem evidência de queda "
-            f"(Vy max = {max_vy:.3f}/frame, abaixo do limiar {min_vertical_velocity}).",
+            f"(Vy max = {best_vy:.3f}/frame, abaixo do limiar {min_vertical_velocity}).",
         )
 
-    # Queda confirmada: pico de velocidade + horizontalização
-    return (
-        "queda",
-        fall_frame_idx,
-        round(max_vy, 3),
-        f"Queda abrupta detectada no frame {fall_frame_idx} "
-        f"(variação de velocidade vertical Vy = {max_vy:.3f}/frame).",
-    )
+    return ("queda", best_frame, round(best_vy, 3), best_description)
 
 
 def sumarizar_achados_video(

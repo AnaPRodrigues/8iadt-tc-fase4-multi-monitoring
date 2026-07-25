@@ -244,7 +244,7 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
     )
     from pipelines.video.pose_features import (
         select_ground_person,
-        vertical_velocity,
+        vertical_velocity_robust,
         windowed_features,
     )
 
@@ -295,12 +295,14 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
             windows, _FALL_THRESHOLD, _PERSISTENCE_FRAMES,
         )
 
-        # Validação dinâmica: exige pico de velocidade vertical para
-        # distinguir queda real de postura reclinada estática (falso positivo)
-        velocities = vertical_velocity(frames)
+        # Validação dinâmica multi-pessoa com fallback para oclusão parcial.
+        # Itera sobre todas as poses detetadas — se qualquer pessoa satisfizer
+        # as condições de queda, o evento é registado (Requisito 1).
+        velocities = vertical_velocity_robust(frames)
         fall_verdict, fall_frame_idx, vy_score, vy_description = (
             validate_fall_dynamic(
                 fall_verdict, fall_frame_idx, velocities, _MIN_VERTICAL_VELOCITY,
+                all_poses_per_frame=all_poses,
             )
         )
 
