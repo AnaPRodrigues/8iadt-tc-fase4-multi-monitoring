@@ -297,7 +297,7 @@ def validate_fall_dynamic(
 
         # Verifica se o tronco alguma vez inclina o suficiente para ser queda.
         # Um médico de pé tem tronco vertical (~0-10°); uma queda real atinge >30°.
-        tilts = [trunk_tilt(f) for f in person_frames if f is not None]
+        tilts = [t for f in person_frames if f is not None for t in [trunk_tilt(f)] if t is not None]
         max_tilt = max(tilts) if tilts else 0.0
 
         # Velocidade robusta (fallback para upper body se quadril ocluído)

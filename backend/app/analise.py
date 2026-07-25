@@ -359,12 +359,17 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         # --- Evidência única consolidada ---
         evidencia_principal: str | None = None
         if fall_detected:
-            # Usa a última janela acima do limiar (fim da queda, pessoa no chão)
+            # Pico da queda + offset para mostrar o resultado
             above = [w for w in windows if w.center_of_mass_amplitude > _FALL_THRESHOLD]
-            evento = above[-1] if above else None
-            # Usa o último frame da janela (pessoa já no chão)
-            last_frame = evento.end_frame if evento else (fall_frame_idx or 0)
-            safe_idx = min(last_frame, len(frame_paths) - 1, len(frames) - 1)
+            if above:
+                pico = max(above, key=lambda w: w.center_of_mass_amplitude)
+                # Usa o meio da janela de pico + meia janela de offset
+                # (aproximadamente onde a pessoa já está no chão)
+                peak_mid = (pico.start_frame + pico.end_frame) // 2
+                best_frame = min(peak_mid + _JANELA_VIDEO // 2, len(frame_paths) - 1)
+            else:
+                best_frame = min(fall_frame_idx or 0, len(frame_paths) - 1)
+            safe_idx = min(best_frame, len(frame_paths) - 1, len(frames) - 1)
 
             # Fallback: se a pessoa selecionada não tem pose, procura em outras
             # pessoas no mesmo frame, depois em frames vizinhos (±10)
@@ -392,14 +397,14 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
                     frame_path=frame_paths[ev_idx],
                     pose_frame=pose_para_evidencia,
                     event_frame_index=ev_idx,
-                    score=evento.center_of_mass_amplitude if evento else 0.0,
+                    score=pico.center_of_mass_amplitude if above else 0.0,
                     run_id=run_id,
                     persistence_frames=_PERSISTENCE_FRAMES,
                 )
                 evidencia_principal = ev.evidence_id
                 todos_detalhes["queda"] = {
                     "frame": ev_idx,
-                    "score": round(evento.center_of_mass_amplitude if evento else 0.0, 3),
+                    "score": round(pico.center_of_mass_amplitude if above else 0.0, 3),
                 }
         elif consolidated:
             # Um único artefato para o achado mais grave (maior score)
