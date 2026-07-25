@@ -47,9 +47,10 @@ bidmc-scan:
 seed-demo:
 	PYTHONPATH=backend $(PY) -m scripts.seed_demo_patients
 
-# Gera uma prescrição avulsa em PDF. Exemplo:
+# Gera uma prescrição avulsa em PDF. Grava em data/ por padrão, sem afetar o seed demo.
+# Exemplos:
 #   make gen-presc ARGS="--patient-id p1 --drug paracetamol --dose 500"
-#   make gen-presc ARGS="--patient-id p1 --drug digoxina --dose 1.5 --output digoxina_alta.pdf"
+#   make gen-presc ARGS="--patient-id p1 --drug digoxina --dose 1.5 --output data/digoxina_alta.pdf"
 gen-presc:
 	PYTHONPATH=backend $(PY) -m pipelines.prescription.generator $(ARGS)
 

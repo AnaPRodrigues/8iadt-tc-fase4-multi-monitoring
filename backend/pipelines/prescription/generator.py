@@ -235,7 +235,7 @@ if __name__ == "__main__":
     parser.add_argument("--dose", required=True, type=float, help="Dose numérica (ex.: 500)")
     parser.add_argument("--frequency", default="8/8h", help="Frequência (default: 8/8h)")
     parser.add_argument("--seed", type=int, default=None, help="Seed para timestamp determinístico")
-    parser.add_argument("--output", default=None, help="Caminho do PDF de saída (default: <drug>_<dose>.pdf)")
+    parser.add_argument("--output", default=None, help="Caminho do PDF de saída (default: data/<drug>_<dose>.pdf)")
     args = parser.parse_args()
 
     pdf_bytes = generate_prescription(
@@ -246,7 +246,8 @@ if __name__ == "__main__":
         seed=args.seed,
     )
 
-    output = args.output or f"{args.drug}_{args.dose:.0f}.pdf"
+    output = args.output or f"data/{args.drug}_{args.dose:.0f}.pdf"
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
     Path(output).write_bytes(pdf_bytes)
     print(f"Prescrição gerada: {output} ({len(pdf_bytes)} bytes)")
     sys.exit(0)
