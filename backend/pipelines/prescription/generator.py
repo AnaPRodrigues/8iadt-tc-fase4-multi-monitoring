@@ -24,6 +24,7 @@ import random
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
 from pipelines.prescription import catalog
@@ -45,50 +46,121 @@ def generate_prescription(
     frequency: str = "8/8h",
     seed: int | None = None,
 ) -> bytes:
-    """Gera um PDF de prescrição com texto real embutido.
-
-    ``seed`` determina o timestamp; se omitido, usa a data/hora atual.
-    ``frequency`` tem default ``"8/8h"`` para uso avulso sem especificar.
-    """
+    """Gera um PDF de Receituário de Controle Especial profissional com texto real embutido."""
     drug_range = catalog.lookup(drug)
     unit = drug_range.unit if drug_range is not None else _DEFAULT_UNIT
     effective_seed = seed if seed is not None else random.randint(0, 2**31 - 1)
     timestamp = _timestamp_from_seed(effective_seed)
 
     buffer = io.BytesIO()
-    pdf = canvas.Canvas(buffer)
-    y = 800
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4  # 595.27 x 841.89 pt
 
-    # Cabeçalho institucional
+    # Configurações de cores e fontes
     pdf.setFont("Helvetica-Bold", 14)
-    pdf.drawString(45, y, "Hospital 8IADT — Prescrição Médica")
-    pdf.line(45, y - 12, 550, y - 12)
 
-    # Campos core (formato compatível com o parser: "Label: valor" por linha)
-    pdf.setFont("Helvetica", 11)
-    y -= 28
-    for line in [
-        f"Paciente: {patient_id}",
+    # -------------------------------------------------------------------------
+    # 1. TÍTULO PRINCIPAL (Conforme solicitado: Apenas "RECEITUÁRIO")
+    # -------------------------------------------------------------------------
+    pdf.drawCentredString(width / 2, height - 40, "RECEITUÁRIO")
+
+    # Linha separadora do topo
+    pdf.setLineWidth(1)
+    pdf.line(40, height - 48, width - 40, height - 48)
+
+    # -------------------------------------------------------------------------
+    # 2. IDENTIFICAÇÃO DO EMITENTE (Médico / Hospital)
+    # -------------------------------------------------------------------------
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(45, height - 62, "IDENTIFICAÇÃO DO EMITENTE")
+
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(45, height - 76, f"Nome Completo: Dr(a). Médico Responsável")
+    pdf.drawString(45, height - 90, f"CRM/CRO: 123456/SP  |  Telefone: (11) 3456-7890")
+    pdf.drawString(45, height - 104, f"Endereço: Av. Paulista, 1000, Bloco B - São Paulo/SP")
+
+    # Quadro do Emitente
+    pdf.setLineWidth(0.5)
+    pdf.rect(40, height - 112, width - 80, 58)
+
+    # Via do Documento (Canto Superior Direito)
+    pdf.setFont("Helvetica-Bold", 8)
+    pdf.drawString(width - 150, height - 62, "1ª VIA: FARMÁCIA")
+    pdf.drawString(width - 150, height - 72, "2ª VIA: PACIENTE")
+
+    # -------------------------------------------------------------------------
+    # 3. DADOS DO PACIENTE
+    # -------------------------------------------------------------------------
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawString(45, height - 128, "PACIENTE")
+
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(45, height - 142, f"Paciente: {patient_id}")
+    pdf.drawString(45, height - 156, f"Endereço: Rua dos Prontuários, 123 - Centro")
+
+    # Quadro do Paciente
+    pdf.rect(40, height - 164, width - 80, 42)
+
+    # -------------------------------------------------------------------------
+    # 4. PRESCRIÇÃO MÉDICA (Corpo do Texto)
+    # -------------------------------------------------------------------------
+    pdf.setFont("Helvetica-Bold", 10)
+    pdf.drawString(45, height - 180, "PRESCRIÇÃO")
+    pdf.line(40, height - 184, width - 40, height - 184)
+
+    # Linhas formatadas para o pdfplumber/Textract extraírem de forma idêntica
+    pdf.setFont("Helvetica", 10)
+    prescription_lines = [
         f"Medicamento: {drug}",
         f"Dose: {dose} {unit}",
         f"Frequência: {frequency}",
         f"Data: {timestamp}",
-    ]:
-        pdf.drawString(45, y, line)
-        y -= 18
+    ]
 
-    # Médico responsável (campo informativo, não parseado)
-    y -= 10
-    pdf.setFont("Helvetica", 9)
-    pdf.drawString(45, y, "Nome Completo: Dr(a). Médico Responsável")
-    y -= 14
-    pdf.drawString(45, y, "CRM/CRO: 123456/SP  |  Telefone: (11) 3456-7890")
-    y -= 14
-    pdf.drawString(45, y, "Endereço: Av. Paulista, 1000, Bloco B - São Paulo/SP")
+    y_pos = height - 205
+    for line in prescription_lines:
+        pdf.drawString(55, y_pos, line)
+        y_pos -= 18
+
+    # Campo de Assinatura
+    pdf.line(width - 220, height - 310, width - 50, height - 310)
+    pdf.setFont("Helvetica-Bold", 8)
+    pdf.drawCentredString(width - 135, height - 322, "Assinatura / Carimbo do Médico")
+
+    # Quadro do Corpo da Prescrição
+    pdf.rect(40, height - 335, width - 80, 160)
+
+    # -------------------------------------------------------------------------
+    # 5. IDENTIFICAÇÃO DO COMPRADOR E FORNECEDOR (Rodapé do Formuário)
+    # -------------------------------------------------------------------------
+    y_footer = height - 350
+
+    # Bloco Esquerdo: Comprador
+    pdf.rect(40, y_footer - 80, (width - 90) / 2, 80)
+    pdf.setFont("Helvetica-Bold", 8)
+    pdf.drawString(45, y_footer - 10, "IDENTIFICAÇÃO DO COMPRADOR")
+    pdf.setFont("Helvetica", 8)
+    pdf.drawString(45, y_footer - 25, "Nome:")
+    pdf.drawString(45, y_footer - 40, "Ident. / RG:                             Órgão Emissor:")
+    pdf.drawString(45, y_footer - 55, "Endereço:")
+    pdf.drawString(45, y_footer - 70, "Cidade/UF:                               Telefone:")
+
+    # Bloco Direito: Fornecedor / Farmácia
+    x_right = 40 + (width - 90) / 2 + 10
+    pdf.rect(x_right, y_footer - 80, (width - 90) / 2, 80)
+    pdf.setFont("Helvetica-Bold", 8)
+    pdf.drawString(x_right + 5, y_footer - 10, "IDENTIFICAÇÃO DO FORNECEDOR")
+    pdf.setFont("Helvetica", 8)
+    pdf.drawString(x_right + 5, y_footer - 55, "Data: ____/____/________")
+    pdf.line(x_right + 10, y_footer - 35, width - 50, y_footer - 35)
+    pdf.drawCentredString(
+        x_right + ((width - 90) / 4),
+        y_footer - 45,
+        "Assinatura e carimbo do farmacêutico",
+    )
 
     pdf.save()
     return buffer.getvalue()
-
 
 def generate_dataset(
     n: int, seed: int, anomaly_rate: float = 0.3
@@ -263,7 +335,6 @@ if __name__ == "__main__":
         frequency=args.frequency,
         seed=args.seed,
     )
-
     output = args.output or f"data/{args.drug}_{args.dose:.0f}.pdf"
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     Path(output).write_bytes(pdf_bytes)
