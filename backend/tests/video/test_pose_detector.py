@@ -5,11 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from pipelines.video.models import MovementWindow
+from pipelines.video.models import JointTarget, MovementWindow, PoseFrame, PosturalFinding
 from pipelines.video.pose import create_landmarker, ensure_pose_model, extract_keypoints
 from pipelines.video.pose_detector import (
     classify_sequence,
     classify_with_persistence,
+    detect_postural_deviations,
     save_fall_evidence,
 )
 
@@ -157,3 +158,82 @@ def test_classify_sequence_unchanged_backward_compat():
     assert classify_sequence(windows, threshold=0.3) == "queda"
     assert classify_sequence([_window(0.1)], threshold=0.3) == "adl"
     assert classify_sequence([], threshold=0.3) == "dados_insuficientes"
+
+
+# --------------------------------------------------------------------------- #
+# detect_postural_deviations
+# --------------------------------------------------------------------------- #
+def _make_joint_frame(
+    hip_xy: tuple[float, float],
+    knee_xy: tuple[float, float],
+    ankle_xy: tuple[float, float],
+) -> PoseFrame:
+    """Frame sintético com landmarks de perna esquerda (23, 25, 27) configuráveis."""
+    landmarks = [(0.5, 0.5, 0.0, 0.9) for _ in range(33)]
+    landmarks[23] = (*hip_xy, 0.0, 0.9)
+    landmarks[25] = (*knee_xy, 0.0, 0.9)
+    landmarks[27] = (*ankle_xy, 0.0, 0.9)
+    return PoseFrame(landmarks=landmarks)
+
+
+def test_postural_deviation_detected_after_persistence():
+    """40 frames com joelho a ~69° (min=70) → 1 finding emitido."""
+    joint_targets = [
+        JointTarget("knee_left", 23, 25, 27, min_angle=70.0, target_angle=90.0),
+    ]
+    # Joelho a ~90° (OK) nos primeiros 5 frames, depois ~69° por 40 frames
+    # Ângulo ~69°: ankle a (0.94, 0.43) com knee a (0.5, 0.6) e hip a (0.5, 0.4)
+    good = _make_joint_frame((0.5, 0.4), (0.5, 0.6), (0.3, 0.6))        # ~90°
+    bad = _make_joint_frame((0.5, 0.4), (0.5, 0.6), (0.94, 0.43))       # ~69°
+    frames = [good for _ in range(5)] + [bad for _ in range(40)]
+
+    findings = detect_postural_deviations(frames, joint_targets, persistence_frames=30, fps=30.0)
+
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.finding_type == "POSTURAL_DEVIATION"
+    assert f.joint_name == "knee_left"
+    assert f.duration_s == pytest.approx(1.0, abs=0.2)
+    assert "69" in f.description or "joelho" in f.description.lower()
+    assert 0.0 <= f.score <= 1.0
+
+
+def test_postural_deviation_counter_resets_when_angle_recovers():
+    """20 frames ruins, 1 frame OK, depois 40 ruins → reset, só o segundo streak gera finding."""
+    joint_targets = [
+        JointTarget("knee_left", 23, 25, 27, min_angle=70.0, target_angle=90.0),
+    ]
+    bad = _make_joint_frame((0.5, 0.4), (0.5, 0.6), (0.94, 0.43))   # ~69°
+    good = _make_joint_frame((0.5, 0.4), (0.5, 0.6), (0.3, 0.6))     # ~90°
+
+    frames = [bad for _ in range(20)] + [good] + [bad for _ in range(40)]
+
+    findings = detect_postural_deviations(frames, joint_targets, persistence_frames=30, fps=30.0)
+
+    assert len(findings) == 1  # só o segundo streak
+
+
+def test_postural_deviation_all_good_no_findings():
+    """Todos os frames acima do mínimo → sem findings."""
+    joint_targets = [
+        JointTarget("knee_left", 23, 25, 27, min_angle=70.0, target_angle=90.0),
+    ]
+    frames = [_make_joint_frame((0.5, 0.4), (0.5, 0.6), (0.3, 0.6)) for _ in range(50)]
+
+    findings = detect_postural_deviations(frames, joint_targets, persistence_frames=30, fps=30.0)
+
+    assert findings == []
+
+
+def test_postural_deviation_none_frame_resets_counter():
+    """Frame None no meio de uma streak → counter reseta."""
+    joint_targets = [
+        JointTarget("knee_left", 23, 25, 27, min_angle=70.0, target_angle=90.0),
+    ]
+    bad = _make_joint_frame((0.5, 0.4), (0.5, 0.6), (0.94, 0.43))
+
+    frames = [bad for _ in range(20)] + [None] + [bad for _ in range(20)]
+
+    findings = detect_postural_deviations(frames, joint_targets, persistence_frames=30, fps=30.0)
+
+    assert findings == []  # nenhum streak atinge 30 frames consecutivos

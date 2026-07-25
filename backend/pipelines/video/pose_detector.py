@@ -12,7 +12,7 @@ import cv2
 
 from common.evidence import Evidence, evidence_dir, save_evidence
 from common.logging import get_logger
-from pipelines.video.models import MovementWindow, PoseFrame
+from pipelines.video.models import JointTarget, MovementWindow, PoseFrame, PosturalFinding
 
 log = get_logger("video.pose_detector")
 
@@ -89,6 +89,70 @@ def draw_keypoints(frame_path: Path, pose_frame: PoseFrame, output_path: Path) -
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(output_path), image)
     return output_path
+
+
+def detect_postural_deviations(
+    frames: list[PoseFrame | None],
+    joint_targets: list[JointTarget],
+    persistence_frames: int,
+    fps: float,
+) -> list[PosturalFinding]:
+    """Deteta desvios de amplitude articular com persistência temporal.
+
+    Para cada articulação em ``joint_targets``, calcula o ângulo por frame
+    (via ``joint_angle``) e conta quantos frames consecutivos ficam abaixo do
+    mínimo configurado. Se o contador atingir ``persistence_frames``, emite um
+    ``POSTURAL_DEVIATION``. O contador reseta quando o ângulo volta acima do
+    mínimo ou é ``None`` (POSE-19).
+    """
+    from pipelines.video.pose_features import joint_angle as _joint_angle
+
+    findings: list[PosturalFinding] = []
+    fps = max(fps, 1.0)
+
+    for jt in joint_targets:
+        consecutive = 0
+        streak_start: int | None = None
+
+        for idx, frame in enumerate(frames):
+            if frame is None:
+                consecutive = 0
+                streak_start = None
+                continue
+
+            angle = _joint_angle(frame, jt.landmark_a, jt.landmark_b, jt.landmark_c)
+            if angle is None:
+                consecutive = 0
+                streak_start = None
+                continue
+
+            if angle < jt.min_angle:
+                if consecutive == 0:
+                    streak_start = idx
+                consecutive += 1
+                if consecutive >= persistence_frames:
+                    score = max(0.0, min(1.0, 1.0 - angle / jt.target_angle))
+                    findings.append(PosturalFinding(
+                        finding_type="POSTURAL_DEVIATION",
+                        joint_name=jt.joint_name,
+                        measured_angle=round(angle, 1),
+                        expected_angle=jt.min_angle,
+                        duration_s=round(consecutive / fps, 1),
+                        frame_index=streak_start,
+                        score=round(score, 3),
+                        description=(
+                            f"Amplitude articular reduzida em flexão de {jt.joint_name} "
+                            f"(alcançado: {angle:.0f}°, esperado: >{jt.min_angle:.0f}°)."
+                        ),
+                    ))
+                    # Reset para não duplicar achados para a mesma streak
+                    consecutive = 0
+                    streak_start = None
+            else:
+                consecutive = 0
+                streak_start = None
+
+    return findings
 
 
 def save_fall_evidence(
