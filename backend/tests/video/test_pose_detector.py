@@ -11,6 +11,7 @@ from pipelines.video.pose_detector import (
     classify_sequence,
     classify_with_persistence,
     detect_postural_deviations,
+    detect_trunk_tilt,
     save_fall_evidence,
 )
 
@@ -237,3 +238,68 @@ def test_postural_deviation_none_frame_resets_counter():
     findings = detect_postural_deviations(frames, joint_targets, persistence_frames=30, fps=30.0)
 
     assert findings == []  # nenhum streak atinge 30 frames consecutivos
+
+
+# --------------------------------------------------------------------------- #
+# detect_trunk_tilt
+# --------------------------------------------------------------------------- #
+def _make_tilt_frame(shoulder_y: float, hip_y: float, dx: float) -> PoseFrame:
+    """Frame com posição de ombros e quadris controlada para teste de tilt."""
+    landmarks = [(0.5, 0.5, 0.0, 0.9) for _ in range(33)]
+    landmarks[11] = (0.50 + dx, shoulder_y, 0.0, 0.9)  # shoulder L
+    landmarks[12] = (0.50 + dx, shoulder_y, 0.0, 0.9)  # shoulder R
+    landmarks[23] = (0.50, hip_y, 0.0, 0.9)              # hip L
+    landmarks[24] = (0.50, hip_y, 0.0, 0.9)              # hip R
+    return PoseFrame(landmarks=landmarks)
+
+
+def test_trunk_tilt_detected_after_persistence():
+    """100 frames com tilt de ~34° (max=30) → 1 finding."""
+    # dx=0.2, dy=0.4 → arctan(0.2/0.4) ≈ 26.6°, queremos >30°: dx=0.25, dy=0.4 → 32°
+    tilted = _make_tilt_frame(shoulder_y=0.20, hip_y=0.60, dx=0.25)
+    frames = [tilted for _ in range(100)]
+
+    findings = detect_trunk_tilt(frames, max_angle=30.0, persistence_frames=90, fps=30.0)
+
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.finding_type == "TRUNK_TILT"
+    assert f.joint_name is None
+    assert f.measured_angle > 30.0
+    assert f.duration_s == pytest.approx(3.0, abs=0.5)
+    assert 0.0 <= f.score <= 1.0
+    assert "inclinação" in f.description.lower()
+
+
+def test_trunk_tilt_below_threshold_no_finding():
+    """Tilt < 30° → sem findings."""
+    # dx=0.1, dy=0.4 → arctan(0.1/0.4) ≈ 14°
+    straight = _make_tilt_frame(shoulder_y=0.20, hip_y=0.60, dx=0.1)
+    frames = [straight for _ in range(100)]
+
+    findings = detect_trunk_tilt(frames, max_angle=30.0, persistence_frames=90, fps=30.0)
+
+    assert findings == []
+
+
+def test_trunk_tilt_counter_resets_on_recovery():
+    """50 frames tilt, 1 straight, 95 tilt → reset, só o segundo streak."""
+    tilted = _make_tilt_frame(shoulder_y=0.20, hip_y=0.60, dx=0.25)
+    straight = _make_tilt_frame(shoulder_y=0.20, hip_y=0.60, dx=0.0)
+
+    frames = [tilted for _ in range(50)] + [straight] + [tilted for _ in range(95)]
+
+    findings = detect_trunk_tilt(frames, max_angle=30.0, persistence_frames=90, fps=30.0)
+
+    assert len(findings) == 1  # só o segundo streak
+
+
+def test_trunk_tilt_none_frame_resets_counter():
+    """Frame None no meio da streak → reseta."""
+    tilted = _make_tilt_frame(shoulder_y=0.20, hip_y=0.60, dx=0.25)
+
+    frames = [tilted for _ in range(50)] + [None] + [tilted for _ in range(50)]
+
+    findings = detect_trunk_tilt(frames, max_angle=30.0, persistence_frames=90, fps=30.0)
+
+    assert findings == []  # nenhum streak atinge 90 frames

@@ -155,6 +155,65 @@ def detect_postural_deviations(
     return findings
 
 
+def detect_trunk_tilt(
+    frames: list[PoseFrame | None],
+    max_angle: float,
+    persistence_frames: int,
+    fps: float,
+) -> list[PosturalFinding]:
+    """Deteta inclinação de tronco sustentada com persistência temporal.
+
+    Se a inclinação exceder ``max_angle`` por ``persistence_frames`` frames
+    consecutivos, emite um ``TRUNK_TILT``. O contador reseta quando a
+    inclinação volta abaixo do limiar ou é ``None`` (POSE-19).
+    """
+    from pipelines.video.pose_features import trunk_tilt as _trunk_tilt
+
+    findings: list[PosturalFinding] = []
+    fps = max(fps, 1.0)
+    consecutive = 0
+    streak_start: int | None = None
+
+    for idx, frame in enumerate(frames):
+        if frame is None:
+            consecutive = 0
+            streak_start = None
+            continue
+
+        angle = _trunk_tilt(frame)
+        if angle is None:
+            consecutive = 0
+            streak_start = None
+            continue
+
+        if angle > max_angle:
+            if consecutive == 0:
+                streak_start = idx
+            consecutive += 1
+            if consecutive >= persistence_frames:
+                score = min(1.0, angle / (2.0 * max_angle))
+                findings.append(PosturalFinding(
+                    finding_type="TRUNK_TILT",
+                    joint_name=None,
+                    measured_angle=round(angle, 1),
+                    expected_angle=max_angle,
+                    duration_s=round(consecutive / fps, 1),
+                    frame_index=streak_start,
+                    score=round(score, 3),
+                    description=(
+                        f"Desvio postural / inclinação de tronco sustentada "
+                        f"({angle:.0f}° de inclinação por {consecutive / fps:.1f}s)."
+                    ),
+                ))
+                consecutive = 0
+                streak_start = None
+        else:
+            consecutive = 0
+            streak_start = None
+
+    return findings
+
+
 def save_fall_evidence(
     *,
     seq_id: str,
