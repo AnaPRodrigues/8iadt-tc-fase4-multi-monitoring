@@ -25,10 +25,9 @@ import yaml
 from common.evidence import evidence_dir
 from common.logging import get_logger
 from common.metrics import save_report
-from pipelines.video.models import MovementWindow, PoseFrame, SequenceVerdict
+from pipelines.video.models import JointTarget, MovementWindow, PoseFrame, SequenceVerdict
 from pipelines.video.pose import create_landmarker, ensure_pose_model, extract_keypoints
 from pipelines.video.pose_detector import (
-    DEFAULT_FALL_THRESHOLD,
     classify_sequence,
     save_fall_evidence,
 )
@@ -49,10 +48,32 @@ _FEATURE = "video_pose"
 DEFAULTS: dict[str, Any] = {
     "sequences": None,
     "window_size": 30,
-    "fall_threshold": DEFAULT_FALL_THRESHOLD,
+    "fall_threshold": 0.55,
+    "persistence_frames": 30,
+    "num_poses": 3,
+    "joint_targets": [],
+    "trunk_tilt_max": 30.0,
+    "tilt_persistence_frames": 90,
     "output_root": "output",
     "model_cache_dir": "models",
 }
+
+
+def _parse_joint_targets(raw: list[dict] | None) -> list[JointTarget]:
+    """Converte a lista de dicionários do YAML em ``JointTarget`` validados."""
+    if not raw:
+        return []
+    targets = []
+    for entry in raw:
+        targets.append(JointTarget(
+            joint_name=str(entry["joint_name"]),
+            landmark_a=int(entry["landmark_a"]),
+            landmark_b=int(entry["landmark_b"]),
+            landmark_c=int(entry["landmark_c"]),
+            min_angle=float(entry["min_angle"]),
+            target_angle=float(entry["target_angle"]),
+        ))
+    return targets
 
 
 @dataclass(frozen=True)
@@ -61,6 +82,11 @@ class Config:
     sequences: list[str] | None
     window_size: int
     fall_threshold: float
+    persistence_frames: int
+    num_poses: int
+    joint_targets: list[JointTarget]
+    trunk_tilt_max: float
+    tilt_persistence_frames: int
     output_root: Path
     model_cache_dir: Path
 
@@ -83,12 +109,18 @@ def load_config(path: Path) -> Config:
 
     merged = {**DEFAULTS, **raw}
     sequences = merged["sequences"]
+    joint_raw = merged.get("joint_targets", [])
 
     return Config(
         dataset_dir=Path(merged["dataset_dir"]),
         sequences=list(sequences) if sequences else None,
         window_size=int(merged["window_size"]),
         fall_threshold=float(merged["fall_threshold"]),
+        persistence_frames=int(merged["persistence_frames"]),
+        num_poses=int(merged["num_poses"]),
+        joint_targets=_parse_joint_targets(joint_raw),
+        trunk_tilt_max=float(merged["trunk_tilt_max"]),
+        tilt_persistence_frames=int(merged["tilt_persistence_frames"]),
         output_root=Path(merged["output_root"]),
         model_cache_dir=Path(merged["model_cache_dir"]),
     )
