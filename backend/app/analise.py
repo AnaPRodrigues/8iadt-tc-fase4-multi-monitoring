@@ -496,24 +496,24 @@ def _analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
             },
         )
 
-    # Agrega: conjunto de estruturas únicas encontradas ao longo do vídeo.
-    todas = sorted({e for lst in estruturas_por_keyframe.values() for e in lst})
+    # Agrega: keyframe com mais estruturas (mais representativo).
+    melhor_kf = max(estruturas_por_keyframe.keys(), key=lambda k: len(estruturas_por_keyframe[k]))
+    estruturas_no_melhor = sorted(estruturas_por_keyframe[melhor_kf])
     nomes = ", ".join(
-        sorted({_TRADUCAO_ESTRUTURA_CRITICA.get(e, e) for e in todas})
+        sorted({_TRADUCAO_ESTRUTURA_CRITICA.get(e, e) for e in estruturas_no_melhor})
     )
-    primeiro_kf = min(estruturas_por_keyframe.keys())
-    instante = round(primeiro_kf / video_fps, 1)
+    todas = sorted({e for lst in estruturas_por_keyframe.values() for e in lst})
+    instante = round(melhor_kf / video_fps, 1)
 
-    # Evidência: extrai o primeiro keyframe com estruturas, desenha as bboxes.
-    primeiro_kf_com_estrutura = min(estruturas_por_keyframe.keys())
+    # Evidência: extrai o keyframe com mais estruturas, desenha as bboxes.
     cap2 = cv2.VideoCapture(str(caminho))
     keyframe_png: Path | None = None
     try:
-        cap2.set(cv2.CAP_PROP_POS_FRAMES, primeiro_kf_com_estrutura)
+        cap2.set(cv2.CAP_PROP_POS_FRAMES, melhor_kf)
         ret, frame = cap2.read()
         if ret:
             # Desenha as bounding boxes no frame
-            for bbox_info in bboxes_por_keyframe.get(primeiro_kf_com_estrutura, []):
+            for bbox_info in bboxes_por_keyframe.get(melhor_kf, []):
                 x, y, w, h = [int(v) for v in bbox_info["bbox"]]
                 nome = _TRADUCAO_ESTRUTURA_CRITICA.get(bbox_info["class"], bbox_info["class"])
                 conf = bbox_info["confidence"]
@@ -524,7 +524,7 @@ def _analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
                 )
             destino_kf = evidence_dir("video_object", run_id)
             destino_kf.mkdir(parents=True, exist_ok=True)
-            keyframe_png = destino_kf / f"{caminho.stem}-keyframe-{primeiro_kf_com_estrutura}.png"
+            keyframe_png = destino_kf / f"{caminho.stem}-keyframe-{melhor_kf}.png"
             cv2.imwrite(str(keyframe_png), frame)
     finally:
         cap2.release()
@@ -538,7 +538,7 @@ def _analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
     evidencia = save_evidence(
         feature="video_object",
         run_id=run_id,
-        evidence_id=f"{caminho.stem}-cirurgico-video",
+        evidence_id=f"{caminho.stem}-cirurgico-kf{melhor_kf}",
         source_record_id=caminho.stem,
         artifact_path=keyframe_png,
         metadata={
