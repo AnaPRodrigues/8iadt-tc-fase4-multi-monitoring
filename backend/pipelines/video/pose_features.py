@@ -163,18 +163,29 @@ def _landmark_xy(frame: PoseFrame, idx: int) -> tuple[float, float]:
 def select_ground_person(
     all_poses: list[list[PoseFrame | None]],
 ) -> list[PoseFrame | None]:
-    """Seleciona, por frame, a pessoa com menor Y médio (mais próxima do chão).
+    """Seleciona, por frame, a pessoa com maior Y médio (mais próxima do chão).
 
-    Frames sem nenhuma pessoa → ``None``. Empate → primeira encontrada.
+    Filtra deteções de baixa qualidade (visibilidade média < 0.7) que são
+    tipicamente alucinações do MediaPipe em objetos (impressoras, móveis).
+    Frames sem pessoa válida → ``None``.
     """
     result: list[PoseFrame | None] = []
     for poses in all_poses:
         valid = [p for p in poses if p is not None]
-        if not valid:
-            result.append(None)
-            continue
+        # Filtra alucinações: pessoa real tem landmarks bem visíveis
+        human_like = [
+            p for p in valid
+            if sum(lm[3] for lm in p.landmarks) / len(p.landmarks) >= 0.7
+        ]
+        if not human_like:
+            # Se só há deteções de baixa qualidade, usa a melhor delas
+            # (fallback — melhor que nada)
+            if not valid:
+                result.append(None)
+                continue
+            human_like = valid
         # Pessoa com maior Y médio = mais abaixo na imagem = nível do solo
-        best = max(valid, key=lambda p: sum(
+        best = max(human_like, key=lambda p: sum(
             lm[1] for lm in p.landmarks
         ) / len(p.landmarks))
         result.append(best)
