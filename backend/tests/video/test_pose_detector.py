@@ -13,6 +13,7 @@ from pipelines.video.pose_detector import (
     detect_postural_deviations,
     detect_trunk_tilt,
     save_fall_evidence,
+    save_postural_evidence,
 )
 
 _URFD_FRAME = (
@@ -303,3 +304,91 @@ def test_trunk_tilt_none_frame_resets_counter():
     findings = detect_trunk_tilt(frames, max_angle=30.0, persistence_frames=90, fps=30.0)
 
     assert findings == []  # nenhum streak atinge 90 frames
+
+
+# --------------------------------------------------------------------------- #
+# save_postural_evidence + save_fall_evidence metadata expandido
+# --------------------------------------------------------------------------- #
+def test_save_fall_evidence_metadata_expandido(tmp_path, landmarker):
+    """save_fall_evidence agora inclui finding_type e persistence_frames."""
+    pose_frame = extract_keypoints(_URFD_FRAME, landmarker)
+    assert pose_frame is not None
+
+    evidence = save_fall_evidence(
+        seq_id="fall-01",
+        frame_path=_URFD_FRAME,
+        pose_frame=pose_frame,
+        event_frame_index=50,
+        score=0.87,
+        run_id="run-teste",
+        root=tmp_path,
+        persistence_frames=32,
+    )
+
+    sidecar = json.loads(evidence.sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["metadata"]["finding_type"] == "FALL_DETECTED"
+    assert sidecar["metadata"]["persistence_frames"] == 32
+    assert "description" in sidecar["metadata"]
+
+
+def test_save_postural_evidence_produz_sidecar(tmp_path, landmarker):
+    """save_postural_evidence grava artefato + sidecar com metadados clínicos."""
+    pose_frame = extract_keypoints(_URFD_FRAME, landmarker)
+    assert pose_frame is not None
+
+    finding = PosturalFinding(
+        finding_type="POSTURAL_DEVIATION",
+        joint_name="knee_left",
+        measured_angle=62.0,
+        expected_angle=70.0,
+        duration_s=1.5,
+        frame_index=95,
+        score=0.42,
+        description="Amplitude reduzida (62°, esperado >70°).",
+    )
+
+    evidence = save_postural_evidence(
+        finding=finding,
+        frame_path=_URFD_FRAME,
+        pose_frame=pose_frame,
+        run_id="run-teste",
+        root=tmp_path,
+    )
+
+    assert evidence.artifact_path.is_file()
+    assert evidence.sidecar_path.is_file()
+    sidecar = json.loads(evidence.sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["metadata"]["finding_type"] == "POSTURAL_DEVIATION"
+    assert sidecar["metadata"]["joint_name"] == "knee_left"
+    assert sidecar["metadata"]["measured_angle"] == 62.0
+    assert sidecar["metadata"]["duration_s"] == 1.5
+
+
+def test_save_postural_evidence_trunk_tilt(tmp_path, landmarker):
+    """save_postural_evidence para TRUNK_TILT — joint_name=None, ângulo presente."""
+    pose_frame = extract_keypoints(_URFD_FRAME, landmarker)
+    assert pose_frame is not None
+
+    finding = PosturalFinding(
+        finding_type="TRUNK_TILT",
+        joint_name=None,
+        measured_angle=34.0,
+        expected_angle=30.0,
+        duration_s=4.2,
+        frame_index=120,
+        score=0.57,
+        description="Inclinação de tronco (34° por 4.2s).",
+    )
+
+    evidence = save_postural_evidence(
+        finding=finding,
+        frame_path=_URFD_FRAME,
+        pose_frame=pose_frame,
+        run_id="run-teste",
+        root=tmp_path,
+    )
+
+    sidecar = json.loads(evidence.sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["metadata"]["finding_type"] == "TRUNK_TILT"
+    assert sidecar["metadata"]["joint_name"] is None
+    assert sidecar["metadata"]["measured_angle"] == 34.0

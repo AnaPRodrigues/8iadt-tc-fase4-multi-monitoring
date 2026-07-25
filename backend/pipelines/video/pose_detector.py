@@ -223,11 +223,26 @@ def save_fall_evidence(
     score: float,
     run_id: str,
     root: str | Path = "output",
+    persistence_frames: int = 0,
 ) -> Evidence:
     """Gera a evidência de queda (frame anotado + metadados) no contrato único de evidência."""
+    from pipelines.video.pose_evidence import draw_annotated_frame
+
+    finding = PosturalFinding(
+        finding_type="FALL_DETECTED",
+        joint_name=None,
+        measured_angle=0.0,
+        expected_angle=0.0,
+        duration_s=0.0,
+        frame_index=event_frame_index,
+        score=round(float(score), 3),
+        description=f"Queda detectada após {persistence_frames} frames consecutivos "
+        f"acima do limiar (score {score:.2f}).",
+    )
+
     dest_dir = evidence_dir("video_pose", run_id, root)
     annotated_path = dest_dir / f"{seq_id}-fall.png"
-    draw_keypoints(frame_path, pose_frame, annotated_path)
+    draw_annotated_frame(frame_path, pose_frame, [finding], annotated_path)
 
     log.info(
         "queda detectada na sequência %s (frame %d, score=%.4f)",
@@ -242,6 +257,54 @@ def save_fall_evidence(
         evidence_id=f"{seq_id}-fall",
         source_record_id=seq_id,
         artifact_path=annotated_path,
-        metadata={"seq_id": seq_id, "event_frame": event_frame_index, "score": score},
+        metadata={
+            "finding_type": "FALL_DETECTED",
+            "seq_id": seq_id,
+            "event_frame": event_frame_index,
+            "score": round(float(score), 3),
+            "persistence_frames": persistence_frames,
+            "description": finding.description,
+        },
+        root=root,
+    )
+
+
+def save_postural_evidence(
+    finding: PosturalFinding,
+    frame_path: Path,
+    pose_frame: PoseFrame,
+    run_id: str,
+    root: str | Path = "output",
+) -> Evidence:
+    """Gera evidência para achados de fisioterapia (POSTURAL_DEVIATION, TRUNK_TILT).
+
+    Mesmo contrato de ``save_fall_evidence`` — artefato PNG anotado + sidecar JSON.
+    """
+    from pipelines.video.pose_evidence import draw_annotated_frame
+
+    source_id = Path(frame_path).stem
+    joint_slug = finding.joint_name or "tilt"
+    evidence_id = f"{source_id}-{joint_slug}-{finding.measured_angle:.0f}deg"
+
+    dest_dir = evidence_dir("video_pose", run_id, root)
+    annotated_path = dest_dir / f"{evidence_id}.png"
+    draw_annotated_frame(frame_path, pose_frame, [finding], annotated_path)
+
+    return save_evidence(
+        feature="video_pose",
+        run_id=run_id,
+        evidence_id=evidence_id,
+        source_record_id=source_id,
+        artifact_path=annotated_path,
+        metadata={
+            "finding_type": finding.finding_type,
+            "joint_name": finding.joint_name,
+            "measured_angle": finding.measured_angle,
+            "expected_angle": finding.expected_angle,
+            "duration_s": finding.duration_s,
+            "frame_index": finding.frame_index,
+            "score": finding.score,
+            "description": finding.description,
+        },
         root=root,
     )
