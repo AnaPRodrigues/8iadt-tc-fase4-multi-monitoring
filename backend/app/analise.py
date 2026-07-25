@@ -363,11 +363,21 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
                 w for w in windows if w.center_of_mass_amplitude > _FALL_THRESHOLD
             )
             safe_idx = min(fall_frame_idx or 0, len(frame_paths) - 1, len(frames) - 1)
-            if frames[safe_idx] is not None:
+
+            # Fallback: se a pessoa selecionada não tem pose no frame da queda,
+            # procura em outras pessoas detetadas nesse mesmo frame
+            pose_para_evidencia = frames[safe_idx]
+            if pose_para_evidencia is None and safe_idx < len(all_poses):
+                for alt_pose in all_poses[safe_idx]:
+                    if alt_pose is not None:
+                        pose_para_evidencia = alt_pose
+                        break
+
+            if pose_para_evidencia is not None:
                 ev = save_fall_evidence(
                     seq_id=caminho.stem,
                     frame_path=frame_paths[safe_idx],
-                    pose_frame=frames[safe_idx],
+                    pose_frame=pose_para_evidencia,
                     event_frame_index=safe_idx,
                     score=evento.center_of_mass_amplitude,
                     run_id=run_id,
@@ -382,11 +392,17 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
             # Um único artefato para o achado mais grave (maior score)
             principal = max(consolidated, key=lambda c: c.score)
             safe_idx = min(principal.frame_index, len(frame_paths) - 1)
-            if frames[safe_idx] is not None:
+            pose_para_evidencia = frames[safe_idx]
+            if pose_para_evidencia is None and safe_idx < len(all_poses):
+                for alt_pose in all_poses[safe_idx]:
+                    if alt_pose is not None:
+                        pose_para_evidencia = alt_pose
+                        break
+            if pose_para_evidencia is not None:
                 ev = save_postural_evidence(
                     finding=principal,
                     frame_path=frame_paths[safe_idx],
-                    pose_frame=frames[safe_idx],
+                    pose_frame=pose_para_evidencia,
                     run_id=run_id,
                 )
                 evidencia_principal = ev.evidence_id
