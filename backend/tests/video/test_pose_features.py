@@ -5,8 +5,14 @@ import math
 
 import pytest
 
-from pipelines.video.models import PoseFrame
-from pipelines.video.pose_features import windowed_features
+from pipelines.video.models import JointTarget, PoseFrame
+from pipelines.video.pose_features import (
+    joint_angle,
+    joint_angles_per_frame,
+    select_ground_person,
+    trunk_tilt,
+    windowed_features,
+)
 
 _N_LANDMARKS = 33
 
@@ -90,3 +96,198 @@ def test_assimetria_reflete_diferenca_entre_quadris():
 
     assert windows_simetrico[0].asymmetry == 0.0
     assert windows_assimetrico[0].asymmetry == pytest.approx(0.4)
+
+
+# --------------------------------------------------------------------------- #
+# Helpers para os novos testes (ângulos, tilt, multi-person)
+# --------------------------------------------------------------------------- #
+def _make_full_frame(
+    landmarks_override: dict[int, tuple[float, float, float, float]] | None = None,
+) -> PoseFrame:
+    """Cria um PoseFrame com todos os 33 landmarks em (0.5, 0.5, 0, 0.9).
+
+    ``landmarks_override`` substitui landmarks específicos (ex.: quadril, joelho).
+    """
+    landmarks = [(0.5, 0.5, 0.0, 0.9) for _ in range(33)]
+    if landmarks_override:
+        for idx, val in landmarks_override.items():
+            landmarks[idx] = val
+    return PoseFrame(landmarks=landmarks)
+
+
+# --------------------------------------------------------------------------- #
+# joint_angle
+# --------------------------------------------------------------------------- #
+def test_joint_angle_90_graus():
+    """Joelho em ângulo reto: quadril (0.5, 0.4), joelho (0.5, 0.6), tornozelo (0.3, 0.6)."""
+    frame = _make_full_frame({
+        23: (0.5, 0.4, 0.0, 0.9),  # hip
+        25: (0.5, 0.6, 0.0, 0.9),  # knee
+        27: (0.3, 0.6, 0.0, 0.9),  # ankle
+    })
+
+    angle = joint_angle(frame, 23, 25, 27)
+
+    assert angle == pytest.approx(90.0, abs=1.0)
+
+
+def test_joint_angle_180_graus():
+    """Perna esticada: landmarks alinhados verticalmente."""
+    frame = _make_full_frame({
+        23: (0.5, 0.2, 0.0, 0.9),  # hip
+        25: (0.5, 0.5, 0.0, 0.9),  # knee
+        27: (0.5, 0.8, 0.0, 0.9),  # ankle
+    })
+
+    angle = joint_angle(frame, 23, 25, 27)
+
+    assert angle == pytest.approx(180.0, abs=2.0)
+
+
+def test_joint_angle_visibilidade_baixa_devolve_none():
+    """Landmark com visibilidade < 0.5 → None."""
+    frame = _make_full_frame({
+        23: (0.5, 0.4, 0.0, 0.9),   # OK
+        25: (0.5, 0.6, 0.0, 0.3),   # visibility too low
+        27: (0.3, 0.6, 0.0, 0.9),   # OK
+    })
+
+    angle = joint_angle(frame, 23, 25, 27)
+
+    assert angle is None
+
+
+# --------------------------------------------------------------------------- #
+# trunk_tilt
+# --------------------------------------------------------------------------- #
+def test_trunk_tilt_vertical():
+    """Espinha perfeitamente vertical → ângulo ~0°."""
+    frame = _make_full_frame({
+        11: (0.50, 0.20, 0.0, 0.9),  # shoulder L
+        12: (0.50, 0.20, 0.0, 0.9),  # shoulder R
+        23: (0.50, 0.60, 0.0, 0.9),  # hip L
+        24: (0.50, 0.60, 0.0, 0.9),  # hip R
+    })
+
+    tilt = trunk_tilt(frame)
+
+    assert tilt == pytest.approx(0.0, abs=1.0)
+
+
+def test_trunk_tilt_30_graus():
+    """Espinha inclinada ~26.6° (dx=0.2, dy=0.4 → arctan(0.2/0.4) ≈ 26.6°)."""
+    import math
+
+    # Ombros deslocados 0.2 em X relativamente aos quadris (dy=0.4 de distância)
+    dx = 0.2
+
+    frame = _make_full_frame({
+        11: (0.50 + dx, 0.20, 0.0, 0.9),
+        12: (0.50 + dx, 0.20, 0.0, 0.9),
+        23: (0.50, 0.60, 0.0, 0.9),
+        24: (0.50, 0.60, 0.0, 0.9),
+    })
+
+    tilt = trunk_tilt(frame)
+
+    # arctan(0.2/0.4) = arctan(0.5) ≈ 26.57°
+    expected = math.degrees(math.atan(0.2 / 0.4))
+    assert tilt == pytest.approx(expected, abs=1.0)
+
+
+def test_trunk_tilt_visibilidade_baixa_devolve_none():
+    """Visibilidade < 0.5 em ombro → None."""
+    frame = _make_full_frame({
+        11: (0.50, 0.20, 0.0, 0.3),  # visibility too low
+        12: (0.50, 0.20, 0.0, 0.9),
+        23: (0.50, 0.60, 0.0, 0.9),
+        24: (0.50, 0.60, 0.0, 0.9),
+    })
+
+    tilt = trunk_tilt(frame)
+
+    assert tilt is None
+
+
+# --------------------------------------------------------------------------- #
+# joint_angles_per_frame
+# --------------------------------------------------------------------------- #
+def test_joint_angles_per_frame_multi_joint():
+    """Vários ângulos num frame → dicionário com nome → ângulo."""
+    frame = _make_full_frame({
+        23: (0.5, 0.4, 0.0, 0.9),   # hip L
+        25: (0.5, 0.6, 0.0, 0.9),   # knee L
+        27: (0.3, 0.6, 0.0, 0.9),   # ankle L
+        24: (0.5, 0.4, 0.0, 0.9),   # hip R
+        26: (0.5, 0.6, 0.0, 0.9),   # knee R
+        28: (0.7, 0.6, 0.0, 0.9),   # ankle R
+    })
+
+    joints = [
+        ("knee_left", 23, 25, 27),
+        ("knee_right", 24, 26, 28),
+    ]
+    angles = joint_angles_per_frame(frame, joints)
+
+    assert "knee_left" in angles
+    assert "knee_right" in angles
+    assert angles["knee_left"] == pytest.approx(90.0, abs=1.0)
+    assert angles["knee_right"] == pytest.approx(90.0, abs=1.0)
+
+
+# --------------------------------------------------------------------------- #
+# select_ground_person
+# --------------------------------------------------------------------------- #
+def test_select_ground_person_single_person():
+    """Com uma única pessoa → devolve essa pessoa."""
+    frame = _make_full_frame()
+    all_poses = [[frame]]
+
+    result = select_ground_person(all_poses)
+
+    assert result == [frame]
+
+
+def test_select_ground_person_picks_lowest_y():
+    """Pessoa com Y maior (mais abaixo na imagem) deve ser selecionada."""
+    person_floor = _make_full_frame()  # todos os landmarks em y=0.9 (ajustar abaixo)
+    person_stand = _make_full_frame()
+
+    # Pessoa no chão: landmarks com Y grande (perto do fundo da imagem)
+    floor_landmarks = [(0.5, 0.9, 0.0, 0.9) for _ in range(33)]
+    stand_landmarks = [(0.5, 0.3, 0.0, 0.9) for _ in range(33)]
+
+    person_floor = PoseFrame(landmarks=floor_landmarks)
+    person_stand = PoseFrame(landmarks=stand_landmarks)
+
+    all_poses = [[person_stand, person_floor]]  # standing first, floor second
+
+    result = select_ground_person(all_poses)
+
+    assert len(result) == 1
+    # Deve escolher a pessoa no chão (Y médio maior = mais abaixo)
+    assert result[0] is not None
+    avg_y = sum(lm[1] for lm in result[0].landmarks) / 33
+    assert avg_y == pytest.approx(0.9, abs=0.01)
+
+
+def test_select_ground_person_all_none():
+    """Frame sem nenhuma pessoa → None."""
+    all_poses = [[None, None]]
+
+    result = select_ground_person(all_poses)
+
+    assert result == [None]
+
+
+def test_select_ground_person_mixed_frames():
+    """Alguns frames com pessoa, outros sem."""
+    frame_a = _make_full_frame()
+    all_poses = [[frame_a], [None], [frame_a]]
+
+    result = select_ground_person(all_poses)
+
+    assert len(result) == 3
+    assert result[0] is not None
+    assert result[1] is None
+    assert result[2] is not None
