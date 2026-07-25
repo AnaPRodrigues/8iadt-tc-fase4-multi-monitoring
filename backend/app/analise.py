@@ -239,6 +239,7 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         detect_trunk_tilt,
         save_fall_evidence,
         save_postural_evidence,
+        sumarizar_achados_video,
     )
     from pipelines.video.pose_features import select_ground_person, windowed_features
 
@@ -288,20 +289,55 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
             windows, _FALL_THRESHOLD, _PERSISTENCE_FRAMES,
         )
 
-        findings_detectados: list[str] = []
-        pontuacao_maxima = 0.0
-        evidencia_principal: str | None = None
         todos_detalhes: dict = {
             "quadros_analisados": len(frame_paths),
             "formato": "video",
             "pessoas_detectadas": n_pessoas,
         }
+        fall_detected = fall_verdict == "queda" and fall_frame_idx is not None
 
-        if fall_verdict == "queda" and fall_frame_idx is not None:
+        # --- Deteção de fisioterapia (desvios + tilt) ---
+        fps = 30.0
+        postural_findings: list = []
+        tilt_findings: list = []
+
+        if not fall_detected:
+            from pipelines.video.models import JointTarget
+            _DEFAULT_JOINT_TARGETS = [
+                JointTarget("knee_left", 23, 25, 27, min_angle=70.0, target_angle=90.0),
+                JointTarget("knee_right", 24, 26, 28, min_angle=70.0, target_angle=90.0),
+            ]
+            postural_findings = detect_postural_deviations(
+                frames, _DEFAULT_JOINT_TARGETS, _PERSISTENCE_FRAMES, fps,
+            )
+            tilt_findings = detect_trunk_tilt(
+                frames, max_angle=30.0, persistence_frames=90, fps=fps,
+            )
+
+        # --- Sumarização: agrupa por articulação/tipo, score único ---
+        resumo, pontuacao, consolidated = sumarizar_achados_video(
+            postural_findings, tilt_findings, fall_detected,
+        )
+        todos_detalhes["findings"] = [c.description for c in consolidated]
+        todos_detalhes["n_postural"] = len(postural_findings)
+        todos_detalhes["n_tilt"] = len(tilt_findings)
+        todos_detalhes["n_consolidated"] = len(consolidated)
+
+        if not consolidated and not fall_detected:
+            razao = _razao_sem_queda(windows, len(frame_paths))
+            return ResultadoAnalise(
+                resumo=f"Sem alterações detectadas no período monitorado.{razao}",
+                pontuacao=0.0,
+                detalhes=todos_detalhes,
+            )
+
+        # --- Evidência única consolidada ---
+        evidencia_principal: str | None = None
+        if fall_detected:
             evento = next(
                 w for w in windows if w.center_of_mass_amplitude > _FALL_THRESHOLD
             )
-            safe_idx = min(fall_frame_idx, len(frame_paths) - 1, len(frames) - 1)
+            safe_idx = min(fall_frame_idx or 0, len(frame_paths) - 1, len(frames) - 1)
             if frames[safe_idx] is not None:
                 ev = save_fall_evidence(
                     seq_id=caminho.stem,
@@ -312,77 +348,27 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
                     run_id=run_id,
                     persistence_frames=_PERSISTENCE_FRAMES,
                 )
-                findings_detectados.append("Queda detectada")
-                pontuacao_maxima = max(pontuacao_maxima, float(evento.center_of_mass_amplitude))
                 evidencia_principal = ev.evidence_id
                 todos_detalhes["queda"] = {
                     "frame": safe_idx,
                     "score": round(evento.center_of_mass_amplitude, 3),
                 }
+        elif consolidated:
+            # Um único artefato para o achado mais grave (maior score)
+            principal = max(consolidated, key=lambda c: c.score)
+            safe_idx = min(principal.frame_index, len(frame_paths) - 1)
+            if frames[safe_idx] is not None:
+                ev = save_postural_evidence(
+                    finding=principal,
+                    frame_path=frame_paths[safe_idx],
+                    pose_frame=frames[safe_idx],
+                    run_id=run_id,
+                )
+                evidencia_principal = ev.evidence_id
 
-        # --- Deteção de fisioterapia (desvios + tilt) ---
-        fps = 30.0
-        postural_findings: list = []
-        tilt_findings: list = []
-
-        if fall_verdict != "queda":
-            # Só corre fisioterapia se NÃO houve queda — uma pessoa no chão
-            # não produz ângulos articulares significativos
-            from pipelines.video.models import JointTarget
-            _DEFAULT_JOINT_TARGETS = [
-                JointTarget("knee_left", 23, 25, 27, min_angle=70.0, target_angle=90.0),
-                JointTarget("knee_right", 24, 26, 28, min_angle=70.0, target_angle=90.0),
-            ]
-            postural_findings = detect_postural_deviations(
-                frames, _DEFAULT_JOINT_TARGETS, _PERSISTENCE_FRAMES, fps,
-            )
-            for finding in postural_findings:
-                safe_idx = min(finding.frame_index, len(frame_paths) - 1)
-                if frames[safe_idx] is not None:
-                    ev = save_postural_evidence(
-                        finding=finding,
-                        frame_path=frame_paths[safe_idx],
-                        pose_frame=frames[safe_idx],
-                        run_id=run_id,
-                    )
-                    findings_detectados.append(finding.description)
-                    pontuacao_maxima = max(pontuacao_maxima, finding.score)
-                    if evidencia_principal is None:
-                        evidencia_principal = ev.evidence_id
-
-            tilt_findings = detect_trunk_tilt(
-                frames, max_angle=30.0, persistence_frames=90, fps=fps,
-            )
-            for finding in tilt_findings:
-                safe_idx = min(finding.frame_index, len(frame_paths) - 1)
-                if frames[safe_idx] is not None:
-                    ev = save_postural_evidence(
-                        finding=finding,
-                        frame_path=frame_paths[safe_idx],
-                        pose_frame=frames[safe_idx],
-                        run_id=run_id,
-                    )
-                    findings_detectados.append(finding.description)
-                    pontuacao_maxima = max(pontuacao_maxima, finding.score)
-                    if evidencia_principal is None:
-                        evidencia_principal = ev.evidence_id
-
-        todos_detalhes["findings"] = findings_detectados
-        todos_detalhes["n_postural"] = len(postural_findings)
-        todos_detalhes["n_tilt"] = len(tilt_findings)
-
-        if not findings_detectados:
-            razao = _razao_sem_queda(windows, len(frame_paths))
-            return ResultadoAnalise(
-                resumo=f"Sem alterações detectadas no período monitorado.{razao}",
-                pontuacao=0.0,
-                detalhes=todos_detalhes,
-            )
-
-        resumo = " | ".join(findings_detectados) + "."
         return ResultadoAnalise(
             resumo=resumo,
-            pontuacao=pontuacao_maxima,
+            pontuacao=pontuacao,
             evidencia_id=evidencia_principal,
             detalhes=todos_detalhes,
         )

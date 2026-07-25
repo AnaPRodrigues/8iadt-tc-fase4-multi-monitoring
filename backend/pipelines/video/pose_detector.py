@@ -99,11 +99,10 @@ def detect_postural_deviations(
 ) -> list[PosturalFinding]:
     """Deteta desvios de amplitude articular com persistência temporal.
 
-    Para cada articulação em ``joint_targets``, calcula o ângulo por frame
-    (via ``joint_angle``) e conta quantos frames consecutivos ficam abaixo do
-    mínimo configurado. Se o contador atingir ``persistence_frames``, emite um
-    ``POSTURAL_DEVIATION``. O contador reseta quando o ângulo volta acima do
-    mínimo ou é ``None`` (POSE-19).
+    Para cada articulação, emite **um único finding por streak contínua**
+    (não um por frame). O finding regista o pior ângulo (mínimo) e a duração
+    total da streak. O contador só reseta quando o ângulo recupera acima do
+    mínimo ou é ``None``.
     """
     from pipelines.video.pose_features import joint_angle as _joint_angle
 
@@ -113,44 +112,53 @@ def detect_postural_deviations(
     for jt in joint_targets:
         consecutive = 0
         streak_start: int | None = None
+        worst_angle: float = float("inf")
+        emitted = False  # evita duplicar o mesmo finding
 
         for idx, frame in enumerate(frames):
             if frame is None:
                 consecutive = 0
                 streak_start = None
+                worst_angle = float("inf")
+                emitted = False
                 continue
 
             angle = _joint_angle(frame, jt.landmark_a, jt.landmark_b, jt.landmark_c)
             if angle is None:
                 consecutive = 0
                 streak_start = None
+                worst_angle = float("inf")
+                emitted = False
                 continue
 
             if angle < jt.min_angle:
                 if consecutive == 0:
                     streak_start = idx
+                    worst_angle = angle
                 consecutive += 1
-                if consecutive >= persistence_frames:
-                    score = max(0.0, min(1.0, 1.0 - angle / jt.target_angle))
+                worst_angle = min(worst_angle, angle)
+                if consecutive >= persistence_frames and not emitted:
+                    score = max(0.0, min(1.0, 1.0 - worst_angle / jt.target_angle))
                     findings.append(PosturalFinding(
                         finding_type="POSTURAL_DEVIATION",
                         joint_name=jt.joint_name,
-                        measured_angle=round(angle, 1),
+                        measured_angle=round(worst_angle, 1),
                         expected_angle=jt.min_angle,
                         duration_s=round(consecutive / fps, 1),
                         frame_index=streak_start,
                         score=round(score, 3),
                         description=(
                             f"Amplitude articular reduzida em flexão de {jt.joint_name} "
-                            f"(alcançado: {angle:.0f}°, esperado: >{jt.min_angle:.0f}°)."
+                            f"(menor ângulo: {worst_angle:.0f}°, esperado: >{jt.min_angle:.0f}°"
+                            f", {consecutive} quadros)."
                         ),
                     ))
-                    # Reset para não duplicar achados para a mesma streak
-                    consecutive = 0
-                    streak_start = None
+                    emitted = True
             else:
                 consecutive = 0
                 streak_start = None
+                worst_angle = float("inf")
+                emitted = False
 
     return findings
 
@@ -163,9 +171,8 @@ def detect_trunk_tilt(
 ) -> list[PosturalFinding]:
     """Deteta inclinação de tronco sustentada com persistência temporal.
 
-    Se a inclinação exceder ``max_angle`` por ``persistence_frames`` frames
-    consecutivos, emite um ``TRUNK_TILT``. O contador reseta quando a
-    inclinação volta abaixo do limiar ou é ``None`` (POSE-19).
+    Emite **um único finding por streak contínua** com o pior ângulo (máximo)
+    e a duração total. O contador só reseta quando a inclinação recupera.
     """
     from pipelines.video.pose_features import trunk_tilt as _trunk_tilt
 
@@ -173,45 +180,141 @@ def detect_trunk_tilt(
     fps = max(fps, 1.0)
     consecutive = 0
     streak_start: int | None = None
+    worst_angle: float = 0.0
+    emitted = False
 
     for idx, frame in enumerate(frames):
         if frame is None:
             consecutive = 0
             streak_start = None
+            worst_angle = 0.0
+            emitted = False
             continue
 
         angle = _trunk_tilt(frame)
         if angle is None:
             consecutive = 0
             streak_start = None
+            worst_angle = 0.0
+            emitted = False
             continue
 
         if angle > max_angle:
             if consecutive == 0:
                 streak_start = idx
+                worst_angle = angle
             consecutive += 1
-            if consecutive >= persistence_frames:
-                score = min(1.0, angle / (2.0 * max_angle))
+            worst_angle = max(worst_angle, angle)
+            if consecutive >= persistence_frames and not emitted:
+                score = min(1.0, worst_angle / (2.0 * max_angle))
                 findings.append(PosturalFinding(
                     finding_type="TRUNK_TILT",
                     joint_name=None,
-                    measured_angle=round(angle, 1),
+                    measured_angle=round(worst_angle, 1),
                     expected_angle=max_angle,
                     duration_s=round(consecutive / fps, 1),
                     frame_index=streak_start,
                     score=round(score, 3),
                     description=(
                         f"Desvio postural / inclinação de tronco sustentada "
-                        f"({angle:.0f}° de inclinação por {consecutive / fps:.1f}s)."
+                        f"({worst_angle:.0f}° de inclinação por {consecutive / fps:.1f}s)."
                     ),
                 ))
-                consecutive = 0
-                streak_start = None
+                emitted = True
         else:
             consecutive = 0
             streak_start = None
+            worst_angle = 0.0
+            emitted = False
 
     return findings
+
+
+# --------------------------------------------------------------------------- #
+# Sumarização de achados — agrupa findings repetidos por articulação/tipo
+# --------------------------------------------------------------------------- #
+_TRADUCAO_ARTICULACAO = {
+    "knee_left": "joelho esquerdo",
+    "knee_right": "joelho direito",
+    "elbow_left": "cotovelo esquerdo",
+    "elbow_right": "cotovelo direito",
+}
+
+
+def sumarizar_achados_video(
+    postural_findings: list[PosturalFinding],
+    tilt_findings: list[PosturalFinding],
+    fall_detected: bool,
+) -> tuple[str, float, list[PosturalFinding]]:
+    """Consolida findings repetidos em descrições agrupadas e pontuação única.
+
+    Devolve ``(resumo, pontuacao, consolidated)`` onde *consolidated* contém
+    no máximo 1 finding por articulação + 1 por tilt + 1 por queda.
+    """
+    partes: list[str] = []
+    consolidated: list[PosturalFinding] = []
+    pontuacao = 0.0
+
+    # --- Queda ---
+    if fall_detected:
+        partes.append("Queda detectada")
+        pontuacao = max(pontuacao, 0.80)
+
+    # --- Desvios posturais: agrupa por articulação ---
+    por_articulacao: dict[str, list[PosturalFinding]] = {}
+    for f in postural_findings:
+        key = f.joint_name or "desconhecido"
+        por_articulacao.setdefault(key, []).append(f)
+
+    for joint_name, findings in por_articulacao.items():
+        if not findings:
+            continue
+        nome_pt = _TRADUCAO_ARTICULACAO.get(joint_name, joint_name)
+        pior = min(findings, key=lambda f: f.measured_angle)
+        n_quadros = sum(f.duration_s * 30 for f in findings)  # ~30 fps
+        n_quadros = max(int(n_quadros), 1)
+
+        partes.append(
+            f"Flexão de {nome_pt} limitada "
+            f"(menor ângulo: {pior.measured_angle:.0f}°, "
+            f"esperado: >{pior.expected_angle:.0f}°) "
+            f"detectada em {n_quadros} quadros."
+        )
+        # Finding consolidado com o pior ângulo
+        consolidated.append(PosturalFinding(
+            finding_type="POSTURAL_DEVIATION",
+            joint_name=joint_name,
+            measured_angle=pior.measured_angle,
+            expected_angle=pior.expected_angle,
+            duration_s=sum(f.duration_s for f in findings),
+            frame_index=pior.frame_index,
+            score=pior.score,
+            description=partes[-1],
+        ))
+        pontuacao = max(pontuacao, pior.score)
+
+    # --- Tilt: consolida num único achado ---
+    if tilt_findings:
+        pior_tilt = max(tilt_findings, key=lambda f: f.measured_angle)
+        duracao_total = sum(f.duration_s for f in tilt_findings)
+        partes.append(
+            "Desvio postural / inclinação de tronco sustentada "
+            "detectada durante o exercício."
+        )
+        consolidated.append(PosturalFinding(
+            finding_type="TRUNK_TILT",
+            joint_name=None,
+            measured_angle=pior_tilt.measured_angle,
+            expected_angle=pior_tilt.expected_angle,
+            duration_s=duracao_total,
+            frame_index=pior_tilt.frame_index,
+            score=pior_tilt.score,
+            description=partes[-1],
+        ))
+        pontuacao = max(pontuacao, pior_tilt.score)
+
+    resumo = " | ".join(partes) + "." if partes else "Sem alterações detectadas."
+    return resumo, round(pontuacao, 3), consolidated
 
 
 def save_fall_evidence(
