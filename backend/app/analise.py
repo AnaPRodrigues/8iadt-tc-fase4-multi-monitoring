@@ -365,28 +365,39 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
             best_window_start = evento.start_frame if evento else (fall_frame_idx or 0)
             safe_idx = min(best_window_start, len(frame_paths) - 1, len(frames) - 1)
 
-            # Fallback: se a pessoa selecionada não tem pose no frame da queda,
-            # procura em outras pessoas detetadas nesse mesmo frame
-            pose_para_evidencia = frames[safe_idx]
+            # Fallback: se a pessoa selecionada não tem pose, procura em outras
+            # pessoas no mesmo frame, depois em frames vizinhos (±10)
+            pose_para_evidencia = frames[safe_idx] if safe_idx < len(frames) else None
             if pose_para_evidencia is None and safe_idx < len(all_poses):
                 for alt_pose in all_poses[safe_idx]:
                     if alt_pose is not None:
                         pose_para_evidencia = alt_pose
                         break
+            # Fallback estendido: frames vizinhos
+            ev_idx = safe_idx
+            if pose_para_evidencia is None:
+                for delta in range(1, 11):
+                    for candidate in (safe_idx - delta, safe_idx + delta):
+                        if 0 <= candidate < len(frames) and frames[candidate] is not None:
+                            pose_para_evidencia = frames[candidate]
+                            ev_idx = candidate
+                            break
+                    if pose_para_evidencia is not None:
+                        break
 
             if pose_para_evidencia is not None:
                 ev = save_fall_evidence(
                     seq_id=caminho.stem,
-                    frame_path=frame_paths[safe_idx],
+                    frame_path=frame_paths[ev_idx],
                     pose_frame=pose_para_evidencia,
-                    event_frame_index=safe_idx,
+                    event_frame_index=ev_idx,
                     score=evento.center_of_mass_amplitude if evento else 0.0,
                     run_id=run_id,
                     persistence_frames=_PERSISTENCE_FRAMES,
                 )
                 evidencia_principal = ev.evidence_id
                 todos_detalhes["queda"] = {
-                    "frame": safe_idx,
+                    "frame": ev_idx,
                     "score": round(evento.center_of_mass_amplitude if evento else 0.0, 3),
                 }
         elif consolidated:
