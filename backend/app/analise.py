@@ -359,11 +359,12 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         # --- Evidência única consolidada ---
         evidencia_principal: str | None = None
         if fall_detected:
-            # Usa a janela com maior amplitude (mais representativa da queda)
+            # Usa a última janela acima do limiar (fim da queda, pessoa no chão)
             above = [w for w in windows if w.center_of_mass_amplitude > _FALL_THRESHOLD]
-            evento = max(above, key=lambda w: w.center_of_mass_amplitude) if above else None
-            best_window_start = evento.start_frame if evento else (fall_frame_idx or 0)
-            safe_idx = min(best_window_start, len(frame_paths) - 1, len(frames) - 1)
+            evento = above[-1] if above else None
+            # Usa o último frame da janela (pessoa já no chão)
+            last_frame = evento.end_frame if evento else (fall_frame_idx or 0)
+            safe_idx = min(last_frame, len(frame_paths) - 1, len(frames) - 1)
 
             # Fallback: se a pessoa selecionada não tem pose, procura em outras
             # pessoas no mesmo frame, depois em frames vizinhos (±10)
