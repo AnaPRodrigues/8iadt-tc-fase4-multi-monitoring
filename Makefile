@@ -5,7 +5,7 @@ PY := .venv/bin/python
 MODEL_HF_REPO := AnaPRodrigues/endoscapes-surgical-detector
 MODEL_HF_FILE := best.pt
 
-.PHONY: install data demo bidmc-scan seed-demo test test-unit lint fmt clean models-fetch serve-api serve-front frontend-install
+.PHONY: install data data-extra tts-consulta demo bidmc-scan seed-demo gen-presc test test-unit lint fmt clean models-fetch serve-api serve-front frontend-install
 
 install:
 	$(PY) -m pip install -e ".[dev]"
@@ -13,6 +13,17 @@ install:
 # Baixa os datasets públicos usados pelo sistema.
 data:
 	./backend/scripts/download_datasets.sh
+
+# Baixa os datasets extras (áudio pt-BR, voz patológica, fisioterapia,
+# instrumentos cirúrgicos).  Complementa o `make data` com fontes adicionais
+# que dependem de bibliotecas Python (datasets, kagglehub).
+data-extra:
+	PYTHONPATH=backend $(PY) -m scripts.download_extra_datasets
+
+# Gera áudios sintéticos de consulta médica em pt-BR (edge-tts) para exercitar
+# o pipeline completo de áudio sem gravação própria.
+tts-consulta:
+	PYTHONPATH=backend $(PY) -m scripts.gerar_consulta_tts
 
 # Baixa o peso já treinado do detector de objetos (o treino em si roda em
 # training/, com GPU) direto do Hugging Face Hub. Antes do primeiro upload, o
@@ -35,6 +46,12 @@ bidmc-scan:
 # vídeo, `make models-fetch`).
 seed-demo:
 	PYTHONPATH=backend $(PY) -m scripts.seed_demo_patients
+
+# Gera uma prescrição avulsa em PDF. Exemplo:
+#   make gen-presc ARGS="--patient-id p1 --drug paracetamol --dose 500"
+#   make gen-presc ARGS="--patient-id p1 --drug digoxina --dose 1.5 --output digoxina_alta.pdf"
+gen-presc:
+	PYTHONPATH=backend $(PY) -m pipelines.prescription.generator $(ARGS)
 
 # --- Painel web -- dois processos, um por terminal ---
 # 1) suba a API:      make serve-api      (fica em http://localhost:8000)

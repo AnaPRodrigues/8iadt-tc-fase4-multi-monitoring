@@ -39,12 +39,21 @@ def _timestamp_from_seed(seed: int) -> str:
 
 
 def generate_prescription(
-    patient_id: str, drug: str, dose: float, frequency: str, seed: int
+    patient_id: str,
+    drug: str,
+    dose: float,
+    frequency: str = "8/8h",
+    seed: int | None = None,
 ) -> bytes:
-    """Gera um PDF de prescrição com texto real embutido."""
+    """Gera um PDF de prescrição com texto real embutido.
+
+    ``seed`` determina o timestamp; se omitido, usa a data/hora atual.
+    ``frequency`` tem default ``"8/8h"`` para uso avulso sem especificar.
+    """
     drug_range = catalog.lookup(drug)
     unit = drug_range.unit if drug_range is not None else _DEFAULT_UNIT
-    timestamp = _timestamp_from_seed(seed)
+    effective_seed = seed if seed is not None else random.randint(0, 2**31 - 1)
+    timestamp = _timestamp_from_seed(effective_seed)
 
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer)
@@ -209,3 +218,35 @@ def generate_dataset_to_disk(
         encoding="utf-8",
     )
     return entries
+
+
+# --------------------------------------------------------------------------- #
+# Uso standalone: gera uma prescrição avulsa e grava o PDF em disco
+# --------------------------------------------------------------------------- #
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(
+        description="Gera uma prescrição avulsa em PDF e grava em disco."
+    )
+    parser.add_argument("--patient-id", required=True, help="ID do paciente")
+    parser.add_argument("--drug", required=True, help="Nome do medicamento (ex.: paracetamol)")
+    parser.add_argument("--dose", required=True, type=float, help="Dose numérica (ex.: 500)")
+    parser.add_argument("--frequency", default="8/8h", help="Frequência (default: 8/8h)")
+    parser.add_argument("--seed", type=int, default=None, help="Seed para timestamp determinístico")
+    parser.add_argument("--output", default=None, help="Caminho do PDF de saída (default: <drug>_<dose>.pdf)")
+    args = parser.parse_args()
+
+    pdf_bytes = generate_prescription(
+        patient_id=args.patient_id,
+        drug=args.drug,
+        dose=args.dose,
+        frequency=args.frequency,
+        seed=args.seed,
+    )
+
+    output = args.output or f"{args.drug}_{args.dose:.0f}.pdf"
+    Path(output).write_bytes(pdf_bytes)
+    print(f"Prescrição gerada: {output} ({len(pdf_bytes)} bytes)")
+    sys.exit(0)
