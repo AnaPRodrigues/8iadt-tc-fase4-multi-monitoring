@@ -359,10 +359,11 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         # --- Evidência única consolidada ---
         evidencia_principal: str | None = None
         if fall_detected:
-            evento = next(
-                w for w in windows if w.center_of_mass_amplitude > _FALL_THRESHOLD
-            )
-            safe_idx = min(fall_frame_idx or 0, len(frame_paths) - 1, len(frames) - 1)
+            # Usa a janela com maior amplitude (mais representativa da queda)
+            above = [w for w in windows if w.center_of_mass_amplitude > _FALL_THRESHOLD]
+            evento = max(above, key=lambda w: w.center_of_mass_amplitude) if above else None
+            best_window_start = evento.start_frame if evento else (fall_frame_idx or 0)
+            safe_idx = min(best_window_start, len(frame_paths) - 1, len(frames) - 1)
 
             # Fallback: se a pessoa selecionada não tem pose no frame da queda,
             # procura em outras pessoas detetadas nesse mesmo frame
@@ -379,14 +380,14 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
                     frame_path=frame_paths[safe_idx],
                     pose_frame=pose_para_evidencia,
                     event_frame_index=safe_idx,
-                    score=evento.center_of_mass_amplitude,
+                    score=evento.center_of_mass_amplitude if evento else 0.0,
                     run_id=run_id,
                     persistence_frames=_PERSISTENCE_FRAMES,
                 )
                 evidencia_principal = ev.evidence_id
                 todos_detalhes["queda"] = {
                     "frame": safe_idx,
-                    "score": round(evento.center_of_mass_amplitude, 3),
+                    "score": round(evento.center_of_mass_amplitude if evento else 0.0, 3),
                 }
         elif consolidated:
             # Um único artefato para o achado mais grave (maior score)
