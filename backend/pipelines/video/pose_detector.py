@@ -231,6 +231,112 @@ def detect_trunk_tilt(
 
 
 # --------------------------------------------------------------------------- #
+# Detector de convulsão/espasmo — oscilação multi-articular (ITER2-04)
+# --------------------------------------------------------------------------- #
+def detect_seizure(
+    frames: list[PoseFrame | None],
+    fps: float,
+    window_frames: int = 60,
+    min_std: float = 0.05,
+    persistence_frames: int = 30,
+) -> list[PosturalFinding]:
+    """Deteta convulsão/espasmo via oscilação rítmica multi-articular.
+
+    Calcula a velocidade angular (variação frame a frame) de 4 articulações
+    — cotovelo E (11-13-15), cotovelo D (12-14-16), joelho E (23-25-27),
+    joelho D (24-26-28) — e mede o desvio padrão numa janela deslizante.
+    Se o std médio das articulações exceder ``min_std`` por
+    ``persistence_frames`` consecutivos, emite um finding "SEIZURE".
+
+    Articulações com visibilidade < 0.4 são excluídas do frame sem
+    invalidar a janela.
+    """
+    from pipelines.video.pose_features import joint_angle as _joint_angle
+
+    _JOINT_TRIPLETS = [
+        (11, 13, 15),  # cotovelo esquerdo
+        (12, 14, 16),  # cotovelo direito
+        (23, 25, 27),  # joelho esquerdo
+        (24, 26, 28),  # joelho direito
+    ]
+
+    if len(frames) < window_frames:
+        return []
+
+    # Pré-calcula ângulos: [joint][frame] = angle | None
+    angles: list[list[float | None]] = [[] for _ in _JOINT_TRIPLETS]
+    for frame in frames:
+        if frame is None:
+            for j in range(len(_JOINT_TRIPLETS)):
+                angles[j].append(None)
+            continue
+        for j, (a, b, c) in enumerate(_JOINT_TRIPLETS):
+            angles[j].append(_joint_angle(frame, a, b, c))
+
+    n = len(frames)
+    # std deslizante por articulação
+    std_windows: list[float] = []
+    for i in range(window_frames - 1, n):
+        joint_stds: list[float] = []
+        for j in range(len(_JOINT_TRIPLETS)):
+            # Velocidades angulares nesta janela
+            window = angles[j][i - window_frames + 1 : i + 1]
+            velocities = []
+            for k in range(1, len(window)):
+                prev_a = window[k - 1]
+                curr_a = window[k]
+                if prev_a is not None and curr_a is not None:
+                    velocities.append(abs(curr_a - prev_a))
+            if velocities:
+                # Desvio padrão das velocidades
+                mean_v = sum(velocities) / len(velocities)
+                var = sum((v - mean_v) ** 2 for v in velocities) / len(velocities)
+                joint_stds.append(var ** 0.5)
+        if joint_stds:
+            std_windows.append(sum(joint_stds) / len(joint_stds))
+        else:
+            std_windows.append(0.0)
+
+    # Persistência: streak de frames com std > min_std
+    findings: list[PosturalFinding] = []
+    consecutive = 0
+    streak_start: int | None = None
+    worst_std = 0.0
+
+    for idx, std_val in enumerate(std_windows):
+        frame_idx = idx + window_frames - 1
+        if std_val > min_std:
+            if consecutive == 0:
+                streak_start = frame_idx
+            consecutive += 1
+            worst_std = max(worst_std, std_val)
+            if consecutive >= persistence_frames and streak_start is not None:
+                if not findings:  # emite apenas 1 finding por streak
+                    score = min(1.0, worst_std / (min_std * 2))
+                    findings.append(PosturalFinding(
+                        finding_type="SEIZURE",
+                        joint_name=None,
+                        measured_angle=round(worst_std, 4),
+                        expected_angle=min_std,
+                        duration_s=round(consecutive / max(fps, 1.0), 1),
+                        frame_index=streak_start,
+                        score=round(score, 3),
+                        description=(
+                            f"Convulsão/espasmo detectado "
+                            f"(std velocidade angular = {worst_std:.4f}, "
+                            f"{len(_JOINT_TRIPLETS)} articulações, "
+                            f"{consecutive / max(fps, 1.0):.1f}s)."
+                        ),
+                    ))
+        else:
+            consecutive = 0
+            streak_start = None
+            worst_std = 0.0
+
+    return findings
+
+
+# --------------------------------------------------------------------------- #
 # Sumarização de achados — agrupa findings repetidos por articulação/tipo
 # --------------------------------------------------------------------------- #
 _TRADUCAO_ARTICULACAO = {

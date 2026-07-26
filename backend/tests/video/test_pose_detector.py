@@ -604,6 +604,90 @@ def test_validate_fall_dynamic_not_fall_verdict_passes_through():
     assert peak is None
 
 
+# --------------------------------------------------------------------------- #
+# T3: detect_seizure — convulsão/espasmo (ITER2-04)
+# --------------------------------------------------------------------------- #
+def _make_seizure_frame(offset: float = 0.0, elbow_vis: float = 0.9) -> PoseFrame:
+    """Frame com landmarks assimétricos para produzir ângulos não-180°."""
+    landmarks = [(0.5, 0.5, 0.0, 0.9) for _ in range(33)]
+    # Cotovelo esquerdo: ombro e pulso assimétricos → ângulo varia com offset
+    landmarks[11] = (0.30, 0.20, 0.0, 0.9)                # shoulder L
+    landmarks[13] = (0.50 + offset, 0.40, 0.0, elbow_vis)  # elbow L (oscila)
+    landmarks[15] = (0.70, 0.60, 0.0, 0.9)                # wrist L
+    # Cotovelo direito: mesmo padrão espelhado
+    landmarks[12] = (0.70, 0.20, 0.0, 0.9)                # shoulder R
+    landmarks[14] = (0.50 - offset, 0.40, 0.0, 0.9)        # elbow R (oscila)
+    landmarks[16] = (0.30, 0.60, 0.0, 0.9)                # wrist R
+    # Joelho esquerdo
+    landmarks[23] = (0.30, 0.60, 0.0, 0.9)                # hip L
+    landmarks[25] = (0.50 + offset, 0.75, 0.0, 0.9)        # knee L (oscila)
+    landmarks[27] = (0.70, 0.90, 0.0, 0.9)                # ankle L
+    # Joelho direito
+    landmarks[24] = (0.70, 0.60, 0.0, 0.9)                # hip R
+    landmarks[26] = (0.50 - offset, 0.75, 0.0, 0.9)        # knee R (oscila)
+    landmarks[28] = (0.30, 0.90, 0.0, 0.9)                # ankle R
+    return PoseFrame(landmarks=landmarks)
+
+
+def test_seizure_detected_with_rhythmic_oscillation():
+    """Oscilação rítmica em cotovelos e joelhos por 90 frames → 1 finding."""
+    from pipelines.video.pose_detector import detect_seizure
+
+    # Padrão irregular: amplitudes variadas para produzir std > 0
+    frames = []
+    offsets = [0.0, 0.04, 0.10, 0.04, 0.0, -0.04, -0.10, -0.04]  # ciclo de 8
+    for i in range(90):
+        offset = offsets[i % len(offsets)]
+        frames.append(_make_seizure_frame(offset=offset))
+
+    findings = detect_seizure(frames, fps=30.0)
+
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.finding_type == "SEIZURE"
+    assert f.measured_angle > 0.0
+    assert f.duration_s > 0.0
+    assert 0.0 <= f.score <= 1.0
+
+
+def test_seizure_no_oscillation_no_finding():
+    """Timeline sem oscilação → 0 findings."""
+    from pipelines.video.pose_detector import detect_seizure
+
+    frames = [_make_seizure_frame(offset=0.0) for _ in range(90)]
+    findings = detect_seizure(frames, fps=30.0)
+
+    assert findings == []
+
+
+def test_seizure_insufficient_frames():
+    """Menos de 60 frames → [] (dados insuficientes)."""
+    from pipelines.video.pose_detector import detect_seizure
+
+    frames = [_make_seizure_frame() for _ in range(30)]
+    findings = detect_seizure(frames, fps=30.0)
+
+    assert findings == []
+
+
+def test_seizure_occluded_joint_excluded():
+    """Articulação com visibilidade < 0.4 excluída; outras ainda contribuem."""
+    from pipelines.video.pose_detector import detect_seizure
+
+    frames = []
+    offsets = [0.0, 0.04, 0.10, 0.04, 0.0, -0.04, -0.10, -0.04]
+    for i in range(90):
+        offset = offsets[i % len(offsets)]
+        # Elbow L com visibilidade 0.3 (ocluído), restantes OK
+        frames.append(_make_seizure_frame(offset=offset, elbow_vis=0.3))
+
+    findings = detect_seizure(frames, fps=30.0)
+
+    # Com 3 de 4 articulações oscilando, ainda deve detetar
+    assert len(findings) == 1
+    assert findings[0].finding_type == "SEIZURE"
+
+
 def test_validate_fall_dynamic_truly_falling_person_detected():
     """Pessoa com queda real (Vy≈0.25, tilt≈45°) → detectada com track_id correto."""
     from pipelines.video.pose_detector import validate_fall_dynamic
