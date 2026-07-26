@@ -451,55 +451,99 @@ def test_validate_fall_dynamic_uses_track_id_correctly():
 
 def test_validate_fall_dynamic_excludes_recumbent_person():
     """Pessoa já deitada (>90 frames com Y>0.45) → excluída da detecção.
-    Mesmo que tenha Vy alto (artefato de detecção), não dispara queda."""
+
+    Cenário que DISPARARIA um falso positivo sem is_recumbent():
+    - Paciente deitado (Y=0.75) há 76 frames → is_recumbent=True
+    - Nos últimos 24 frames, o paciente reposiciona-se no leito:
+      Y sobe de 0.75→0.97, com tilt≈53° (dx=0.28 ombros deslocados)
+    - Vy=0.12, deslocamento total=0.22, tilt=53° → TODOS os thresholds
+      de queda single-person são atingidos (Vy≥0.08, ΔY≥0.20, tilt≥25°)
+    - Mas is_recumbent=True → a pessoa É excluída → veredicto="adl"
+
+    SEM a guarda is_recumbent (Mutant 3), este cenário produziria "queda".
+    """
     from pipelines.video.pose_detector import validate_fall_dynamic
 
-    # Pessoa deitada há 100 frames
-    lying = _make_person_frame(hip_y=0.80, track_id=5)
-    # Outra pessoa de pé
+    # Paciente deitado (Y=0.75, tilt≈53° por dx=0.28 nos ombros)
+    patient_stable = _make_person_frame(hip_y=0.75, track_id=5, shoulder_dx=0.28)
+
+    # Reposicionamento no leito: Y sobe rapidamente (Vy alto)
+    patient_move = [
+        _make_person_frame(hip_y=0.87, track_id=5, shoulder_dx=0.28),  # Vy=0.12
+        _make_person_frame(hip_y=0.93, track_id=5, shoulder_dx=0.28),  # Vy=0.06
+        _make_person_frame(hip_y=0.97, track_id=5, shoulder_dx=0.28),  # Vy=0.04
+    ]
+
+    # Acompanhante de pé, estático
     standing = _make_person_frame(hip_y=0.30, track_id=6)
 
-    all_poses = [[lying, standing] for _ in range(100)]
-    dummy_vy: list[float | None] = [0.0] * 100
+    # 76 frames baseline + 3 frames de movimento + 21 frames pós-movimento
+    all_poses = (
+        [[patient_stable, standing] for _ in range(76)]
+        + [[patient_move[0], standing]]
+        + [[patient_move[1], standing]]
+        + [[patient_move[2], standing]]
+        + [[patient_move[2], standing] for _ in range(21)]
+    )
+    # total = 76 + 1 + 1 + 1 + 21 = 100 frames
 
     verdict, frame_idx, vy_score, desc, tid, peak = validate_fall_dynamic(
-        "queda", 50, dummy_vy, min_vertical_velocity=0.10,
+        "queda", 76, [], min_vertical_velocity=0.10,
         all_poses_per_frame=all_poses, n_pessoas=2,
     )
 
-    # A pessoa deitada (track_id=5) é is_recumbent → excluída
-    # A pessoa de pé (track_id=6) tem Y estável → sem Vy significativo
-    # → resultado deve ser "adl" (sem queda)
+    # Is_recumbent=True para track_id=5 → excluído
+    # Track_id=6 estático → sem condições de queda
+    # → veredicto DEVE ser "adl"
     assert verdict == "adl", (
-        f"Pessoa deitada não deveria disparar queda, mas verdict={verdict}"
+        f"Pessoa deitada (is_recumbent=True) deve ser excluída, "
+        f"mesmo com Vy/displacement/tilt acima dos thresholds. "
+        f"verdict={verdict}, vy_score={vy_score}"
     )
 
 
 def test_validate_fall_dynamic_single_person_keeps_original_thresholds():
-    """Single-person: thresholds originais (25°, 0.20, 0.10) preservados."""
+    """Single-person: thresholds originais (Vy≥0.08 floor, ΔY≥0.20, tilt≥25°).
+
+    Testa que uma queda marginal (Vy=0.15, ΔY=0.60, tilt≈32°) é detectada
+    em modo single-person (thresholds baixos) mas seria rejeitada em modo
+    multi-pessoa (Vy≥0.20, ΔY≥0.30, tilt≥35°).
+    """
     from pipelines.video.pose_detector import validate_fall_dynamic
 
-    # Pessoa em pé que cai: Y=0.30 → 0.90 (Vy≈0.12/frame, tilt≈26°)
-    standing = _make_person_frame(hip_y=0.30, shoulder_dx=0.22)
+    # Pessoa com tilt moderado (dx=0.25, dy=0.40 → arctan(0.25/0.40)≈32°)
+    standing = _make_person_frame(hip_y=0.30, shoulder_dx=0.25)
+
+    # Queda: Y cai de 0.30 a 0.90 (Vy≈0.15/frame)
     falling_frames = []
-    for y in [0.30, 0.45, 0.60, 0.75, 0.90]:
-        falling_frames.append(_make_person_frame(hip_y=y, shoulder_dx=0.22))
+    for y in [0.45, 0.60, 0.75, 0.90]:
+        falling_frames.append(_make_person_frame(hip_y=y, shoulder_dx=0.25))
 
-    # 95 frames baseline + 5 frames queda
-    all_poses = [[standing] for _ in range(95)] + [[f] for f in falling_frames]
-    dummy_vy: list[float | None] = [0.0] * 95 + [0.12, 0.12, 0.12, 0.12, 0.12]
+    all_poses = (
+        [[standing] for _ in range(96)]
+        + [[f] for f in falling_frames]
+    )
 
-    verdict, frame_idx, vy_score, desc, tid, peak = validate_fall_dynamic(
-        "queda", 95, dummy_vy, min_vertical_velocity=0.10,
+    # Verdict single-person: thresholds Vy≥0.08, ΔY≥0.20, tilt≥25°
+    verdict_1p, _, vy_1p, _, _, _ = validate_fall_dynamic(
+        "queda", 96, [], min_vertical_velocity=0.10,
         all_poses_per_frame=all_poses, n_pessoas=1,
     )
 
-    # Single-person: min_vertical_velocity=0.10 (floor), tilt≥25°
-    # O Vy≈0.12 é suficiente com thresholds originais
-    # O tilt≈26° (dx=0.22, dy=0.4) excede 25°
-    # Nota: depende se total_dy atinge 0.20
-    # Apenas verificamos que NÃO aplica thresholds multi-pessoa
-    assert vy_score >= 0.0  # sempre tem score
+    # Verdict multi-pessoa: thresholds Vy≥0.20, ΔY≥0.30, tilt≥35°
+    verdict_mp, _, vy_mp, _, _, _ = validate_fall_dynamic(
+        "queda", 96, [], min_vertical_velocity=0.10,
+        all_poses_per_frame=all_poses, n_pessoas=3,
+    )
+
+    # Single-person DEVE detectar: Vy≈0.15≥0.08, ΔY=0.60≥0.20, tilt≈32°≥25°
+    assert verdict_1p == "queda", (
+        f"Single-person deveria detectar queda com Vy≈0.15, mas verdict={verdict_1p}"
+    )
+    # Multi-person NÃO deve detectar: Vy≈0.15<0.20, tilt≈32°<35°
+    assert verdict_mp == "adl", (
+        f"Multi-person NÃO deveria detectar (thresholds elevados), mas verdict={verdict_mp}"
+    )
 
 
 def test_validate_fall_dynamic_no_tracking_fallback():
