@@ -247,18 +247,28 @@ def validate_fall_dynamic(
     velocities: list[float | None],
     min_vertical_velocity: float = 0.10,
     all_poses_per_frame: list[list[PoseFrame | None]] | None = None,
-) -> tuple[str, int | None, float, str, int, int | None]:
-    """Validação dinâmica de queda multi-pessoa com fallback para oclusão.
+    n_pessoas: int | None = None,
+) -> tuple[str, int | None, float, str, int | None, int | None]:
+    """Validação dinâmica de queda multi-pessoa com agrupamento por track_id.
 
-    Itera sobre **todas** as poses detetadas no frame. Se qualquer pessoa
-    satisfizer as condições de queda, o evento é registado.
+    Agrupa as poses de todos os frames por ``track_id`` (não por índice
+    posicional), garantindo que cada pessoa real tem a sua própria timeline
+    independente. Pessoas já deitadas (``is_recumbent()``) são excluídas
+    da detecção de queda — um acompanhante que se senta não dispara alarme.
 
-    Devolve ``(verdict, frame_idx, velocity_score, description, person_index, peak_vy_frame)``.
+    Em cenas multi-pessoa (``n_pessoas > 1``), os thresholds são elevados
+    automaticamente para reduzir falsos positivos.
+
+    Devolve ``(verdict, frame_idx, velocity_score, description, track_id, peak_vy_frame)``.
+    ``track_id`` é o identificador persistente da pessoa que caiu (``None`` se
+    tracking não disponível ou fallback de frame inteiro).
     """
     if fall_verdict != "queda":
-        return (fall_verdict, fall_frame_idx, 0.0, "", -1, None)
+        return (fall_verdict, fall_frame_idx, 0.0, "", None, None)
 
     from pipelines.video.pose_features import (
+        group_poses_by_track_id,
+        is_recumbent,
         lateral_displacement,
         max_vertical_velocity,
         total_displacement,
@@ -266,99 +276,166 @@ def validate_fall_dynamic(
         vertical_velocity_robust,
     )
 
+    # Thresholds base (single-person, calibrados contra URFD)
     _MIN_TILT_FOR_FALL = 25.0
-    _MIN_TOTAL_DISPLACEMENT = 0.20  # ΔY acumulado mínimo para queda real
-    _INITIAL_FRAMES = 30
+    _MIN_TOTAL_DISPLACEMENT = 0.20
+    _MIN_VERTICAL_VELOCITY_FLOOR = 0.08
+
+    # Determina se é cena multi-pessoa para thresholds adaptativos (C2)
+    effective_n_pessoas = n_pessoas
+    if effective_n_pessoas is None and all_poses_per_frame:
+        effective_n_pessoas = max(
+            (len(p) for p in all_poses_per_frame if p), default=0
+        )
+
+    if effective_n_pessoas is not None and effective_n_pessoas > 1:
+        _MIN_TILT_FOR_FALL = 35.0
+        _MIN_TOTAL_DISPLACEMENT = 0.30
+        min_vertical_velocity = max(min_vertical_velocity, 0.20)
+    else:
+        min_vertical_velocity = max(min_vertical_velocity, _MIN_VERTICAL_VELOCITY_FLOOR)
 
     best_vy = 0.0
     best_description = ""
-    best_person = -1
+    best_track_id: int | None = None
     best_peak_frame: int | None = None
 
-    all_vy: list[list[float | None]] = [velocities]
-    all_person_frames: list[list[PoseFrame | None]] = []
-
+    # Estratégia primária: agrupar por track_id (A1)
     if all_poses_per_frame:
-        max_people = max((len(p) for p in all_poses_per_frame if p), default=0)
-        if max_people > 1:
-            all_vy = []
-            for p_idx in range(max_people):
-                pf: list[PoseFrame | None] = [
-                    poses[p_idx] if poses and p_idx < len(poses) else None
-                    for poses in all_poses_per_frame
+        person_timelines = group_poses_by_track_id(all_poses_per_frame)
+
+        if person_timelines:
+            # Analisa cada pessoa real independentemente
+            for track_id, person_frames in person_timelines.items():
+                # Exclui pessoas já deitadas (B1)
+                if is_recumbent(person_frames):
+                    continue
+
+                vy_list = vertical_velocity_robust(person_frames)
+
+                tilts = [
+                    t for f in person_frames if f is not None
+                    for t in [trunk_tilt(f)] if t is not None
                 ]
-                all_person_frames.append(pf)
-                all_vy.append(vertical_velocity_robust(pf))
+                max_tilt = max(tilts) if tilts else 0.0
+
+                max_vy = max_vertical_velocity(vy_list)
+                total_dy = total_displacement(vy_list)
+
+                # Queda = Pico Vy + deslocamento total + tilt
+                if (
+                    max_vy >= min_vertical_velocity
+                    and total_dy >= _MIN_TOTAL_DISPLACEMENT
+                    and max_tilt >= _MIN_TILT_FOR_FALL
+                ):
+                    if max_vy > best_vy:
+                        best_vy = max_vy
+                        best_track_id = track_id
+                        valid_vy = [
+                            (i, v) for i, v in enumerate(vy_list) if v is not None
+                        ]
+                        if valid_vy:
+                            best_peak_frame = max(valid_vy, key=lambda x: x[1])[0]
+                        best_description = (
+                            f"Queda abrupta detectada no frame {best_peak_frame} "
+                            f"(variação de velocidade vertical Vy = {max_vy:.3f}/frame, "
+                            f"inclinação do tronco = {max_tilt:.0f}°"
+                            + (f", track_id={track_id}" if track_id is not None else "")
+                            + ")."
+                        )
+                    continue
+
+                # Fallback: rolamento/escorregamento
+                dx_list = lateral_displacement(person_frames)
+                valid_dx = [v for v in dx_list if v is not None]
+                max_dx = max(valid_dx) if len(valid_dx) >= 5 else 0.0
+
+                if max_dx > 0.05 and max_vy > 0.05:
+                    combined = (max_dx + max_vy) / 2.0
+                    if combined > best_vy:
+                        best_vy = combined
+                        best_track_id = track_id
+                        valid_vy = [
+                            (i, v) for i, v in enumerate(vy_list) if v is not None
+                        ]
+                        best_peak_frame = (
+                            max(valid_vy, key=lambda x: x[1])[0]
+                            if valid_vy else None
+                        )
+                        best_description = (
+                            f"Queda por rolamento/escorregamento detectada "
+                            f"(deslocamento lateral ΔX = {max_dx:.3f}, "
+                            f"Vy = {max_vy:.3f}"
+                            + (f", track_id={track_id}" if track_id is not None else "")
+                            + ")."
+                        )
+
+            if best_vy >= min_vertical_velocity:
+                return (
+                    "queda", fall_frame_idx, round(best_vy, 3),
+                    best_description, best_track_id, best_peak_frame,
+                )
+
+            return (
+                "adl", None, round(best_vy, 3),
+                "Postura reclinada/estática detectada — sem evidência de queda "
+                f"(Vy max = {best_vy:.3f}/frame, abaixo do limiar {min_vertical_velocity}).",
+                None, None,
+            )
+
+    # Fallback: sem tracking multi-pessoa — usa a velocidade já calculada
+    # sobre os frames do ground_person (comportamento retrocompatível)
+    if not all_poses_per_frame or not person_timelines:
+        person_frames: list[PoseFrame | None] = []
+        if all_poses_per_frame:
+            person_frames = [
+                poses[0] if poses and len(poses) > 0 else None
+                for poses in all_poses_per_frame
+            ]
         else:
-            all_person_frames = [all_poses_per_frame[0] if all_poses_per_frame else []]
-    else:
-        all_person_frames = [[]]
+            person_frames = []
 
-    for p_idx, vy_list in enumerate(all_vy):
-        person_frames = all_person_frames[p_idx] if p_idx < len(all_person_frames) else []
+        # Exclui se já está deitado (B1, mesmo no fallback)
+        if is_recumbent(person_frames):
+            return (
+                "adl", None, 0.0,
+                "Postura reclinada/estática detectada — pessoa já se encontrava "
+                "deitada no início da análise.",
+                None, None,
+            )
 
-        tilts = [t for f in person_frames if f is not None for t in [trunk_tilt(f)] if t is not None]
+        vy_list = vertical_velocity_robust(person_frames) if person_frames else velocities
+
+        tilts = [
+            t for f in person_frames if f is not None
+            for t in [trunk_tilt(f)] if t is not None
+        ]
         max_tilt = max(tilts) if tilts else 0.0
 
         max_vy = max_vertical_velocity(vy_list)
         total_dy = total_displacement(vy_list)
 
-        # Filtro de posição inicial
-        early_frames = person_frames[:_INITIAL_FRAMES] if person_frames else []
-        early_y = [
-            (f.landmarks[23][1] + f.landmarks[24][1]) / 2.0
-            for f in early_frames
-            if f is not None
-            and f.landmarks[23][3] >= 0.5 and f.landmarks[24][3] >= 0.5
-        ]
-        started_low = (sum(early_y) / len(early_y)) > 0.45 if early_y else False
-
-        # Queda = Pico Vy + deslocamento total + tilt + não começou baixo
         if (
             max_vy >= min_vertical_velocity
             and total_dy >= _MIN_TOTAL_DISPLACEMENT
             and max_tilt >= _MIN_TILT_FOR_FALL
-            and not started_low
         ):
-            if max_vy > best_vy:
-                best_vy = max_vy
-                best_person = p_idx
-                # Frame do pico de Vy (onde a velocidade é máxima)
-                valid_vy = [(i, v) for i, v in enumerate(vy_list) if v is not None]
-                if valid_vy:
-                    best_peak_frame = max(valid_vy, key=lambda x: x[1])[0]
-                best_description = (
-                    f"Queda abrupta detectada no frame {best_peak_frame} "
-                    f"(variação de velocidade vertical Vy = {max_vy:.3f}/frame, "
-                    f"inclinação do tronco = {max_tilt:.0f}°)."
-                )
-            continue
+            valid_vy = [(i, v) for i, v in enumerate(vy_list) if v is not None]
+            peak_frame = max(valid_vy, key=lambda x: x[1])[0] if valid_vy else None
+            return (
+                "queda", fall_frame_idx, round(max_vy, 3),
+                f"Queda abrupta detectada no frame {peak_frame} "
+                f"(variação de velocidade vertical Vy = {max_vy:.3f}/frame, "
+                f"inclinação do tronco = {max_tilt:.0f}°).",
+                None, peak_frame,
+            )
 
-        dx_list = lateral_displacement(person_frames)
-        valid_dx = [v for v in dx_list if v is not None]
-        max_dx = max(valid_dx) if len(valid_dx) >= 5 else 0.0
-
-        if max_dx > 0.05 and max_vy > 0.05:
-            combined = (max_dx + max_vy) / 2.0
-            if combined > best_vy:
-                best_vy = combined
-                best_person = p_idx
-                valid_vy = [(i, v) for i, v in enumerate(vy_list) if v is not None]
-                best_peak_frame = max(valid_vy, key=lambda x: x[1])[0] if valid_vy else None
-                best_description = (
-                    f"Queda por rolamento/escorregamento detectada "
-                    f"(deslocamento lateral ΔX = {max_dx:.3f}, Vy = {max_vy:.3f})."
-                )
-
-    if best_vy < min_vertical_velocity:
-        return (
-            "adl", None, round(best_vy, 3),
-            "Postura reclinada/estática detectada — sem evidência de queda "
-            f"(Vy max = {best_vy:.3f}/frame, abaixo do limiar {min_vertical_velocity}).",
-            -1, None,
-        )
-
-    return ("queda", fall_frame_idx, round(best_vy, 3), best_description, best_person, best_peak_frame)
+    return (
+        "adl", None, round(best_vy, 3),
+        "Postura reclinada/estática detectada — sem evidência de queda "
+        f"(Vy max = {best_vy:.3f}/frame, abaixo do limiar {min_vertical_velocity}).",
+        None, None,
+    )
 
 
 def sumarizar_achados_video(
@@ -447,8 +524,15 @@ def save_fall_evidence(
     run_id: str,
     root: str | Path = "output",
     persistence_frames: int = 0,
+    track_id: int | None = None,
 ) -> Evidence:
-    """Gera a evidência de queda (frame anotado + metadados) no contrato único de evidência."""
+    """Gera a evidência de queda (frame anotado + metadados) no contrato único de evidência.
+
+    ``track_id`` identifica inequivocamente a pessoa que disparou a queda
+    (rastreada via IoU entre frames consecutivos). É incluído no sidecar de
+    metadados para correlacionar a evidência visual com a identidade da pessoa
+    ao longo da sequência.
+    """
     from pipelines.video.pose_evidence import draw_annotated_frame
 
     finding = PosturalFinding(
@@ -460,7 +544,8 @@ def save_fall_evidence(
         frame_index=event_frame_index,
         score=round(float(score), 3),
         description=f"Queda detectada após {persistence_frames} frames consecutivos "
-        f"acima do limiar (score {score:.2f}).",
+        f"acima do limiar (score {score:.2f})"
+        + (f" [track_id={track_id}]" if track_id is not None else ""),
     )
 
     dest_dir = evidence_dir("video_pose", run_id, root)
@@ -486,6 +571,7 @@ def save_fall_evidence(
             "event_frame": event_frame_index,
             "score": round(float(score), 3),
             "persistence_frames": persistence_frames,
+            "track_id": track_id,
             "description": finding.description,
         },
         root=root,
