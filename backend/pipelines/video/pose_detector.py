@@ -712,6 +712,95 @@ def validate_fall_dynamic(
     )
 
 
+def analyze_all_persons(
+    all_poses_per_frame: list[list[PoseFrame | None]],
+    fps: float = 30.0,
+    joint_targets: list[JointTarget] | None = None,
+    fall_threshold: float = 0.55,
+    persistence_frames: int = 1,
+) -> tuple[str, float, list[PosturalFinding], dict]:
+    """Pipeline multi-pessoa: analisa cada pessoa com o detector do seu papel.
+
+    Itera ``group_poses_by_track_id()`` — para cada pessoa identificada,
+    classifica o papel via ``classify_person_role()`` e despacha os
+    detectores adequados:
+
+    - "recumbent" → detect_agitation() + detect_bed_exit()
+    - "standing" / "transitioning" → validate_fall_dynamic()
+    - "unknown" → ignorada
+
+    Consolida os findings de todas as pessoas. Sem tracking ativo, faz
+    fallback ao comportamento Iteração 1 (single-person).
+
+    Returns:
+        (resumo, pontuacao, consolidated_findings, details_dict)
+    """
+    from pipelines.video.pose_features import (
+        classify_person_role,
+        group_poses_by_track_id,
+    )
+
+    all_findings: list[PosturalFinding] = []
+    details: dict = {"pessoas_analisadas": 0, "por_papel": {}}
+
+    person_timelines = group_poses_by_track_id(all_poses_per_frame)
+
+    if not person_timelines:
+        # Fallback single-person (sem tracking)
+        return ("Sem alterações detectadas.", 0.0, [], details)
+
+    for track_id, person_frames in person_timelines.items():
+        role = classify_person_role(person_frames)
+        details["pessoas_analisadas"] += 1
+        details["por_papel"][track_id] = role
+
+        if role == "recumbent":
+            # Detectores para pessoa deitada
+            ag = detect_agitation(person_frames, fps)
+            be = detect_bed_exit(person_frames, fps)
+            all_findings.extend(ag)
+            all_findings.extend(be)
+
+        elif role in ("standing", "transitioning"):
+            # Detector de queda para pessoa em pé ou em transição
+            from pipelines.video.pose_features import (
+                vertical_velocity_robust,
+            )
+            velocities = vertical_velocity_robust(person_frames)
+            verdict, _, vy_score, desc, tid, peak = validate_fall_dynamic(
+                "queda", 0, velocities, 0.10,
+                all_poses_per_frame=all_poses_per_frame,
+            )
+            if verdict == "queda":
+                all_findings.append(PosturalFinding(
+                    finding_type="FALL_DETECTED",
+                    joint_name=None,
+                    measured_angle=vy_score,
+                    expected_angle=0.10,
+                    duration_s=0.0,
+                    frame_index=peak or 0,
+                    score=min(1.0, vy_score),
+                    description=desc,
+                ))
+
+    # Consolida
+    resumo, pontuacao, consolidated = sumarizar_achados_video(
+        [], [], len([f for f in all_findings if f.finding_type == "FALL_DETECTED"]) > 0,
+    )
+
+    # Adiciona achados não-queda ao consolidated
+    for f in all_findings:
+        if f.finding_type not in ("FALL_DETECTED", "POSTURAL_DEVIATION", "TRUNK_TILT"):
+            consolidated.append(f)
+            if pontuacao == 0.0:
+                pontuacao = f.score
+
+    if not consolidated:
+        return ("Sem alterações detectadas.", 0.0, [], details)
+
+    return (resumo, pontuacao, consolidated, details)
+
+
 def sumarizar_achados_video(
     postural_findings: list[PosturalFinding],
     tilt_findings: list[PosturalFinding],
