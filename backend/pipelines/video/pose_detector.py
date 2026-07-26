@@ -270,6 +270,7 @@ def validate_fall_dynamic(
     best_person = -1
     best_peak_frame: int | None = None
     _MIN_TILT_FOR_FALL = 25.0
+    _INITIAL_FRAMES = 30  # janela inicial para verificar posição de partida
 
     all_vy: list[list[float | None]] = [velocities]
     all_person_frames: list[list[PoseFrame | None]] = []
@@ -298,7 +299,19 @@ def validate_fall_dynamic(
 
         max_vy = max_vertical_velocity(vy_list)
 
-        if max_vy >= min_vertical_velocity and max_tilt >= _MIN_TILT_FOR_FALL:
+        # Filtro de posição inicial: se a pessoa já começa o vídeo na metade
+        # inferior do frame (Y > 0.5) e não houve descida a partir de uma
+        # posição alta, é postura sentada/reclinada — não é queda.
+        early_frames = person_frames[:_INITIAL_FRAMES] if person_frames else []
+        early_y = [
+            (f.landmarks[23][1] + f.landmarks[24][1]) / 2.0
+            for f in early_frames
+            if f is not None
+            and f.landmarks[23][3] >= 0.5 and f.landmarks[24][3] >= 0.5
+        ]
+        started_low = (sum(early_y) / len(early_y)) > 0.5 if early_y else False
+
+        if max_vy >= min_vertical_velocity and max_tilt >= _MIN_TILT_FOR_FALL and not started_low:
             if max_vy > best_vy:
                 best_vy = max_vy
                 best_person = p_idx
