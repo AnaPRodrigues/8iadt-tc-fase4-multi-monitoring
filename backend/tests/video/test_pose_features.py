@@ -695,3 +695,107 @@ def test_classify_person_role_handles_none_frames():
     # 50 frames válidos + 50 None → ainda tem 50 válidos, Y≈0.30 → "standing"
     frames = [valid, None] * 50
     assert classify_person_role(frames) == "standing"
+
+
+# --------------------------------------------------------------------------- #
+# T6: select_ground_person — persistência de track_id (ITER2-01)
+# --------------------------------------------------------------------------- #
+def test_select_ground_person_stable_track_id_despite_y_swap():
+    """2 track_ids com Y alternando → track_id estável, sem saltos."""
+    from pipelines.video.pose_features import reset_ground_person_state
+    from pipelines.video.pose_features import select_ground_person
+
+    reset_ground_person_state()
+
+    # Pessoa A (tid=0): Y=0.80 (mais baixo na imagem = mais próximo do chão)
+    # Pessoa B (tid=1): Y=0.40 (mais alto)
+    # Normalmente, A seria ground person. Mas em alguns frames B tem Y maior.
+    pa = _make_full_frame({23: (0.50, 0.80, 0.0, 0.9), 24: (0.52, 0.80, 0.0, 0.9)})
+    pa = PoseFrame(landmarks=pa.landmarks, track_id=0)
+    pb = _make_full_frame({23: (0.50, 0.40, 0.0, 0.9), 24: (0.52, 0.40, 0.0, 0.9)})
+    pb = PoseFrame(landmarks=pb.landmarks, track_id=1)
+    # Frame onde B momentaneamente tem Y maior (inclina-se)
+    pb_low = _make_full_frame({23: (0.50, 0.85, 0.0, 0.9), 24: (0.52, 0.85, 0.0, 0.9)})
+    pb_low = PoseFrame(landmarks=pb_low.landmarks, track_id=1)
+
+    # 60 frames baseline (A=0.80, B=0.40) + 5 frames onde B se inclina (Y=0.85)
+    all_poses = [[pa, pb] for _ in range(60)] + [[pa, pb_low] for _ in range(5)]
+
+    result, track_ids = select_ground_person(all_poses)
+
+    # Track_id dominante deve ser 0 (maior Y médio nos primeiros 60 frames)
+    # e deve manter-se estável mesmo quando B se inclina
+    dominant = {tid for tid in track_ids if tid is not None}
+    assert 0 in dominant
+    # O track_id 1 NÃO deve aparecer como ground person nos frames de inclinação
+    assert all(tid != 1 or i < 60 for i, tid in enumerate(track_ids) if tid is not None)
+
+
+def test_select_ground_person_recalculates_after_prolonged_absence():
+    """Track_id dominante ausente >30 frames → recalcula."""
+    from pipelines.video.pose_features import reset_ground_person_state
+    from pipelines.video.pose_features import select_ground_person
+
+    reset_ground_person_state()
+
+    pa = _make_full_frame({23: (0.50, 0.80, 0.0, 0.9), 24: (0.52, 0.80, 0.0, 0.9)})
+    pa = PoseFrame(landmarks=pa.landmarks, track_id=0)
+    pb = _make_full_frame({23: (0.50, 0.90, 0.0, 0.9), 24: (0.52, 0.90, 0.0, 0.9)})
+    pb = PoseFrame(landmarks=pb.landmarks, track_id=1)
+
+    # 60 frames com A (tid=0) → dominante = 0
+    # Depois 35 frames só com B (tid=1) → A ausente > 30 → recalcula
+    all_poses = [[pa] for _ in range(60)] + [[pb] for _ in range(35)]
+
+    result, track_ids = select_ground_person(all_poses)
+
+    # Nos primeiros 60 frames, track_id=0 domina
+    assert track_ids[0] == 0
+    # Após 30+ frames de ausência, track_id=1 assume
+    assert 1 in track_ids[60:]
+
+
+def test_select_ground_person_no_tracking_falls_back():
+    """Sem tracking → comportamento original (Y máximo por frame)."""
+    from pipelines.video.pose_features import reset_ground_person_state
+    from pipelines.video.pose_features import select_ground_person
+
+    reset_ground_person_state()
+
+    # Frames sem track_id
+    p_high = _make_full_frame({23: (0.50, 0.85, 0.0, 0.9), 24: (0.52, 0.85, 0.0, 0.9)})
+    p_low = _make_full_frame({23: (0.50, 0.30, 0.0, 0.9), 24: (0.52, 0.30, 0.0, 0.9)})
+
+    all_poses = [[p_high, p_low] for _ in range(10)]
+
+    result, track_ids = select_ground_person(all_poses)
+
+    # Sem tracking, todos os track_ids são None
+    assert all(tid is None for tid in track_ids)
+    # Mas o ground person ainda é selecionado (maior Y)
+    assert all(r is not None for r in result)
+
+
+def test_select_ground_person_brief_absence_maintains_track_id():
+    """Track_id dominante ausente por 10 frames → mantém (ausência breve)."""
+    from pipelines.video.pose_features import reset_ground_person_state
+    from pipelines.video.pose_features import select_ground_person
+
+    reset_ground_person_state()
+
+    pa = _make_full_frame({23: (0.50, 0.80, 0.0, 0.9), 24: (0.52, 0.80, 0.0, 0.9)})
+    pa = PoseFrame(landmarks=pa.landmarks, track_id=0)
+    pb = _make_full_frame({23: (0.50, 0.50, 0.0, 0.9), 24: (0.52, 0.50, 0.0, 0.9)})
+    pb = PoseFrame(landmarks=pb.landmarks, track_id=1)
+
+    # 60 frames com A, 10 frames só com B (ausência breve), 10 frames com A de volta
+    all_poses = (
+        [[pa, pb] for _ in range(60)]
+        + [[pb] for _ in range(10)]
+        + [[pa, pb] for _ in range(10)]
+    )
+
+    result, track_ids = select_ground_person(all_poses)
+
+    # A (tid=0) deve manter-se dominante mesmo após ausência de 10 frames
+    assert all(tid == 0 for tid in track_ids[70:] if tid is not None)

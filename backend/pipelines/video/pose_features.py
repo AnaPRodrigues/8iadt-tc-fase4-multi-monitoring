@@ -288,42 +288,75 @@ def _landmark_xy(frame: PoseFrame, idx: int) -> tuple[float, float]:
     return (frame.landmarks[idx][0], frame.landmarks[idx][1])
 
 
+# Estado de persistência do ground person (ITER2-01)
+_ground_person_state: dict = {
+    "dominant_tid": None,     # track_id dominante (int | None)
+    "frames_absent": 0,       # frames consecutivos sem o dominant_tid
+}
+_MAX_ABSENT_FRAMES = 30       # frames antes de recalcular o dominante
+_DOMINANT_WINDOW = 60         # frames iniciais para determinar o dominante
+
+
+def reset_ground_person_state() -> None:
+    """Reinicia o estado de persistência do ground person (entre sequências)."""
+    global _ground_person_state
+    _ground_person_state = {
+        "dominant_tid": None,
+        "frames_absent": 0,
+    }
+
+
 def select_ground_person(
     all_poses: list[list[PoseFrame | None]],
 ) -> tuple[list[PoseFrame | None], list[int | None]]:
-    """Seleciona, por frame, a pessoa com maior Y médio (mais próxima do chão).
+    """Seleciona a pessoa ground-track com persistência de track_id (ITER2-01).
 
-    Aplica dois filtros anti-alucinação:
-    1. Visibilidade média ≥ _MIN_VISIBILITY (pessoa real vs. objeto)
-    2. Consistência temporal: ignora "pessoas" que só aparecem em frames
-       isolados (< _MIN_CONSECUTIVE_FRAMES frames consecutivos).
-       Uma pessoa real é detetada de forma contínua;
-       uma impressora gera deteções esporádicas.
+    Com tracking ativo, uma vez identificado o track_id dominante, mantém-no
+    ao longo da sequência — evitando saltos de identidade que geram amplitude
+    artificial no centro de massa. Recalcula o dominante apenas se a pessoa
+    desaparecer por > ``_MAX_ABSENT_FRAMES`` frames consecutivos.
 
-    Com tracking ativo, devolve também ``track_ids`` alinhado frame a frame,
-    permitindo que a evidência de queda referencie inequivocamente a pessoa
-    correta mesmo quando a ordem da lista de poses muda entre frames.
+    Sem tracking (todos track_id=None), mantém o comportamento original:
+    seleção por Y máximo em cada frame.
+
+    Aplica filtros anti-alucinação:
+    1. Visibilidade média ≥ ``_MIN_VISIBILITY`` (pessoa real vs. objeto)
+    2. Consistência temporal ≥ ``_MIN_CONSECUTIVE_FRAMES`` frames consecutivos
 
     Devolve ``(frames, track_ids)`` — ambos com o mesmo comprimento.
     """
+    global _ground_person_state
+
     n = len(all_poses)
     result: list[PoseFrame | None] = [None] * n
     track_ids: list[int | None] = [None] * n
 
+    # Detecta se há tracking ativo
+    has_tracking = any(
+        p is not None and p.track_id is not None
+        for poses in all_poses if poses
+        for p in poses if p is not None
+    )
+
+    # Fallback: sem tracking → comportamento original
+    if not has_tracking:
+        _ground_person_state["dominant_tid"] = None
+        _ground_person_state["frames_absent"] = 0
+
     # Primeiro, computa a "qualidade" de cada pose por frame
-    scored: list[list[tuple[PoseFrame, float, float]]] = []
+    scored: list[list[tuple[PoseFrame, float, float, int | None]]] = []
     for poses in all_poses:
-        frame_scores: list[tuple[PoseFrame, float, float]] = []
+        frame_scores: list[tuple[PoseFrame, float, float, int | None]] = []
         for p in poses:
             if p is None:
                 continue
             avg_vis = sum(lm[3] for lm in p.landmarks) / len(p.landmarks)
             avg_y = sum(lm[1] for lm in p.landmarks) / len(p.landmarks)
             if avg_vis >= _MIN_VISIBILITY:
-                frame_scores.append((p, avg_y, avg_vis))
+                frame_scores.append((p, avg_y, avg_vis, p.track_id))
         scored.append(frame_scores)
 
-    # Filtro temporal: só considera poses que aparecem em ≥ _MIN_CONSECUTIVE_FRAMES frames consecutivos
+    # Filtro temporal
     for i in range(n):
         if not scored[i]:
             continue
@@ -336,17 +369,79 @@ def select_ground_person(
             else:
                 streak = 0
         if streak < _MIN_CONSECUTIVE_FRAMES:
-            scored[i] = []  # descarta — deteção esporádica
+            scored[i] = []
 
-    # Seleciona a pessoa com maior Y em cada frame + respetivo track_id
+    if not has_tracking:
+        # Comportamento original: Y máximo por frame
+        for i in range(n):
+            if not scored[i]:
+                result[i] = None
+                track_ids[i] = None
+            else:
+                best = max(scored[i], key=lambda x: x[1])
+                result[i] = best[0]
+                track_ids[i] = best[0].track_id
+        return result, track_ids
+
+    # --- Persistência de track_id ---
+
+    # Determina o track_id dominante se ainda não foi definido
+    state = _ground_person_state
+    if state["dominant_tid"] is None:
+        # Conta frequência de cada track_id como "ground person" nos primeiros _DOMINANT_WINDOW frames
+        tid_y_sum: dict[int, tuple[float, int]] = {}
+        for i in range(min(_DOMINANT_WINDOW, n)):
+            if not scored[i]:
+                continue
+            best = max(scored[i], key=lambda x: x[1])
+            tid = best[3]
+            if tid is not None:
+                curr_sum, count = tid_y_sum.get(tid, (0.0, 0))
+                tid_y_sum[tid] = (curr_sum + best[1], count + 1)
+
+        if tid_y_sum:
+            # Escolhe o track_id com maior Y médio
+            dominant = max(tid_y_sum.items(), key=lambda kv: kv[1][0] / kv[1][1])
+            state["dominant_tid"] = dominant[0]
+
+    dominant_tid = state["dominant_tid"]
+
     for i in range(n):
         if not scored[i]:
             result[i] = None
             track_ids[i] = None
+            continue
+
+        # Procura a pose com o track_id dominante neste frame
+        dominant_pose = None
+        best_fallback = None
+        best_fallback_y = -1.0
+
+        for p, y, _vis, tid in scored[i]:
+            if tid == dominant_tid:
+                dominant_pose = p
+                break
+            if y > best_fallback_y:
+                best_fallback_y = y
+                best_fallback = p
+
+        if dominant_pose is not None:
+            result[i] = dominant_pose
+            track_ids[i] = dominant_tid
+            state["frames_absent"] = 0
+        elif best_fallback is not None:
+            # Dominante ausente neste frame
+            result[i] = best_fallback
+            track_ids[i] = best_fallback.track_id
+            state["frames_absent"] += 1
+
+            # Recalcula se ausente por muitos frames
+            if state["frames_absent"] > _MAX_ABSENT_FRAMES:
+                state["dominant_tid"] = None
+                state["frames_absent"] = 0
         else:
-            best = max(scored[i], key=lambda x: x[1])
-            result[i] = best[0]
-            track_ids[i] = best[0].track_id
+            result[i] = None
+            track_ids[i] = None
 
     return result, track_ids
 
