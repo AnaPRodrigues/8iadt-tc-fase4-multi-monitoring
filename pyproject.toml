@@ -23,6 +23,9 @@ dependencies = [
     "python-multipart>=0.0.9",
     "httpx>=0.28",
     "requests>=2.32",
+    "datasets>=2.14",
+    "kagglehub>=0.1",
+    "edge-tts>=6.1",
 ]
 
 [project.optional-dependencies]

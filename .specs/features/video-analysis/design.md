@@ -248,3 +248,103 @@ class Detection:
 | Tamanho do subconjunto curado (URFD e Endoscapes) | Métricas pouco robustas se o subconjunto for pequeno demais | Calibrado durante a implementação, documentado no relatório |
 
 > **Nível de projeto:** nenhuma decisão aqui é nova a nível de arquitetura de projeto — todas aplicam AD-033/035/039 já existentes, e reaproveitam o padrão "Lambda real thin + infra própria" já confirmado em F4.
+
+---
+## Amendment 1 — Suporte a ficheiros de vídeo (2026-07-25)
+
+**Contexto:** Ver spec.md § Amendment 1. O dispatch de `_analisar_video()` foi
+estendido com um terceiro ramo para ficheiros de vídeo, e uma nova modalidade
+`video_cirurgico` foi adicionada para vídeos cirúrgicos. Toda a lógica nova está em
+`backend/app/analise.py` (zero ficheiros novos, zero dependências novas).
+
+### Componentes novos
+
+#### `_extrair_frames()` — `backend/app/analise.py`
+
+- **Purpose**: Extrair frames de um ficheiro de vídeo como PNGs numerados usando
+  `cv2.VideoCapture`.
+- **Interfaces**: `_extrair_frames(video_path: Path, output_dir: Path, max_frames: int = 500) -> list[Path]`
+- **Comportamento**: Vídeos com mais de `max_frames` frames são subamostrados
+  uniformemente. PNGs são escritos em `output_dir` como `frame_NNNNNN.png`.
+- **Errors**: `ErroDeAnalise` se o ficheiro não existir ou o OpenCV não conseguir
+  abri-lo (codec ausente, corrompido). Lista vazia se o vídeo não tiver frames.
+- **Dependencies**: `cv2` (opencv-python>=4.9, já presente)
+
+#### `_analisar_video_pose()` — `backend/app/analise.py`
+
+- **Purpose**: Pipeline completo: vídeo → extração de frames → MediaPipe Pose →
+  `windowed_features` → `classify_sequence` → `save_fall_evidence`.
+- **Interfaces**: `_analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise`
+- **Reuso**: 100% do pipeline de pose existente (`extract_keypoints`,
+  `windowed_features`, `classify_sequence`, `save_fall_evidence`). Só substitui
+  `load_sequence()` (específico do URFD) por `_extrair_frames()`.
+- **Dependencies**: `pipelines.video.pose`, `pipelines.video.pose_detector`,
+  `pipelines.video.pose_features`, `tempfile`
+
+#### `_analisar_video_cirurgico()` — `backend/app/analise.py`
+
+- **Purpose**: Pipeline de vídeo cirúrgico: extração de keyframes a cada 2 s → YOLOv8
+  (ou Rekognition, conforme `ENV`) em cada keyframe → agregação de estruturas
+  encontradas.
+- **Interfaces**: `_analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise`
+- **Comportamento**: Se o ficheiro não for vídeo (extensão não reconhecida), delega
+  para `_analisar_quadro_cirurgico()` (compatibilidade com JPEG único).
+- **Dependencies**: `aws.adapters`, `pipelines.video.adapters`,
+  `pipelines.video.object_detector`, `cv2`
+
+### Dispatch atualizado
+
+```
+_analisar_video()
+├── is_dir()            → _analisar_postura()        [URFD, inalterado]
+├── is_file() + .mp4    → _analisar_video_pose()     [NOVO — P4]
+└── is_file() + .jpg    → _analisar_quadro_cirurgico() [Endoscapes, inalterado]
+
+_despachar() [servico.py]
+├── modalidade="video"           → _analisar_video()
+└── modalidade="video_cirurgico" → _analisar_video_cirurgico()  [NOVO — P5]
+```
+
+### Modalidades (atualizado)
+
+| Modalidade | Opções no frontend | Pipeline |
+| --- | --- | --- |
+| `video` | "Vídeo — movimentação" | Pose/queda (PNGs, .mp4, .avi, …) |
+| `video_cirurgico` | "Vídeo — cirurgia" (nova) | YOLOv8/Rekognition (.mp4, .jpg, .png) |
+| `audio` | "Áudio" | ICBHI + transcrição + features acústicas + termos críticos + sentimento |
+| `sinais_vitais` | "Sinais vitais" | CTG / BIDMC |
+| `documento` | "Prescrições" | PDF → regras de dose |
+
+### Tratamento de erros (novos cenários)
+
+| Cenário | Tratamento |
+| --- | --- |
+| .mp4 corrompido / codec desconhecido | `cv2.VideoCapture.isOpened() == False` → `ErroDeAnalise` |
+| .mp4 com zero frames | `_extrair_frames` devolve lista vazia → `ResultadoAnalise(pontuacao=None)` |
+| .mp4 com < 30 frames (pose) | `ResultadoAnalise(pontuacao=None, resumo="Vídeo muito curto…")` |
+| .mp4 sem pessoas (pose) | `classify_sequence` → "dados_insuficientes" → `pontuacao=0.0` + nota |
+| .mp4 cirúrgico sem estruturas | `pontuacao=0.0`, sem evidência, mensagem clara |
+| JPEG em `video_cirurgico` | Delega para `_analisar_quadro_cirurgico()` |
+| .mp4 cirúrgico ilegível | `ErroDeAnalise` |
+
+### Ficheiros modificados
+
+| Ficheiro | Mudança |
+| --- | --- |
+| `backend/app/analise.py` | +`_EXTENSOES_VIDEO`, +`_extrair_frames()`, +`_razao_sem_queda()`, +`_analisar_video_pose()`, +`_analisar_video_cirurgico()`, dispatch atualizado |
+| `backend/app/servico.py` | +dispatch `video_cirurgico` → `_analisar_video_cirurgico`, +`_MODALIDADE_FUSAO` |
+| `backend/app/repositorio.py` | +`"video_cirurgico"` em `MODALIDADES` |
+| `backend/common/atividade.py` | +`"video_cirurgico": "vídeo cirúrgico"` |
+| `frontend/src/formatos.js` | +`video_cirurgico: "Vídeo — cirurgia"` |
+| `frontend/src/components/AreaEnvio.jsx` | +`"video_cirurgico"` em `MODALIDADES` |
+| `backend/tests/app/test_analise.py` | +11 testes (8 pose vídeo + 3 cirúrgico) |
+
+### Decisões técnicas
+
+| Decisão | Escolha | Rationale |
+| --- | --- | --- |
+| Extração de frames | `cv2.VideoCapture` + `cv2.imwrite` para PNGs | opencv-python já é dependência; zero novas bibliotecas |
+| FPS de extração (pose) | `max_frames=500`, subamostragem uniforme | Equilibra cobertura temporal com uso de CPU/disco |
+| Intervalo de keyframes (cirúrgico) | 2 segundos | Para um vídeo de 30 s são ~15 keyframes; cobre variação de perspetiva sem sobrecarregar |
+| Separação pose vs cirúrgico | Modalidades distintas no frontend/backend | Um .mp4 pode ser de fisioterapia ou de cirurgia; o utilizador escolhe |
+| Frames em disco temporário | `tempfile.TemporaryDirectory` | Limpeza automática; evidência já foi copiada para `output/` por `save_fall_evidence` / `save_evidence` |

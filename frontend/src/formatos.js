@@ -5,7 +5,8 @@
 // de fusão, que usa "prescription"/"vitals").
 const NOMES_MODALIDADE = {
   video: "Vídeo — movimentação",
-  audio: "Áudio — respiração",
+  video_cirurgico: "Vídeo — cirurgia",
+  audio: "Áudio",
   sinais_vitais: "Sinais vitais",
   documento: "Prescrições",
   vitals: "Sinais vitais",
@@ -19,7 +20,8 @@ export function nomeModalidade(modalidade) {
 // O que cada painel monitora (texto explicativo para quem não conhece o sistema).
 export const O_QUE_MONITORA = {
   video: "Quedas e padrões de movimentação do paciente.",
-  audio: "Sinais de dificuldade respiratória na ausculta.",
+  video_cirurgico: "Estruturas anatómicas críticas em vídeo cirúrgico.",
+  audio: "Alterações respiratórias, termos críticos e fadiga vocal na ausculta/consulta.",
   sinais_vitais: "Anomalias na série de sinais vitais ao longo do tempo.",
   documento: "Doses fora da faixa segura ou mudanças abruptas na prescrição.",
 };

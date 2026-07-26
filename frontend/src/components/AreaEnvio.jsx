@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../api.js";
 import { nomeModalidade } from "../formatos.js";
 
-const MODALIDADES = ["video", "audio", "sinais_vitais", "documento"];
+const MODALIDADES = ["video", "video_cirurgico", "audio", "sinais_vitais", "documento"];
 
 // Área de envio de arquivos: escolhe a modalidade, seleciona o arquivo, envia e
 // dispara a análise. Mostra a situação de cada passo.
