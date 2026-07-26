@@ -806,6 +806,57 @@ def test_bed_exit_insufficient_frames():
     assert findings == []
 
 
+# --------------------------------------------------------------------------- #
+# T7: analyze_all_persons — integração multi-pessoa (ITER2-03)
+# --------------------------------------------------------------------------- #
+def test_analyze_all_persons_recumbent_dispatch():
+    """Pessoa deitada com agitação → AGITATION emitido pelo orchestrator."""
+    from pipelines.video.pose_detector import analyze_all_persons
+
+    frames = []
+    y_base = 0.80
+    for i in range(1800):
+        if i > 0 and i % 90 == 0:
+            y_base = 0.85 if y_base == 0.80 else 0.80
+        landmarks = [(0.5, 0.5, 0.0, 0.9) for _ in range(33)]
+        landmarks[23] = (0.50, y_base, 0.0, 0.9)
+        landmarks[24] = (0.52, y_base, 0.0, 0.9)
+        landmarks[11] = (0.50, y_base - 0.20, 0.0, 0.9)
+        landmarks[12] = (0.52, y_base - 0.20, 0.0, 0.9)
+        landmarks[0] = (0.51, y_base - 0.25, 0.0, 0.9)
+        frames.append(PoseFrame(landmarks=landmarks, track_id=0))
+
+    all_poses = [[f] for f in frames]
+
+    _, _, consolidated, details = analyze_all_persons(
+        all_poses_per_frame=all_poses, fps=30.0,
+    )
+
+    assert details["pessoas_analisadas"] == 1
+    agitation_findings = [c for c in consolidated if c.finding_type == "AGITATION"]
+    assert len(agitation_findings) >= 1
+
+
+def test_analyze_all_persons_no_tracking_fallback():
+    """Sem tracking → fallback (sem erro, sem findings)."""
+    from pipelines.video.pose_detector import analyze_all_persons
+
+    frames = []
+    for _ in range(100):
+        landmarks = [(0.5, 0.5, 0.0, 0.9) for _ in range(33)]
+        landmarks[23] = (0.50, 0.30, 0.0, 0.9)
+        landmarks[24] = (0.52, 0.30, 0.0, 0.9)
+        frames.append(PoseFrame(landmarks=landmarks, track_id=None))
+
+    all_poses = [[f] for f in frames]
+    _, pontuacao, consolidated, details = analyze_all_persons(
+        all_poses_per_frame=all_poses, fps=30.0,
+    )
+
+    assert details["pessoas_analisadas"] == 0
+    assert pontuacao == 0.0
+
+
 def test_validate_fall_dynamic_truly_falling_person_detected():
     """Pessoa com queda real (Vy≈0.25, tilt≈45°) → detectada com track_id correto."""
     from pipelines.video.pose_detector import validate_fall_dynamic

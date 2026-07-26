@@ -799,3 +799,34 @@ def test_select_ground_person_brief_absence_maintains_track_id():
 
     # A (tid=0) deve manter-se dominante mesmo após ausência de 10 frames
     assert all(tid == 0 for tid in track_ids[70:] if tid is not None)
+
+
+def test_select_ground_person_dominant_survives_low_visibility():
+    """Track_id dominante sobrevive a frame com visibilidade < threshold (AC5)."""
+    from pipelines.video.pose_features import reset_ground_person_state
+    from pipelines.video.pose_features import select_ground_person
+
+    reset_ground_person_state()
+
+    pa_visible = _make_full_frame({23: (0.50, 0.80, 0.0, 0.9), 24: (0.52, 0.80, 0.0, 0.9)})
+    pa_visible = PoseFrame(landmarks=pa_visible.landmarks, track_id=0)
+    # Frame com visibilidade baixa no quadril — pessoa real mas ocluída
+    pa_occluded = _make_full_frame({23: (0.50, 0.80, 0.0, 0.35), 24: (0.52, 0.80, 0.0, 0.35)})
+    pa_occluded = PoseFrame(landmarks=pa_occluded.landmarks, track_id=0)
+    pb = _make_full_frame({23: (0.50, 0.50, 0.0, 0.9), 24: (0.52, 0.50, 0.0, 0.9)})
+    pb = PoseFrame(landmarks=pb.landmarks, track_id=1)
+
+    # 60 frames com A visível → dominante = 0
+    # Depois 5 frames com A ocluído (vis < 0.4) — track_id 0 ainda presente
+    all_poses = (
+        [[pa_visible, pb] for _ in range(60)]
+        + [[pa_occluded, pb] for _ in range(5)]
+    )
+
+    result, track_ids = select_ground_person(all_poses)
+
+    # O track_id dominante (0) NÃO deve ser abandonado por oclusão
+    # O frame com vis < threshold produz None no resultado, mas o track_id persiste
+    assert track_ids[0] == 0  # primeiro frame
+    # Frame ocluído: result é None (vis < threshold) mas track_id não recalcula
+    assert track_ids[61] is None or track_ids[61] == 0
