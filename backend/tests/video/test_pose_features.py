@@ -625,3 +625,73 @@ def test_select_ground_person_single_isolated_frame_excluded():
     result, track_ids = select_ground_person(all_poses)
 
     assert result == [None, None, None, None, None]
+
+
+# --------------------------------------------------------------------------- #
+# T2: classify_person_role — classificador de papel (ITER2-02)
+# --------------------------------------------------------------------------- #
+def test_classify_person_role_recumbent():
+    """Pessoa deitada (Y=0.80) → 'recumbent'."""
+    from pipelines.video.pose_features import classify_person_role
+
+    frames = [
+        _make_full_frame({23: (0.50, 0.80, 0.0, 0.9), 24: (0.52, 0.80, 0.0, 0.9)})
+        for _ in range(100)
+    ]
+    assert classify_person_role(frames) == "recumbent"
+
+
+def test_classify_person_role_standing():
+    """Pessoa em pé (Y=0.30) → 'standing'."""
+    from pipelines.video.pose_features import classify_person_role
+
+    frames = [
+        _make_full_frame({23: (0.50, 0.30, 0.0, 0.9), 24: (0.52, 0.30, 0.0, 0.9)})
+        for _ in range(100)
+    ]
+    assert classify_person_role(frames) == "standing"
+
+
+def test_classify_person_role_transitioning():
+    """Pessoa a levantar-se (Y: 0.80→0.30 ao longo de 200 frames) → 'transitioning'."""
+    from pipelines.video.pose_features import classify_person_role
+
+    # 100 frames deitado + 100 frames em pé
+    lying = [
+        _make_full_frame({23: (0.50, 0.80, 0.0, 0.9), 24: (0.52, 0.80, 0.0, 0.9)})
+        for _ in range(100)
+    ]
+    standing = [
+        _make_full_frame({23: (0.50, 0.30, 0.0, 0.9), 24: (0.52, 0.30, 0.0, 0.9)})
+        for _ in range(100)
+    ]
+    # Após transição: últimos 90 frames = 90 em pé (Y=0.30) → is_recumbent=False
+    # Y médio dos últimos 30 frames = 0.30 → não é < 0.35? Na verdade 0.30 < 0.35 → "standing"
+    # Precisamos de um Y que NÃO seja nem recumbent nem standing
+    # Usar Y=0.40 (zona cinzenta entre 0.35 e 0.45)
+    mixed = [
+        _make_full_frame({23: (0.50, 0.40, 0.0, 0.9), 24: (0.52, 0.40, 0.0, 0.9)})
+        for _ in range(100)
+    ]
+    assert classify_person_role(mixed) == "transitioning"
+
+
+def test_classify_person_role_unknown_insufficient_data():
+    """Menos de 10 frames válidos → 'unknown'."""
+    from pipelines.video.pose_features import classify_person_role
+
+    frames = [
+        _make_full_frame({23: (0.50, 0.50, 0.0, 0.9), 24: (0.52, 0.50, 0.0, 0.9)})
+        for _ in range(5)
+    ]
+    assert classify_person_role(frames) == "unknown"
+
+
+def test_classify_person_role_handles_none_frames():
+    """Frames None são ignorados na contagem."""
+    from pipelines.video.pose_features import classify_person_role
+
+    valid = _make_full_frame({23: (0.50, 0.30, 0.0, 0.9), 24: (0.52, 0.30, 0.0, 0.9)})
+    # 50 frames válidos + 50 None → ainda tem 50 válidos, Y≈0.30 → "standing"
+    frames = [valid, None] * 50
+    assert classify_person_role(frames) == "standing"

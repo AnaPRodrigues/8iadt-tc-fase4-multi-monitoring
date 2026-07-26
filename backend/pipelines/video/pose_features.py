@@ -483,6 +483,51 @@ def group_poses_by_track_id(
     return dict(person_timeline)
 
 
+def classify_person_role(
+    person_frames: list[PoseFrame | None],
+    standing_y_threshold: float = 0.35,
+    min_valid_frames: int = 10,
+    standing_window: int = 30,
+) -> str:
+    """Classifica o papel de uma pessoa com base na posição Y dos quadris.
+
+    Usa ``is_recumbent()`` (janela deslizante de 90 frames, Y > 0.45) para
+    a classe "recumbent". Para "standing", verifica a média de Y nos últimos
+    ``standing_window`` frames; se < ``standing_y_threshold``, a pessoa está
+    de pé. Caso contrário, está em transição ("transitioning").
+
+    Devolve "unknown" se houver menos de ``min_valid_frames`` frames válidos.
+
+    Returns:
+        "recumbent" | "standing" | "transitioning" | "unknown"
+    """
+    valid_count = sum(1 for f in person_frames if f is not None)
+    if valid_count < min_valid_frames:
+        return "unknown"
+
+    if is_recumbent(person_frames):
+        return "recumbent"
+
+    # Y médio dos últimos standing_window frames válidos
+    recent = person_frames[-standing_window:] if len(person_frames) > standing_window else person_frames
+    y_values: list[float] = []
+    for f in recent:
+        if f is None:
+            continue
+        center = hip_center(f)
+        if center is None:
+            center = _upper_body_center(f)
+        if center is not None:
+            y_values.append(center[1])
+
+    if len(y_values) >= min_valid_frames:
+        avg_y = sum(y_values) / len(y_values)
+        if avg_y < standing_y_threshold:
+            return "standing"
+
+    return "transitioning"
+
+
 def joint_angle(
     frame: PoseFrame, a: int, b: int, c: int
 ) -> float | None:
