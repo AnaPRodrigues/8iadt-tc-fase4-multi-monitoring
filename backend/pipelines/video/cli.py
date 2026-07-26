@@ -25,17 +25,19 @@ import yaml
 from common.evidence import evidence_dir
 from common.logging import get_logger
 from common.metrics import save_report
-from pipelines.video.models import JointTarget, SequenceVerdict
-from pipelines.video.pose import create_landmarker, ensure_pose_model, extract_all_keypoints
+from pipelines.video.models import JointTarget, PoseFrame, SequenceVerdict
+from pipelines.video.pose import (
+    create_landmarker,
+    ensure_pose_model,
+    extract_all_keypoints,
+    reset_person_tracker,
+)
 from pipelines.video.pose_detector import (
-    classify_with_persistence,
-    detect_postural_deviations,
-    detect_trunk_tilt,
+    analyze_all_persons,
     save_fall_evidence,
     save_postural_evidence,
 )
 from pipelines.video.pose_evaluate import evaluate
-from pipelines.video.pose_features import select_ground_person, windowed_features
 from pipelines.video.pose_loader import load_sequence
 
 log = get_logger("video.cli")
@@ -168,71 +170,63 @@ def run(config_path: Path, run_id: str | None = None) -> int:
 
     for seq_dir in seq_dirs:
         seq = load_sequence(seq_dir)
+        # Reinicia o rastreador de identidade para cada sequência (vídeo distinto)
+        reset_person_tracker()
 
-        # Extração multi-pessoa
+        # Extração multi-pessoa com tracking de identidade persistente
         all_poses = [extract_all_keypoints(p, landmarker) for p in seq.frame_paths]
-        frames = select_ground_person(all_poses)
         n_pessoas = max(
             (len(poses) for poses in all_poses if poses), default=0
         )
 
-        # Features de movimento (compartilhadas pelos dois detetores)
-        windows = windowed_features(frames, cfg.window_size)
+        # Pipeline multi-pessoa unificado (ITER2-03)
+        _, _, consolidated, _ = analyze_all_persons(
+            all_poses_per_frame=all_poses,
+            fps=30.0,
+            joint_targets=cfg.joint_targets if cfg.joint_targets else None,
+            fall_threshold=cfg.fall_threshold,
+            persistence_frames=cfg.persistence_frames if n_pessoas <= 1 else 3,
+        )
 
-        # --- Deteção de queda (com persistência) ---
-        fall_verdict, fall_frame_idx = classify_with_persistence(
-            windows, cfg.fall_threshold, cfg.persistence_frames,
+        fall_detected = any(
+            c.finding_type == "FALL_DETECTED" for c in consolidated
         )
         verdicts.append(SequenceVerdict(
-            seq_id=seq.seq_id, predicted=fall_verdict, label=seq.label,
+            seq_id=seq.seq_id,
+            predicted="queda" if fall_detected else "adl",
+            label=seq.label,
         ))
 
-        if fall_verdict == "queda" and fall_frame_idx is not None:
-            evento = next(
-                w for w in windows if w.center_of_mass_amplitude > cfg.fall_threshold
-            )
-            safe_idx = min(fall_frame_idx, len(seq.frame_paths) - 1, len(frames) - 1)
-            if frames[safe_idx] is not None:
+        # Evidência para cada finding
+        for finding in consolidated:
+            safe_idx = min(finding.frame_index, len(seq.frame_paths) - 1)
+            evidence_pose: PoseFrame | None = None
+            if safe_idx < len(all_poses) and all_poses[safe_idx]:
+                for p in all_poses[safe_idx]:
+                    if p is not None:
+                        evidence_pose = p
+                        break
+
+            if evidence_pose is None:
+                continue
+
+            if finding.finding_type == "FALL_DETECTED":
                 save_fall_evidence(
                     seq_id=seq.seq_id,
                     frame_path=seq.frame_paths[safe_idx],
-                    pose_frame=frames[safe_idx],
+                    pose_frame=evidence_pose,
                     event_frame_index=safe_idx,
-                    score=evento.center_of_mass_amplitude,
+                    score=finding.score,
                     run_id=run_id,
                     root=cfg.output_root,
                     persistence_frames=cfg.persistence_frames,
                 )
                 n_fall_evidencias += 1
-
-        # --- Deteção de fisioterapia ---
-        fps = 30.0  # default para sequências URFD
-        if cfg.joint_targets:
-            postural_findings = detect_postural_deviations(
-                frames, cfg.joint_targets, cfg.persistence_frames, fps,
-            )
-            for finding in postural_findings:
-                safe_idx = min(finding.frame_index, len(seq.frame_paths) - 1)
-                if frames[safe_idx] is not None:
-                    save_postural_evidence(
-                        finding=finding,
-                        frame_path=seq.frame_paths[safe_idx],
-                        pose_frame=frames[safe_idx],
-                        run_id=run_id,
-                        root=cfg.output_root,
-                    )
-                    n_postural_evidencias += 1
-
-        tilt_findings = detect_trunk_tilt(
-            frames, cfg.trunk_tilt_max, cfg.tilt_persistence_frames, fps,
-        )
-        for finding in tilt_findings:
-            safe_idx = min(finding.frame_index, len(seq.frame_paths) - 1)
-            if frames[safe_idx] is not None:
+            else:
                 save_postural_evidence(
                     finding=finding,
                     frame_path=seq.frame_paths[safe_idx],
-                    pose_frame=frames[safe_idx],
+                    pose_frame=evidence_pose,
                     run_id=run_id,
                     root=cfg.output_root,
                 )

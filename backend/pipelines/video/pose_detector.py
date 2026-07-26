@@ -820,6 +820,27 @@ def sumarizar_achados_video(
         partes.append("Queda detectada")
         pontuacao = max(pontuacao, 0.80)
 
+    # --- Novos detectores (ITER2: SEIZURE, AGITATION, BED_EXIT) ---
+    for f in postural_findings:
+        if f.finding_type == "SEIZURE":
+            partes.append(
+                f"Convulsão/espasmo detectado "
+                f"(std={f.measured_angle:.4f}, {f.duration_s}s)"
+            )
+            pontuacao = max(pontuacao, f.score)
+        elif f.finding_type == "AGITATION":
+            partes.append(
+                f"Agitação psicomotora detectada "
+                f"({f.measured_angle:.0f} mudanças/min)"
+            )
+            pontuacao = max(pontuacao, f.score)
+        elif f.finding_type == "BED_EXIT":
+            partes.append(
+                f"Saída do leito detectada "
+                f"(ΔY={f.measured_angle:.3f}, {f.duration_s}s)"
+            )
+            pontuacao = max(pontuacao, f.score)
+
     # --- Desvios posturais: agrupa por articulação ---
     por_articulacao: dict[str, list[PosturalFinding]] = {}
     for f in postural_findings:

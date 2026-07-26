@@ -122,13 +122,9 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
         reset_person_tracker,
     )
     from pipelines.video.pose_detector import (
-        classify_with_persistence,
+        analyze_all_persons,
         save_fall_evidence,
-    )
-    from pipelines.video.pose_features import (
-        find_pose_by_track_id,
-        select_ground_person,
-        windowed_features,
+        save_postural_evidence,
     )
     from pipelines.video.pose_loader import load_sequence
 
@@ -141,26 +137,27 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
 
     reset_person_tracker()
     all_poses = [extract_all_keypoints(p, landmarker) for p in seq.frame_paths]
-    frames, track_ids = select_ground_person(all_poses)
-    windows = windowed_features(frames, _JANELA_VIDEO)
 
-    fall_verdict, fall_frame_idx = classify_with_persistence(
-        windows, _FALL_THRESHOLD, persistence_frames=1,
+    _, _, consolidated, _ = analyze_all_persons(
+        all_poses_per_frame=all_poses,
+        fps=30.0,
+        fall_threshold=_FALL_THRESHOLD,
+        persistence_frames=1,
     )
 
-    if fall_verdict != "queda":
+    fall_findings = [c for c in consolidated if c.finding_type == "FALL_DETECTED"]
+    if not fall_findings:
         return ResultadoAnalise(resumo="Sem queda detectada no período monitorado.", pontuacao=0.0)
 
-    evento = next(w for w in windows if w.center_of_mass_amplitude > _FALL_THRESHOLD)
-    safe_idx = min(fall_frame_idx or 0, len(seq.frame_paths) - 1, len(frames) - 1)
+    principal = fall_findings[0]
+    safe_idx = min(principal.frame_index, len(seq.frame_paths) - 1)
 
-    # Determina track_id da pessoa que caiu e busca o esqueleto correto
-    fall_track_id = track_ids[safe_idx] if safe_idx < len(track_ids) else None
-    evidence_pose = frames[safe_idx]
-    if fall_track_id is not None:
-        tracked = find_pose_by_track_id(all_poses, safe_idx, fall_track_id)
-        if tracked is not None:
-            evidence_pose = tracked
+    evidence_pose = None
+    if safe_idx < len(all_poses) and all_poses[safe_idx]:
+        for p in all_poses[safe_idx]:
+            if p is not None:
+                evidence_pose = p
+                break
 
     if evidence_pose is None:
         return ResultadoAnalise(resumo="Sem queda detectada no período monitorado.", pontuacao=0.0)
@@ -170,16 +167,15 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
         frame_path=seq.frame_paths[safe_idx],
         pose_frame=evidence_pose,
         event_frame_index=safe_idx,
-        score=evento.center_of_mass_amplitude,
+        score=principal.score,
         run_id=run_id,
         persistence_frames=1,
-        track_id=fall_track_id,
     )
     return ResultadoAnalise(
         resumo="Queda detectada.",
-        pontuacao=float(evento.center_of_mass_amplitude),
+        pontuacao=float(principal.score),
         evidencia_id=evidencia.evidence_id,
-        detalhes={"quadro": safe_idx, "track_id": fall_track_id},
+        detalhes={"quadro": safe_idx},
     )
 
 
@@ -260,19 +256,13 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         reset_person_tracker,
     )
     from pipelines.video.pose_detector import (
-        classify_with_persistence,
-        detect_postural_deviations,
-        detect_trunk_tilt,
+        analyze_all_persons,
         save_fall_evidence,
         save_postural_evidence,
         sumarizar_achados_video,
-        validate_fall_dynamic,
     )
     from pipelines.video.pose_features import (
         find_pose_by_track_id,
-        select_ground_person,
-        vertical_velocity_robust,
-        windowed_features,
     )
 
     _FALL_THRESHOLD = 0.55
@@ -312,176 +302,70 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         # Extração multi-pessoa com tracking de identidade persistente
         reset_person_tracker()
         all_poses = [extract_all_keypoints(p, landmarker) for p in frame_paths]
-        frames, track_ids = select_ground_person(all_poses)
         n_pessoas = max((len(poses) for poses in all_poses if poses), default=0)
 
-        # Thresholds adaptativos para cenas multi-pessoa (C2)
-        persistence = _PERSISTENCE_FRAMES
-        if n_pessoas > 1:
-            persistence = 3
-
-        # Features de movimento (compartilhadas pelos dois detetores)
-        windows = windowed_features(frames, _JANELA_VIDEO)
-
-        # --- Deteção de queda (com persistência temporal) ---
-        fall_verdict, fall_frame_idx = classify_with_persistence(
-            windows, _FALL_THRESHOLD, persistence,
-        )
-
-        # Validação dinâmica multi-pessoa com fallback para oclusão parcial.
-        velocities = vertical_velocity_robust(frames)
-        (
-            fall_verdict, fall_frame_idx, vy_score, vy_description,
-            fall_track_id, fall_peak_frame,
-        ) = validate_fall_dynamic(
-            fall_verdict, fall_frame_idx, velocities, _MIN_VERTICAL_VELOCITY,
-            all_poses_per_frame=all_poses, n_pessoas=n_pessoas,
+        # Pipeline multi-pessoa unificado (ITER2-03)
+        fps = 30.0
+        resumo, pontuacao, consolidated, analise_details = analyze_all_persons(
+            all_poses_per_frame=all_poses,
+            fps=fps,
+            fall_threshold=_FALL_THRESHOLD,
+            persistence_frames=_PERSISTENCE_FRAMES if n_pessoas <= 1 else 3,
         )
 
         todos_detalhes: dict = {
             "quadros_analisados": len(frame_paths),
             "formato": "video",
             "pessoas_detectadas": n_pessoas,
-            "vy_max": round(vy_score, 3),
+            "findings": [c.description for c in consolidated],
+            "n_consolidated": len(consolidated),
         }
-        fall_detected = fall_verdict == "queda" and fall_frame_idx is not None
-
-        # --- Deteção de fisioterapia (desvios + tilt) ---
-        fps = 30.0
-        postural_findings: list = []
-        tilt_findings: list = []
-
-        if not fall_detected:
-            from pipelines.video.models import JointTarget
-            _DEFAULT_JOINT_TARGETS = [
-                JointTarget("knee_left", 23, 25, 27, min_angle=70.0, target_angle=90.0),
-                JointTarget("knee_right", 24, 26, 28, min_angle=70.0, target_angle=90.0),
-            ]
-            postural_findings = detect_postural_deviations(
-                frames, _DEFAULT_JOINT_TARGETS, _PERSISTENCE_FRAMES, fps,
-            )
-            tilt_findings = detect_trunk_tilt(
-                frames, max_angle=30.0, persistence_frames=90, fps=fps,
-            )
-
-        # --- Sumarização: agrupa por articulação/tipo, score único ---
-        resumo, pontuacao, consolidated = sumarizar_achados_video(
-            postural_findings, tilt_findings, fall_detected,
+        todos_detalhes.update(analise_details)
+        fall_detected = any(
+            c.finding_type == "FALL_DETECTED" for c in consolidated
         )
-        todos_detalhes["findings"] = [c.description for c in consolidated]
-        todos_detalhes["n_postural"] = len(postural_findings)
-        todos_detalhes["n_tilt"] = len(tilt_findings)
-        todos_detalhes["n_consolidated"] = len(consolidated)
 
-        # Se a queda foi rejeitada pelo filtro de velocidade, reporta como postura estática
-        postural_rest_note: str | None = None
-        if vy_description and fall_verdict != "queda":
-            postural_rest_note = vy_description
-            todos_detalhes["postural_rest"] = True
-
-        if not consolidated and not fall_detected:
-            razao = _razao_sem_queda(windows, len(frame_paths))
-            nota = f" {postural_rest_note}" if postural_rest_note else ""
+        if not consolidated:
             return ResultadoAnalise(
-                resumo=f"Sem alterações detectadas no período monitorado.{razao}{nota}",
+                resumo=f"Sem alterações detectadas no período monitorado."
+                f"{' Nenhuma pessoa identificada nos quadros analisados.' if n_pessoas == 0 else ''}",
                 pontuacao=0.0,
                 detalhes=todos_detalhes,
             )
 
-        # --- Evidência única consolidada ---
+        # --- Evidência para o achado mais grave ---
         evidencia_principal: str | None = None
-        if fall_detected:
-            # Frame do pico de Vy (onde a queda foi mais rápida)
-            ev_idx = fall_peak_frame if fall_peak_frame is not None else (
-                fall_frame_idx or 0
-            )
-            ev_idx = min(ev_idx, len(frame_paths) - 1)
+        principal = max(consolidated, key=lambda c: c.score)
+        safe_idx = min(principal.frame_index, len(frame_paths) - 1)
 
-            # Estratégia primária: busca o esqueleto pelo track_id da pessoa
-            # que disparou a queda (elimina dependência do índice posicional).
-            pose_para_evidencia = None
-            if fall_track_id is not None and ev_idx < len(all_poses):
-                pose_para_evidencia = find_pose_by_track_id(
-                    all_poses, ev_idx, fall_track_id,
-                )
-                # Se não encontrou nesse frame, tenta frames vizinhos
-                if pose_para_evidencia is None:
-                    for delta in range(1, 11):
-                        for cand in (ev_idx - delta, ev_idx + delta):
-                            if 0 <= cand < len(all_poses):
-                                pose_para_evidencia = find_pose_by_track_id(
-                                    all_poses, cand, fall_track_id,
-                                )
-                                if pose_para_evidencia is not None:
-                                    ev_idx = cand
-                                    break
-                        if pose_para_evidencia is not None:
-                            break
+        # Encontra a pose correta via track_id ou fallback
+        pose_para_evidencia = None
+        if safe_idx < len(all_poses) and all_poses[safe_idx]:
+            # Tenta a primeira pose válida no frame
+            for p in all_poses[safe_idx]:
+                if p is not None:
+                    pose_para_evidencia = p
+                    break
 
-            # Fallback: seleciona pessoa com quadril mais baixo e tronco completo
-            # (comportamento antigo, robusto quando tracking não está ativo).
-            if pose_para_evidencia is None and ev_idx < len(all_poses) and all_poses[ev_idx]:
-                best_y = -1.0
-                for p in all_poses[ev_idx]:
-                    if p is None:
-                        continue
-                    hip_y = (p.landmarks[23][1] + p.landmarks[24][1]) / 2.0
-                    lv = p.landmarks[23][3]
-                    rv = p.landmarks[24][3]
-                    slv = p.landmarks[11][3]
-                    srv = p.landmarks[12][3]
-                    # Exige tronco completo (ombros + quadris) com visibilidade >= 0.6
-                    if lv >= 0.6 and rv >= 0.6 and slv >= 0.6 and srv >= 0.6 and hip_y > best_y:
-                        best_y = hip_y
-                        pose_para_evidencia = p
-            # Fallback: frames vizinhos
-            if pose_para_evidencia is None and ev_idx < len(frames):
-                pose_para_evidencia = frames[ev_idx]
-            if pose_para_evidencia is None:
-                for delta in range(1, 11):
-                    for cand in (ev_idx - delta, ev_idx + delta):
-                        if 0 <= cand < len(frames) and frames[cand] is not None:
-                            pose_para_evidencia = frames[cand]
-                            ev_idx = cand
-                            break
-                    if pose_para_evidencia is not None:
-                        break
-
-            if pose_para_evidencia is not None:
+        if pose_para_evidencia is not None:
+            if principal.finding_type == "FALL_DETECTED":
                 ev = save_fall_evidence(
                     seq_id=caminho.stem,
-                    frame_path=frame_paths[ev_idx],
+                    frame_path=frame_paths[safe_idx],
                     pose_frame=pose_para_evidencia,
-                    event_frame_index=ev_idx,
-                    score=vy_score,
+                    event_frame_index=safe_idx,
+                    score=principal.score,
                     run_id=run_id,
                     persistence_frames=_PERSISTENCE_FRAMES,
-                    track_id=fall_track_id,
                 )
-                evidencia_principal = ev.evidence_id
-                todos_detalhes["queda"] = {
-                    "frame": ev_idx,
-                    "vy_max": vy_score,
-                    "track_id": fall_track_id,
-                }
-        elif consolidated:
-            # Um único artefato para o achado mais grave (maior score)
-            principal = max(consolidated, key=lambda c: c.score)
-            safe_idx = min(principal.frame_index, len(frame_paths) - 1)
-            pose_para_evidencia = frames[safe_idx]
-            if pose_para_evidencia is None and safe_idx < len(all_poses):
-                for alt_pose in all_poses[safe_idx]:
-                    if alt_pose is not None:
-                        pose_para_evidencia = alt_pose
-                        break
-            if pose_para_evidencia is not None:
+            else:
                 ev = save_postural_evidence(
                     finding=principal,
                     frame_path=frame_paths[safe_idx],
                     pose_frame=pose_para_evidencia,
                     run_id=run_id,
                 )
-                evidencia_principal = ev.evidence_id
+            evidencia_principal = ev.evidence_id
 
         return ResultadoAnalise(
             resumo=resumo,
