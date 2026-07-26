@@ -290,17 +290,24 @@ def _landmark_xy(frame: PoseFrame, idx: int) -> tuple[float, float]:
 
 def select_ground_person(
     all_poses: list[list[PoseFrame | None]],
-) -> list[PoseFrame | None]:
+) -> tuple[list[PoseFrame | None], list[int | None]]:
     """Seleciona, por frame, a pessoa com maior Y médio (mais próxima do chão).
 
     Aplica dois filtros anti-alucinação:
-    1. Visibilidade média ≥ 0.7 (pessoa real vs. objeto)
+    1. Visibilidade média ≥ 0.45 (pessoa real vs. objeto)
     2. Consistência temporal: ignora "pessoas" que só aparecem em frames
        isolados (< 3 frames consecutivos). Uma pessoa real é detetada
        de forma contínua; uma impressora gera deteções esporádicas.
+
+    Com tracking ativo, devolve também ``track_ids`` alinhado frame a frame,
+    permitindo que a evidência de queda referencie inequivocamente a pessoa
+    correta mesmo quando a ordem da lista de poses muda entre frames.
+
+    Devolve ``(frames, track_ids)`` — ambos com o mesmo comprimento.
     """
     n = len(all_poses)
     result: list[PoseFrame | None] = [None] * n
+    track_ids: list[int | None] = [None] * n
 
     # Primeiro, computa a "qualidade" de cada pose por frame
     scored: list[list[tuple[PoseFrame, float, float]]] = []
@@ -331,14 +338,149 @@ def select_ground_person(
         if streak < 3:
             scored[i] = []  # descarta — deteção esporádica
 
-    # Seleciona a pessoa com maior Y em cada frame
+    # Seleciona a pessoa com maior Y em cada frame + respetivo track_id
     for i in range(n):
         if not scored[i]:
             result[i] = None
+            track_ids[i] = None
         else:
-            result[i] = max(scored[i], key=lambda x: x[1])[0]
+            best = max(scored[i], key=lambda x: x[1])
+            result[i] = best[0]
+            track_ids[i] = best[0].track_id
 
-    return result
+    return result, track_ids
+
+
+def find_pose_by_track_id(
+    all_poses: list[list[PoseFrame | None]],
+    frame_idx: int,
+    track_id: int,
+) -> PoseFrame | None:
+    """Encontra o ``PoseFrame`` com um ``track_id`` específico em ``all_poses[frame_idx]``.
+
+    Útil para desenhar evidência da pessoa exata que disparou o evento de queda,
+    eliminando a dependência do índice posicional da lista (que muda entre frames).
+    Devolve ``None`` se o track_id não estiver presente nesse frame (ex.: oclusão).
+    """
+    if frame_idx < 0 or frame_idx >= len(all_poses):
+        return None
+    poses = all_poses[frame_idx]
+    if not poses:
+        return None
+    for p in poses:
+        if p is not None and p.track_id == track_id:
+            return p
+    return None
+
+
+def dominant_track_id(
+    track_ids: list[int | None],
+    window_start: int,
+    window_end: int,
+) -> int | None:
+    """Determina o ``track_id`` dominante numa janela temporal.
+
+    Conta a frequência de cada track_id (ignorando ``None``) e devolve o mais
+    frequente. Usado para identificar qual pessoa disparou a queda quando o
+    ``select_ground_person`` alterna entre track_ids ao longo da sequência.
+
+    Devolve ``None`` se não houver track_ids válidos na janela.
+    """
+    from collections import Counter
+
+    subset = [
+        tid
+        for tid in track_ids[window_start:window_end]
+        if tid is not None
+    ]
+    if not subset:
+        return None
+    return Counter(subset).most_common(1)[0][0]
+
+
+def is_recumbent(
+    person_frames: list[PoseFrame | None],
+    window_frames: int = 90,
+    min_valid_frames: int = 10,
+    y_threshold: float = 0.45,
+) -> bool:
+    """Determina se uma pessoa já está deitada com base numa janela deslizante.
+
+    Examina os últimos ``window_frames`` frames válidos (não-None) da timeline
+    da pessoa e calcula a posição Y média dos quadris. Se a média for superior
+    a ``y_threshold``, a pessoa é classificada como recumbent (já deitada).
+
+    Usa ``hip_center`` primeiro; se o quadril estiver ocluído (visibilidade
+    < 0.5), faz fallback para ``_upper_body_center`` (cabeça + ombros).
+
+    Devolve ``False`` se houver menos de ``min_valid_frames`` frames válidos
+    na janela — dados insuficientes para classificar, não se assume deitada.
+
+    Args:
+        person_frames: Timeline de uma única pessoa (por track_id).
+        window_frames: Tamanho da janela deslizante (default 90 ≈ 3s a 30fps).
+        min_valid_frames: Mínimo de frames válidos para classificar.
+        y_threshold: Y médio acima do qual a pessoa é considerada deitada.
+    """
+    recent = person_frames[-window_frames:] if len(person_frames) > window_frames else person_frames
+
+    y_values: list[float] = []
+    for f in recent:
+        if f is None:
+            continue
+        center = hip_center(f)
+        if center is None:
+            center = _upper_body_center(f)
+        if center is not None:
+            y_values.append(center[1])
+
+    if len(y_values) < min_valid_frames:
+        return False
+
+    return (sum(y_values) / len(y_values)) > y_threshold
+
+
+def group_poses_by_track_id(
+    all_poses_per_frame: list[list[PoseFrame | None]],
+) -> dict[int, list[PoseFrame | None]]:
+    """Agrupa poses por ``track_id`` ao longo de todos os frames.
+
+    Constrói uma timeline independente para cada identidade rastreada,
+    preenchendo com ``None`` os frames em que o track_id não está presente.
+    Poses com ``track_id=None`` (sem tracking ativo) são excluídas.
+
+    Usar esta função em vez de iterar por índice posicional (``p_idx``)
+    garante que as métricas de movimento de cada pessoa são computadas
+    apenas sobre os frames em que a sua identidade está presente, sem
+    contaminação cruzada entre pessoas diferentes.
+
+    Args:
+        all_poses_per_frame: Lista de frames, cada um com uma lista de
+            ``PoseFrame | None`` (uma por pessoa detetada).
+
+    Returns:
+        Dicionário ``track_id → timeline``, onde a timeline é uma lista
+        de ``PoseFrame | None`` com o mesmo comprimento que
+        ``all_poses_per_frame``.
+    """
+    from collections import defaultdict
+
+    if not all_poses_per_frame:
+        return {}
+
+    n_frames = len(all_poses_per_frame)
+    person_timeline: dict[int, list[PoseFrame | None]] = defaultdict(
+        lambda: [None] * n_frames
+    )
+
+    for frame_idx, poses in enumerate(all_poses_per_frame):
+        if not poses:
+            continue
+        for p in poses:
+            if p is not None and p.track_id is not None:
+                person_timeline[p.track_id][frame_idx] = p
+
+    return dict(person_timeline)
 
 
 def joint_angle(

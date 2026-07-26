@@ -247,11 +247,14 @@ def test_select_ground_person_single_person():
     # Precisa de 3+ frames consecutivos para passar no filtro temporal
     all_poses = [[frame], [frame], [frame], [frame]]
 
-    result = select_ground_person(all_poses)
+    result, track_ids = select_ground_person(all_poses)
 
     assert len(result) == 4
     assert all(r is not None for r in result)
     assert result[0] == frame
+    assert len(track_ids) == 4
+    # Sem tracking ativo, track_ids são None
+    assert all(t is None for t in track_ids)
 
 
 def test_select_ground_person_picks_lowest_y():
@@ -264,7 +267,7 @@ def test_select_ground_person_picks_lowest_y():
     # 4 frames consecutivos com 2 pessoas
     all_poses = [[person_stand, person_floor]] * 4
 
-    result = select_ground_person(all_poses)
+    result, track_ids = select_ground_person(all_poses)
 
     assert len(result) == 4
     assert result[0] is not None
@@ -276,9 +279,10 @@ def test_select_ground_person_all_none():
     """Frame sem nenhuma pessoa → None."""
     all_poses = [[None, None]] * 4
 
-    result = select_ground_person(all_poses)
+    result, track_ids = select_ground_person(all_poses)
 
     assert result == [None, None, None, None]
+    assert track_ids == [None, None, None, None]
 
 
 def test_select_ground_person_mixed_frames():
@@ -286,7 +290,7 @@ def test_select_ground_person_mixed_frames():
     frame_a = _make_full_frame()
     all_poses = [[frame_a], [frame_a], [frame_a], [None], [frame_a], [frame_a], [frame_a]]
 
-    result = select_ground_person(all_poses)
+    result, track_ids = select_ground_person(all_poses)
 
     assert len(result) == 7
     assert result[0] is not None
@@ -304,7 +308,7 @@ def test_select_ground_person_sporadic_ignored():
     # Apenas 2 frames — não atinge o mínimo de 3 consecutivos
     all_poses = [[frame], [frame], [None], [None], [None]]
 
-    result = select_ground_person(all_poses)
+    result, track_ids = select_ground_person(all_poses)
 
     assert result == [None, None, None, None, None]
 
@@ -381,3 +385,186 @@ def test_max_vertical_velocity_empty():
     """Sem dados → 0.0."""
     assert max_vertical_velocity([], window_frames=15) == 0.0
     assert max_vertical_velocity([None, None], window_frames=15) == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# is_recumbent — detecção de posição deitada com janela deslizante
+# --------------------------------------------------------------------------- #
+def test_is_recumbent_person_lying_down():
+    """Pessoa com Y>0.45 consistente → True."""
+    from pipelines.video.pose_features import is_recumbent
+
+    # 100 frames com quadril em Y=0.8 (deitado)
+    frames = [
+        _make_full_frame({23: (0.50, 0.80, 0.0, 0.9), 24: (0.52, 0.80, 0.0, 0.9)})
+        for _ in range(100)
+    ]
+    assert is_recumbent(frames) is True
+
+
+def test_is_recumbent_person_standing():
+    """Pessoa com Y<0.45 consistente → False."""
+    from pipelines.video.pose_features import is_recumbent
+
+    frames = [
+        _make_full_frame({23: (0.50, 0.30, 0.0, 0.9), 24: (0.52, 0.30, 0.0, 0.9)})
+        for _ in range(100)
+    ]
+    assert is_recumbent(frames) is False
+
+
+def test_is_recumbent_insufficient_data():
+    """Menos de 10 frames válidos → False (dados insuficientes)."""
+    from pipelines.video.pose_features import is_recumbent
+
+    # Apenas 5 frames — abaixo do mínimo de 10
+    frames = [
+        _make_full_frame({23: (0.50, 0.80, 0.0, 0.9), 24: (0.52, 0.80, 0.0, 0.9)})
+        for _ in range(5)
+    ]
+    assert is_recumbent(frames) is False
+
+
+def test_is_recumbent_transition_from_lying_to_standing():
+    """Transição deitado→em pé: is_recumbent segue a janela deslizante."""
+    from pipelines.video.pose_features import is_recumbent
+
+    # 100 frames deitado + 100 frames em pé
+    lying = [
+        _make_full_frame({23: (0.50, 0.80, 0.0, 0.9), 24: (0.52, 0.80, 0.0, 0.9)})
+        for _ in range(100)
+    ]
+    standing = [
+        _make_full_frame({23: (0.50, 0.30, 0.0, 0.9), 24: (0.52, 0.30, 0.0, 0.9)})
+        for _ in range(100)
+    ]
+
+    # Após 100 frames deitado → True
+    assert is_recumbent(lying) is True
+
+    # Após transição: 100 deitado + 50 em pé → últimos 90 frames: 40 deitado + 50 em pé
+    # Y médio ≈ (40*0.80 + 50*0.30)/90 ≈ 0.522 → >0.45 → ainda True
+    mixed_150 = lying + standing[:50]
+    assert is_recumbent(mixed_150) is True
+
+    # Após 100 deitado + 100 em pé → últimos 90 frames: 90 em pé → Y≈0.30 → False
+    mixed_200 = lying + standing
+    assert is_recumbent(mixed_200) is False
+
+
+def test_is_recumbent_handles_none_frames():
+    """Frames None são ignorados na janela deslizante."""
+    from pipelines.video.pose_features import is_recumbent
+
+    valid = _make_full_frame({23: (0.50, 0.80, 0.0, 0.9), 24: (0.52, 0.80, 0.0, 0.9)})
+    # 90 frames válidos + 30 None intercalados
+    frames = [valid, None] * 45 + [valid] * 30
+    assert is_recumbent(frames) is True
+
+
+def test_is_recumbent_uses_fallback_when_hips_occluded():
+    """Quando quadris têm baixa visibilidade, usa upper_body_center como fallback."""
+    from pipelines.video.pose_features import is_recumbent
+
+    # Quadril com visibilidade < 0.5, mas parte superior visível
+    frames = []
+    for _ in range(100):
+        f = _make_full_frame({
+            23: (0.50, 0.80, 0.0, 0.3),  # quadril ocluído
+            24: (0.52, 0.80, 0.0, 0.3),  # quadril ocluído
+            0: (0.50, 0.70, 0.0, 0.9),   # nariz visível
+            11: (0.50, 0.75, 0.0, 0.9),  # ombro esquerdo visível
+            12: (0.52, 0.75, 0.0, 0.9),  # ombro direito visível
+        })
+        frames.append(f)
+    # Upper body Y ≈ (0.70+0.75+0.75)/3 ≈ 0.733 > 0.45 → True
+    assert is_recumbent(frames) is True
+
+
+# --------------------------------------------------------------------------- #
+# group_poses_by_track_id — agrupamento de poses por identidade
+# --------------------------------------------------------------------------- #
+def test_group_poses_by_track_id_two_consistent_people():
+    """2 pessoas com track_ids estáveis → 2 timelines completas."""
+    from pipelines.video.pose_features import group_poses_by_track_id
+
+    p0 = _make_full_frame()
+    p0 = PoseFrame(landmarks=p0.landmarks, track_id=0)
+    p1 = _make_full_frame()
+    p1 = PoseFrame(landmarks=p1.landmarks, track_id=1)
+
+    all_poses = [[p0, p1], [p0, p1], [p0, p1], [p0, p1]]
+    result = group_poses_by_track_id(all_poses)
+
+    assert len(result) == 2
+    assert 0 in result
+    assert 1 in result
+    assert len(result[0]) == 4
+    assert len(result[1]) == 4
+    assert result[0][0] == p0
+    assert result[1][0] == p1
+
+
+def test_group_poses_by_track_id_swapped_order():
+    """Ordem dos índices troca entre frames — agrupamento por track_id é imune."""
+    from pipelines.video.pose_features import group_poses_by_track_id
+
+    p0 = _make_full_frame()
+    p0 = PoseFrame(landmarks=p0.landmarks, track_id=0)
+    p1 = _make_full_frame()
+    p1 = PoseFrame(landmarks=p1.landmarks, track_id=1)
+
+    # Frame 0: [p0, p1]; Frame 1: [p1, p0] — índices trocados
+    all_poses = [[p0, p1], [p1, p0], [p0, p1], [p1, p0]]
+    result = group_poses_by_track_id(all_poses)
+
+    assert len(result) == 2
+    # Cada track_id deve ter 4 frames, independente da ordem
+    assert len(result[0]) == 4
+    assert len(result[1]) == 4
+    # track_id 0 está presente nos 4 frames
+    assert all(r is not None for r in result[0])
+
+
+def test_group_poses_by_track_id_none_track_id_excluded():
+    """Poses sem track_id (None) são excluídas do agrupamento."""
+    from pipelines.video.pose_features import group_poses_by_track_id
+
+    p_tracked = _make_full_frame()
+    p_tracked = PoseFrame(landmarks=p_tracked.landmarks, track_id=5)
+    p_untracked = _make_full_frame()  # track_id=None
+
+    all_poses = [[p_tracked, p_untracked], [p_tracked, p_untracked]]
+    result = group_poses_by_track_id(all_poses)
+
+    # Só o track_id=5 deve aparecer; untracked é ignorado
+    assert 5 in result
+    assert None not in result
+    assert len(result) == 1
+
+
+def test_group_poses_by_track_id_gaps_filled_with_none():
+    """track_id ausente em alguns frames → posição preenchida com None."""
+    from pipelines.video.pose_features import group_poses_by_track_id
+
+    p0 = _make_full_frame()
+    p0 = PoseFrame(landmarks=p0.landmarks, track_id=0)
+
+    # track_id=0 aparece só nos frames 0 e 2
+    all_poses = [[p0], [], [p0], []]
+    result = group_poses_by_track_id(all_poses)
+
+    assert len(result) == 1
+    assert 0 in result
+    assert result[0][0] == p0
+    assert result[0][1] is None  # gap preenchido
+    assert result[0][2] == p0
+    assert result[0][3] is None  # gap preenchido
+
+
+def test_group_poses_by_track_id_empty_input():
+    """Input vazio → dicionário vazio."""
+    from pipelines.video.pose_features import group_poses_by_track_id
+
+    assert group_poses_by_track_id([]) == {}
+    assert group_poses_by_track_id([[], [], []]) == {}
