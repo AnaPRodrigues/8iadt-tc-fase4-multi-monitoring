@@ -247,20 +247,29 @@ def lateral_displacement(
 def max_vertical_velocity(
     velocities: list[float | None], window_frames: int = 15
 ) -> float:
-    """Maior velocidade vertical **sustentada e direcional** no sinal.
+    """Maior velocidade vertical **consecutiva e direcional** no sinal.
 
-    Exige pelo menos 5 frames com $V_y > 0.10$ **no mesmo sentido** (positivo =
-    descida). Valores negativos (subida) são ignorados — uma pessoa a caminhar
-    oscila para cima e para baixo, mas uma queda real só tem descida abrupta.
+    Exige pelo menos 3 frames **consecutivos** com $V_y > 0.10$ no sentido
+    positivo (descida). Jitter esparso do MediaPipe em braço/cabeça NUNCA
+    atinge 3 frames consecutivos — só uma queda real produz descida sustentada.
 
-    Filtra jitter, caminhada e ajustes posturais. Devolve a média dos 5
-    maiores valores positivos; se não houver 5 acima do piso, devolve 0.0.
+    Devolve a média do melhor bloco consecutivo; 0.0 se nenhum bloco atingir
+    o mínimo de 3 frames consecutivos acima do piso.
     """
     valid = [v for v in velocities if v is not None]
-    positive = sorted([v for v in valid if v > 0.10], reverse=True)
-    if len(positive) < 5:
-        return 0.0
-    return sum(positive[:5]) / 5.0
+    best_avg = 0.0
+    current_streak: list[float] = []
+
+    for v in valid:
+        if v is not None and v > 0.10:
+            current_streak.append(v)
+            if len(current_streak) >= 3:
+                avg = sum(current_streak) / len(current_streak)
+                best_avg = max(best_avg, avg)
+        else:
+            current_streak = []
+
+    return best_avg
 def _min_visibility(frame: PoseFrame, indices: list[int]) -> float:
     """Menor visibilidade entre os landmarks pedidos — gate de qualidade.
 

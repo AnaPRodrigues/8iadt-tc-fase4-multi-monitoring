@@ -364,14 +364,21 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
             )
             ev_idx = min(ev_idx, len(frame_paths) - 1)
 
-            # Pose da pessoa que disparou o alerta (target_person_index do
-            # validate_fall_dynamic). NÃO ordenar por Y médio — isso favorece
-            # pessoas em primeiro plano cujos pés têm Y≈0.95.
+            # No frame do pico, recalcula qual pessoa está mais no chão
+            # (Y do quadril mais alto = mais próxima do solo). O índice
+            # fall_person_idx pode estar desatualizado porque YOLO reordena.
             pose_para_evidencia = None
-            if fall_person_idx >= 0 and ev_idx < len(all_poses):
-                poses_no_frame = all_poses[ev_idx]
-                if fall_person_idx < len(poses_no_frame):
-                    pose_para_evidencia = poses_no_frame[fall_person_idx]
+            if ev_idx < len(all_poses) and all_poses[ev_idx]:
+                best_y = -1.0
+                for p in all_poses[ev_idx]:
+                    if p is None:
+                        continue
+                    hip_y = (p.landmarks[23][1] + p.landmarks[24][1]) / 2.0
+                    lv = p.landmarks[23][3]
+                    rv = p.landmarks[24][3]
+                    if lv >= 0.4 and rv >= 0.4 and hip_y > best_y:
+                        best_y = hip_y
+                        pose_para_evidencia = p
             # Fallback: frames vizinhos
             if pose_para_evidencia is None and ev_idx < len(frames):
                 pose_para_evidencia = frames[ev_idx]

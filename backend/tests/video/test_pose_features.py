@@ -333,24 +333,24 @@ def test_vertical_velocity_estatico_produz_zero():
     assert vy[2] == pytest.approx(0.0, abs=0.01)
 
 
-def test_max_vertical_velocity_sustained_requer_10_frames():
-    """Top 10 acima de 0.15 → média dos 10 maiores."""
-    vy = [0.3] * 12 + [0.01, 0.01]
-    max_v = max_vertical_velocity(vy, window_frames=14)
-    assert max_v == pytest.approx(0.3, abs=0.01)
+def test_max_vertical_velocity_consecutivo_requer_3_frames():
+    """≥3 frames consecutivos >0.10 → média do bloco."""
+    vy = [0.3, 0.3, 0.3, 0.2, 0.01, 0.01]
+    max_v = max_vertical_velocity(vy, window_frames=6)
+    assert max_v == pytest.approx(0.275, abs=0.05)
 
 
 def test_max_vertical_velocity_pico_isolado_ignorado():
-    """Menos de 10 frames acima de 0.15 → 0.0."""
-    vy = [0.0, 0.0, 0.3] + [0.0] * 10
-    max_v = max_vertical_velocity(vy, window_frames=13)
+    """Pico isolado sem 3 consecutivos → 0.0."""
+    vy = [0.0, 0.0, 0.25, 0.0, 0.0, 0.0]
+    max_v = max_vertical_velocity(vy, window_frames=6)
     assert max_v == 0.0
 
 
 def test_max_vertical_velocity_ignora_none():
-    """max_vertical_velocity ignora frames None — exige 10 acima de 0.15."""
-    vy = [None, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, None, 0.1]
-    max_v = max_vertical_velocity(vy, window_frames=13)
+    """Frames None interrompem a streak consecutiva."""
+    vy = [None, 0.3, 0.3, None, 0.3, 0.3, 0.3, None]
+    max_v = max_vertical_velocity(vy, window_frames=8)
     assert max_v == pytest.approx(0.3, abs=0.01)
 
 
