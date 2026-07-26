@@ -493,7 +493,8 @@ O MVP original (F0-F5, spec-driven, ver histórico abaixo) foi fechado com Strea
 - **Prescrições avulsas (2026-07-25) — FECHADA.** `make gen-presc ARGS="..."` gera PDF avulso em `data/`. Layout de receituário completo. `seed` opcional, `frequency` com default.
 - **Áudio geral (2026-07-25) — FECHADA.** `_analisar_audio` agora é dispatcher: com `.txt` → ICBHI respiratório; sem `.txt` → consulta (transcrição + acústica + termos críticos + sentimento).
 - **Frontend (2026-07-25) — FECHADO.** Painel `video_cirurgico` no detalhe do paciente. Rótulo "Áudio" genérico.
-- **Next step**: todos os itens pendentes concluídos. Próximos passos a critério do utilizador — relatório técnico, vídeo de demonstração.
+- **Feature**: `video-multiperson-fix` (Iteração 1) — **EXECUTADA (2026-07-26), Verifier em execução.** 4 commits (`b6b549b`..`81c76d8`). Três correções estruturais: (A1) `validate_fall_dynamic` agrupa poses por `track_id` (não índice posicional); (B1) `is_recumbent()` com janela deslizante de 90 frames substitui `_INITIAL_FRAMES=30`; (C2) thresholds adaptativos em cenas multi-pessoa (tilt 25→35°, ΔY 0.20→0.30, Vy 0.10→0.20, persistência 1→3). +17 testes novos (10 pose_features + 7 pose_detector), zero regressão (153 video+fusion tests verdes). Spec em `.specs/features/video-multiperson-fix/spec.md` (8 requisitos MULTI-01..08). Verifier em background.
+- **Next step**: aguardar relatório do Verifier; se PASS, feature fechada. Iteração 2 (A2+A3+B2: persistência de track_id no ground_person, análise multi-pessoa completa, novos detectores) especificar separadamente.
 - **Branch**: `feat/f3-vitals-anomaly` (+25 commits nesta sessão); 533 testes, 0 falhas.
 - **Ambiente**: `.venv/bin/activate`; `PYTHONPATH=backend`; `make serve-api` + `make serve-front`.
 
