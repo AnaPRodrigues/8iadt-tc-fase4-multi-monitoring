@@ -296,7 +296,7 @@ def select_ground_person(
                 continue
             avg_vis = sum(lm[3] for lm in p.landmarks) / len(p.landmarks)
             avg_y = sum(lm[1] for lm in p.landmarks) / len(p.landmarks)
-            if avg_vis >= 0.7:
+            if avg_vis >= 0.45:
                 frame_scores.append((p, avg_y, avg_vis))
         scored.append(frame_scores)
 
