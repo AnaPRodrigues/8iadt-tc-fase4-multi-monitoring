@@ -309,7 +309,7 @@ def validate_fall_dynamic(
             if f is not None
             and f.landmarks[23][3] >= 0.5 and f.landmarks[24][3] >= 0.5
         ]
-        started_low = (sum(early_y) / len(early_y)) > 0.5 if early_y else False
+        started_low = (sum(early_y) / len(early_y)) > 0.45 if early_y else False
 
         if max_vy >= min_vertical_velocity and max_tilt >= _MIN_TILT_FOR_FALL and not started_low:
             if max_vy > best_vy:

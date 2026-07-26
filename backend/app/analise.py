@@ -364,18 +364,15 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
             )
             ev_idx = min(ev_idx, len(frame_paths) - 1)
 
-            # Pose da pessoa que realmente caiu: maior Y médio no frame do pico
-            # (mais próxima do chão), NÃO a primeira do YOLO ou a de maior área
+            # Pose da pessoa que disparou o alerta (target_person_index do
+            # validate_fall_dynamic). NÃO ordenar por Y médio — isso favorece
+            # pessoas em primeiro plano cujos pés têm Y≈0.95.
             pose_para_evidencia = None
-            if ev_idx < len(all_poses) and all_poses[ev_idx]:
-                # Ordena por Y médio decrescente (mais no chão primeiro)
-                candidatas = sorted(
-                    [p for p in all_poses[ev_idx] if p is not None],
-                    key=lambda p: sum(lm[1] for lm in p.landmarks) / len(p.landmarks),
-                    reverse=True,
-                )
-                pose_para_evidencia = candidatas[0] if candidatas else None
-            # Fallback
+            if fall_person_idx >= 0 and ev_idx < len(all_poses):
+                poses_no_frame = all_poses[ev_idx]
+                if fall_person_idx < len(poses_no_frame):
+                    pose_para_evidencia = poses_no_frame[fall_person_idx]
+            # Fallback: frames vizinhos
             if pose_para_evidencia is None and ev_idx < len(frames):
                 pose_para_evidencia = frames[ev_idx]
             if pose_para_evidencia is None:
