@@ -688,6 +688,124 @@ def test_seizure_occluded_joint_excluded():
     assert findings[0].finding_type == "SEIZURE"
 
 
+# --------------------------------------------------------------------------- #
+# T4: detect_agitation — agitação psicomotora (ITER2-05)
+# --------------------------------------------------------------------------- #
+def test_agitation_detected_with_frequent_position_changes():
+    """20 mudanças de posição em 60s → 1 finding AGITATION."""
+    from pipelines.video.pose_detector import detect_agitation
+
+    # Simula 20 mudanças em 1800 frames (~60s a 30fps)
+    # Cada ~90 frames: Y muda de 0.50 para 0.55 (ΔY=0.05 > 0.03)
+    frames = []
+    y_base = 0.50
+    for i in range(1800):
+        if i > 0 and i % 90 == 0:
+            y_base = 0.55 if y_base == 0.50 else 0.50  # alterna Y
+        frames.append(_make_person_frame(hip_y=y_base, track_id=0))
+
+    findings = detect_agitation(frames, fps=30.0)
+
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.finding_type == "AGITATION"
+    assert f.measured_angle > 10.0  # taxa de mudanças/min
+    assert 0.0 <= f.score <= 1.0
+
+
+def test_agitation_stable_person_no_finding():
+    """Pessoa estável (2 mudanças em 60s) → 0 findings."""
+    from pipelines.video.pose_detector import detect_agitation
+
+    frames = [_make_person_frame(hip_y=0.50, track_id=0) for _ in range(1800)]
+    # Apenas 2 mudanças pontuais
+    frames[300] = _make_person_frame(hip_y=0.55, track_id=0)
+    frames[600] = _make_person_frame(hip_y=0.55, track_id=0)
+
+    findings = detect_agitation(frames, fps=30.0)
+
+    assert findings == []
+
+
+def test_agitation_insufficient_frames():
+    """Menos de 120 frames → [] (dados insuficientes)."""
+    from pipelines.video.pose_detector import detect_agitation
+
+    frames = [_make_person_frame(hip_y=0.50, track_id=0) for _ in range(60)]
+    findings = detect_agitation(frames, fps=30.0)
+
+    assert findings == []
+
+
+# --------------------------------------------------------------------------- #
+# T5: detect_bed_exit — saída do leito (ITER2-06)
+# --------------------------------------------------------------------------- #
+def test_bed_exit_detected_when_lying_person_rises():
+    """Pessoa deitada que sobe + desloca lateralmente → 1 finding BED_EXIT."""
+    from pipelines.video.pose_detector import detect_bed_exit
+
+    # 100 frames deitado (Y≈0.80) + 100 frames a subir com deslocamento lateral
+    lying = [_make_person_frame(hip_y=0.80, track_id=0) for _ in range(100)]
+    rising = []
+    for i in range(100):
+        y = 0.80 - (i / 100) * 0.40  # Y desce 0.80→0.40
+        # Move os quadris lateralmente para criar ΔX no hip_center
+        hip_x = 0.50 + (i / 100) * 0.10  # X: 0.50→0.60 (ΔX=0.10 > 0.05)
+        landmarks = [(0.5, 0.5, 0.0, 0.9) for _ in range(33)]
+        landmarks[23] = (hip_x, y, 0.0, 0.9)       # hip L com X crescente
+        landmarks[24] = (hip_x + 0.02, y, 0.0, 0.9)  # hip R
+        landmarks[11] = (hip_x, y - 0.20, 0.0, 0.9)  # shoulder L
+        landmarks[12] = (hip_x + 0.02, y - 0.20, 0.0, 0.9)
+        landmarks[0] = (hip_x + 0.01, y - 0.25, 0.0, 0.9)
+        rising.append(PoseFrame(landmarks=landmarks, track_id=0))
+
+    frames = lying + rising
+
+    findings = detect_bed_exit(frames, fps=30.0)
+
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.finding_type == "BED_EXIT"
+    assert f.measured_angle > 0.0  # |ΔY|
+    assert 0.0 <= f.score <= 1.0
+
+
+def test_bed_exit_not_applicable_to_standing_person():
+    """Pessoa de pé → 0 findings (gate is_recumbent)."""
+    from pipelines.video.pose_detector import detect_bed_exit
+
+    frames = [_make_person_frame(hip_y=0.30, track_id=0) for _ in range(200)]
+    findings = detect_bed_exit(frames, fps=30.0)
+
+    assert findings == []
+
+
+def test_bed_exit_no_lateral_movement_no_finding():
+    """Pessoa deitada que sobe sem ΔX → 0 findings."""
+    from pipelines.video.pose_detector import detect_bed_exit
+
+    lying = [_make_person_frame(hip_y=0.80, track_id=0) for _ in range(100)]
+    rising = []
+    for i in range(100):
+        y = 0.80 - (i / 100) * 0.20
+        rising.append(_make_person_frame(hip_y=y, track_id=0, shoulder_dx=0.0))
+
+    frames = lying + rising
+    findings = detect_bed_exit(frames, fps=30.0)
+
+    assert findings == []
+
+
+def test_bed_exit_insufficient_frames():
+    """Menos de 120 frames → []."""
+    from pipelines.video.pose_detector import detect_bed_exit
+
+    frames = [_make_person_frame(hip_y=0.80, track_id=0) for _ in range(60)]
+    findings = detect_bed_exit(frames, fps=30.0)
+
+    assert findings == []
+
+
 def test_validate_fall_dynamic_truly_falling_person_detected():
     """Pessoa com queda real (Vy≈0.25, tilt≈45°) → detectada com track_id correto."""
     from pipelines.video.pose_detector import validate_fall_dynamic

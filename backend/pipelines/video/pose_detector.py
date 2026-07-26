@@ -337,6 +337,174 @@ def detect_seizure(
 
 
 # --------------------------------------------------------------------------- #
+# Detector de agitação — mudanças de posição por minuto (ITER2-05)
+# --------------------------------------------------------------------------- #
+def detect_agitation(
+    frames: list[PoseFrame | None],
+    fps: float,
+    window_frames: int = 30,
+    min_changes_per_minute: int = 10,
+    min_total_frames: int = 120,
+) -> list[PosturalFinding]:
+    """Deteta agitação psicomotora via frequência de mudanças de posição.
+
+    Divide a timeline em janelas de ``window_frames``, calcula o Y médio
+    dos quadris em cada janela, e conta quantas vezes a posição muda
+    significativamente (|ΔY| > 0.03) entre janelas consecutivas.
+    Se a taxa exceder ``min_changes_per_minute`` mudanças/min, emite
+    um finding "AGITATION".
+    """
+    from pipelines.video.pose_features import hip_center, _upper_body_center
+
+    if len(frames) < min_total_frames:
+        return []
+
+    # Y médio por janela
+    window_y: list[float | None] = []
+    for start in range(0, len(frames), window_frames):
+        end = min(start + window_frames, len(frames))
+        y_vals: list[float] = []
+        for f in frames[start:end]:
+            if f is None:
+                continue
+            center = hip_center(f)
+            if center is None:
+                center = _upper_body_center(f)
+            if center is not None:
+                y_vals.append(center[1])
+        if y_vals:
+            window_y.append(sum(y_vals) / len(y_vals))
+        else:
+            window_y.append(None)
+
+    # Conta mudanças entre janelas consecutivas
+    changes = 0
+    for i in range(1, len(window_y)):
+        prev_y = window_y[i - 1]
+        curr_y = window_y[i]
+        if prev_y is not None and curr_y is not None:
+            if abs(curr_y - prev_y) > 0.03:
+                changes += 1
+
+    total_seconds = len(frames) / max(fps, 1.0)
+    rate_per_minute = changes / (total_seconds / 60.0)
+
+    findings: list[PosturalFinding] = []
+    if rate_per_minute > min_changes_per_minute:
+        score = min(1.0, rate_per_minute / (min_changes_per_minute * 2))
+        findings.append(PosturalFinding(
+            finding_type="AGITATION",
+            joint_name=None,
+            measured_angle=round(rate_per_minute, 1),
+            expected_angle=float(min_changes_per_minute),
+            duration_s=round(total_seconds, 1),
+            frame_index=0,
+            score=round(score, 3),
+            description=(
+                f"Agitação psicomotora detectada "
+                f"({rate_per_minute:.0f} mudanças/min, "
+                f"threshold {min_changes_per_minute}/min, "
+                f"{total_seconds:.0f}s analisados)."
+            ),
+        ))
+
+    return findings
+
+
+# --------------------------------------------------------------------------- #
+# Detector de saída do leito — Y subindo + ΔX (ITER2-06)
+# --------------------------------------------------------------------------- #
+def detect_bed_exit(
+    frames: list[PoseFrame | None],
+    fps: float,
+    window_frames: int = 60,
+    min_delta_y: float = -0.10,
+    min_delta_x: float = 0.05,
+    min_total_frames: int = 120,
+) -> list[PosturalFinding]:
+    """Deteta saída do leito em pessoa previamente deitada.
+
+    Só se aplica a pessoas classificadas como recumbent. Calcula a diferença
+    de Y médio e o deslocamento lateral total entre dois blocos de 30 frames
+    (janela total de 60 frames). Se a pessoa sobe (ΔY < 0) e se desloca
+    lateralmente, emite um finding "BED_EXIT".
+    """
+    from pipelines.video.pose_features import (
+        hip_center,
+        is_recumbent,
+        lateral_displacement,
+        _upper_body_center,
+    )
+
+    if len(frames) < min_total_frames:
+        return []
+
+    if not is_recumbent(frames):
+        return []
+
+    # Divide em dois blocos de 30 frames cada (janela total = 60)
+    half = window_frames // 2
+    early_frames = frames[-window_frames:-half] if len(frames) > window_frames else frames[:half]
+    late_frames = frames[-half:]
+
+    # Y médio do bloco inicial
+    early_y: list[float] = []
+    for f in early_frames:
+        if f is None:
+            continue
+        center = hip_center(f)
+        if center is None:
+            center = _upper_body_center(f)
+        if center is not None:
+            early_y.append(center[1])
+
+    # Y médio do bloco final
+    late_y: list[float] = []
+    for f in late_frames:
+        if f is None:
+            continue
+        center = hip_center(f)
+        if center is None:
+            center = _upper_body_center(f)
+        if center is not None:
+            late_y.append(center[1])
+
+    if len(early_y) < 5 or len(late_y) < 5:
+        return []
+
+    avg_early_y = sum(early_y) / len(early_y)
+    avg_late_y = sum(late_y) / len(late_y)
+    delta_y = avg_late_y - avg_early_y  # negativo = subindo na imagem
+
+    # Deslocamento lateral total no período
+    recent = frames[-window_frames:] if len(frames) > window_frames else frames
+    dx_list = lateral_displacement(recent)
+    valid_dx = [v for v in dx_list if v is not None]
+    total_dx = sum(valid_dx) if valid_dx else 0.0
+
+    findings: list[PosturalFinding] = []
+    if delta_y < min_delta_y and total_dx > min_delta_x:
+        score = min(1.0, abs(delta_y) / (abs(min_delta_y) * 2))
+        duration = window_frames / max(fps, 1.0)
+        findings.append(PosturalFinding(
+            finding_type="BED_EXIT",
+            joint_name=None,
+            measured_angle=round(abs(delta_y), 3),
+            expected_angle=abs(min_delta_y),
+            duration_s=round(duration, 1),
+            frame_index=max(0, len(frames) - window_frames),
+            score=round(score, 3),
+            description=(
+                f"Saída do leito detectada "
+                f"(ΔY = {delta_y:.3f}, ΔX = {total_dx:.3f}, "
+                f"{duration:.1f}s)."
+            ),
+        ))
+
+    return findings
+
+
+# --------------------------------------------------------------------------- #
 # Sumarização de achados — agrupa findings repetidos por articulação/tipo
 # --------------------------------------------------------------------------- #
 _TRADUCAO_ARTICULACAO = {
