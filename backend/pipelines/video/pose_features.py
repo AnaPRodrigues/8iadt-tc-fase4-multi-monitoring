@@ -244,32 +244,38 @@ def lateral_displacement(
     return displacements
 
 
+def total_displacement(
+    velocities: list[float | None],
+) -> float:
+    """Deslocamento vertical total acumulado ($\\Delta Y$) durante a descida.
+
+    Soma todos os $V_y$ positivos (descida). Uma acompanhante sentada pode
+    mexer os braços (jitter), mas seu tronco nunca acumula $\\Delta Y \\ge 0.20$.
+    Uma queda real do leito produz $\\Delta Y \\ge 0.20$ facilmente.
+
+    Devolve 0.0 se não houver dados suficientes.
+    """
+    valid = [v for v in velocities if v is not None and v > 0.0]
+    if not valid:
+        return 0.0
+    return sum(valid)
+
+
 def max_vertical_velocity(
     velocities: list[float | None], window_frames: int = 15
 ) -> float:
-    """Maior velocidade vertical **consecutiva e direcional** no sinal.
+    """Maior velocidade vertical no sinal (pico de descida).
 
-    Exige pelo menos 3 frames **consecutivos** com $V_y > 0.10$ no sentido
-    positivo (descida). Jitter esparso do MediaPipe em braço/cabeça NUNCA
-    atinge 3 frames consecutivos — só uma queda real produz descida sustentada.
+    Aceita frames isolados acima do piso — o filtro anti-jitter é feito
+    pelo ``total_displacement``, não por consecutividade. Para CCTV/15fps,
+    o pico de descida pode durar apenas 1-2 frames.
 
-    Devolve a média do melhor bloco consecutivo; 0.0 se nenhum bloco atingir
-    o mínimo de 3 frames consecutivos acima do piso.
+    Devolve 0.0 se nenhum valor ultrapassar o piso.
     """
-    valid = [v for v in velocities if v is not None]
-    best_avg = 0.0
-    current_streak: list[float] = []
-
-    for v in valid:
-        if v is not None and v > 0.10:
-            current_streak.append(v)
-            if len(current_streak) >= 3:
-                avg = sum(current_streak) / len(current_streak)
-                best_avg = max(best_avg, avg)
-        else:
-            current_streak = []
-
-    return best_avg
+    valid = [v for v in velocities if v is not None and v > 0.08]
+    if not valid:
+        return 0.0
+    return max(valid)
 def _min_visibility(frame: PoseFrame, indices: list[int]) -> float:
     """Menor visibilidade entre os landmarks pedidos — gate de qualidade.
 

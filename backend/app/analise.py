@@ -364,9 +364,9 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
             )
             ev_idx = min(ev_idx, len(frame_paths) - 1)
 
-            # No frame do pico, recalcula qual pessoa está mais no chão
-            # (Y do quadril mais alto = mais próxima do solo). O índice
-            # fall_person_idx pode estar desatualizado porque YOLO reordena.
+            # No frame do pico, seleciona a pessoa com quadril mais baixo
+            # e tronco completo (ombros + quadris válidos). Visibilidade 0.6
+            # descarta alucinações em impressoras/móveis.
             pose_para_evidencia = None
             if ev_idx < len(all_poses) and all_poses[ev_idx]:
                 best_y = -1.0
@@ -376,7 +376,10 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
                     hip_y = (p.landmarks[23][1] + p.landmarks[24][1]) / 2.0
                     lv = p.landmarks[23][3]
                     rv = p.landmarks[24][3]
-                    if lv >= 0.4 and rv >= 0.4 and hip_y > best_y:
+                    slv = p.landmarks[11][3]
+                    srv = p.landmarks[12][3]
+                    # Exige tronco completo (ombros + quadris) com visibilidade >= 0.6
+                    if lv >= 0.6 and rv >= 0.6 and slv >= 0.6 and srv >= 0.6 and hip_y > best_y:
                         best_y = hip_y
                         pose_para_evidencia = p
             # Fallback: frames vizinhos

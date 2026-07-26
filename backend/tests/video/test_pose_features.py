@@ -11,6 +11,7 @@ from pipelines.video.pose_features import (
     joint_angles_per_frame,
     max_vertical_velocity,
     select_ground_person,
+    total_displacement,
     trunk_tilt,
     vertical_velocity,
     windowed_features,
@@ -333,25 +334,47 @@ def test_vertical_velocity_estatico_produz_zero():
     assert vy[2] == pytest.approx(0.0, abs=0.01)
 
 
-def test_max_vertical_velocity_consecutivo_requer_3_frames():
-    """≥3 frames consecutivos >0.10 → média do bloco."""
-    vy = [0.3, 0.3, 0.3, 0.2, 0.01, 0.01]
-    max_v = max_vertical_velocity(vy, window_frames=6)
-    assert max_v == pytest.approx(0.275, abs=0.05)
-
-
-def test_max_vertical_velocity_pico_isolado_ignorado():
-    """Pico isolado sem 3 consecutivos → 0.0."""
+def test_max_vertical_velocity_pico_isolado_aceito():
+    """1 frame >0.08 já é suficiente (CCTV/15fps compat)."""
     vy = [0.0, 0.0, 0.25, 0.0, 0.0, 0.0]
     max_v = max_vertical_velocity(vy, window_frames=6)
+    assert max_v == pytest.approx(0.25, abs=0.01)
+
+
+def test_max_vertical_velocity_abaixo_do_piso_ignorado():
+    """Nenhum frame >0.08 → 0.0."""
+    vy = [0.0, 0.07, 0.05, 0.0, 0.0]
+    max_v = max_vertical_velocity(vy, window_frames=5)
     assert max_v == 0.0
 
 
 def test_max_vertical_velocity_ignora_none():
-    """Frames None interrompem a streak consecutiva."""
-    vy = [None, 0.3, 0.3, None, 0.3, 0.3, 0.3, None]
-    max_v = max_vertical_velocity(vy, window_frames=8)
+    """Frames None são ignorados."""
+    vy = [None, 0.3, None, 0.1, None]
+    max_v = max_vertical_velocity(vy, window_frames=5)
     assert max_v == pytest.approx(0.3, abs=0.01)
+
+
+# --------------------------------------------------------------------------- #
+# total_displacement
+# --------------------------------------------------------------------------- #
+def test_total_displacement_acumula_descidas():
+    """Soma todos os Vy positivos."""
+    vy = [0.05, 0.10, -0.02, 0.08, None]
+    td = total_displacement(vy)
+    assert td == pytest.approx(0.23, abs=0.01)
+
+
+def test_total_displacement_sem_descida():
+    """Sem Vy positivo → 0.0."""
+    vy = [-0.01, -0.02, 0.0, None]
+    td = total_displacement(vy)
+    assert td == 0.0
+
+
+def test_total_displacement_vazio():
+    """Lista vazia → 0.0."""
+    assert total_displacement([]) == 0.0
 
 
 def test_max_vertical_velocity_empty():
