@@ -115,12 +115,21 @@ def _analisar_video(caminho: Path, run_id: str) -> ResultadoAnalise:
 
 
 def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
-    from pipelines.video.pose import create_landmarker, ensure_pose_model, extract_all_keypoints
+    from pipelines.video.pose import (
+        create_landmarker,
+        ensure_pose_model,
+        extract_all_keypoints,
+        reset_person_tracker,
+    )
     from pipelines.video.pose_detector import (
         classify_with_persistence,
         save_fall_evidence,
     )
-    from pipelines.video.pose_features import select_ground_person, windowed_features
+    from pipelines.video.pose_features import (
+        find_pose_by_track_id,
+        select_ground_person,
+        windowed_features,
+    )
     from pipelines.video.pose_loader import load_sequence
 
     _FALL_THRESHOLD = 0.55
@@ -130,8 +139,9 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
     model_path = ensure_pose_model(caminho.parent / "_modelo_pose")
     landmarker = create_landmarker(model_path, num_poses=3)
 
+    reset_person_tracker()
     all_poses = [extract_all_keypoints(p, landmarker) for p in seq.frame_paths]
-    frames = select_ground_person(all_poses)
+    frames, track_ids = select_ground_person(all_poses)
     windows = windowed_features(frames, _JANELA_VIDEO)
 
     fall_verdict, fall_frame_idx = classify_with_persistence(
@@ -143,22 +153,33 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
 
     evento = next(w for w in windows if w.center_of_mass_amplitude > _FALL_THRESHOLD)
     safe_idx = min(fall_frame_idx or 0, len(seq.frame_paths) - 1, len(frames) - 1)
-    if frames[safe_idx] is None:
+
+    # Determina track_id da pessoa que caiu e busca o esqueleto correto
+    fall_track_id = track_ids[safe_idx] if safe_idx < len(track_ids) else None
+    evidence_pose = frames[safe_idx]
+    if fall_track_id is not None:
+        tracked = find_pose_by_track_id(all_poses, safe_idx, fall_track_id)
+        if tracked is not None:
+            evidence_pose = tracked
+
+    if evidence_pose is None:
         return ResultadoAnalise(resumo="Sem queda detectada no período monitorado.", pontuacao=0.0)
+
     evidencia = save_fall_evidence(
         seq_id=seq.seq_id,
         frame_path=seq.frame_paths[safe_idx],
-        pose_frame=frames[safe_idx],
+        pose_frame=evidence_pose,
         event_frame_index=safe_idx,
         score=evento.center_of_mass_amplitude,
         run_id=run_id,
         persistence_frames=1,
+        track_id=fall_track_id,
     )
     return ResultadoAnalise(
         resumo="Queda detectada.",
         pontuacao=float(evento.center_of_mass_amplitude),
         evidencia_id=evidencia.evidence_id,
-        detalhes={"quadro": safe_idx},
+        detalhes={"quadro": safe_idx, "track_id": fall_track_id},
     )
 
 
@@ -232,7 +253,12 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
     os mesmos frames extraídos. Com ``num_poses=3``, seleciona automaticamente
     a pessoa mais próxima do chão quando há múltiplos esqueletos na cena.
     """
-    from pipelines.video.pose import create_landmarker, ensure_pose_model, extract_all_keypoints
+    from pipelines.video.pose import (
+        create_landmarker,
+        ensure_pose_model,
+        extract_all_keypoints,
+        reset_person_tracker,
+    )
     from pipelines.video.pose_detector import (
         classify_with_persistence,
         detect_postural_deviations,
@@ -243,6 +269,7 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         validate_fall_dynamic,
     )
     from pipelines.video.pose_features import (
+        find_pose_by_track_id,
         select_ground_person,
         vertical_velocity_robust,
         windowed_features,
@@ -282,27 +309,33 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         model_path = ensure_pose_model(caminho.parent / "_modelo_pose")
         landmarker = create_landmarker(model_path, num_poses=_NUM_POSES)
 
-        # Extração multi-pessoa → seleciona pessoa no nível do solo
+        # Extração multi-pessoa com tracking de identidade persistente
+        reset_person_tracker()
         all_poses = [extract_all_keypoints(p, landmarker) for p in frame_paths]
-        frames = select_ground_person(all_poses)
+        frames, track_ids = select_ground_person(all_poses)
         n_pessoas = max((len(poses) for poses in all_poses if poses), default=0)
+
+        # Thresholds adaptativos para cenas multi-pessoa (C2)
+        persistence = _PERSISTENCE_FRAMES
+        if n_pessoas > 1:
+            persistence = 3
 
         # Features de movimento (compartilhadas pelos dois detetores)
         windows = windowed_features(frames, _JANELA_VIDEO)
 
         # --- Deteção de queda (com persistência temporal) ---
         fall_verdict, fall_frame_idx = classify_with_persistence(
-            windows, _FALL_THRESHOLD, _PERSISTENCE_FRAMES,
+            windows, _FALL_THRESHOLD, persistence,
         )
 
         # Validação dinâmica multi-pessoa com fallback para oclusão parcial.
         velocities = vertical_velocity_robust(frames)
         (
             fall_verdict, fall_frame_idx, vy_score, vy_description,
-            fall_person_idx, fall_peak_frame,
+            fall_track_id, fall_peak_frame,
         ) = validate_fall_dynamic(
             fall_verdict, fall_frame_idx, velocities, _MIN_VERTICAL_VELOCITY,
-            all_poses_per_frame=all_poses,
+            all_poses_per_frame=all_poses, n_pessoas=n_pessoas,
         )
 
         todos_detalhes: dict = {
@@ -364,11 +397,30 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
             )
             ev_idx = min(ev_idx, len(frame_paths) - 1)
 
-            # No frame do pico, seleciona a pessoa com quadril mais baixo
-            # e tronco completo (ombros + quadris válidos). Visibilidade 0.6
-            # descarta alucinações em impressoras/móveis.
+            # Estratégia primária: busca o esqueleto pelo track_id da pessoa
+            # que disparou a queda (elimina dependência do índice posicional).
             pose_para_evidencia = None
-            if ev_idx < len(all_poses) and all_poses[ev_idx]:
+            if fall_track_id is not None and ev_idx < len(all_poses):
+                pose_para_evidencia = find_pose_by_track_id(
+                    all_poses, ev_idx, fall_track_id,
+                )
+                # Se não encontrou nesse frame, tenta frames vizinhos
+                if pose_para_evidencia is None:
+                    for delta in range(1, 11):
+                        for cand in (ev_idx - delta, ev_idx + delta):
+                            if 0 <= cand < len(all_poses):
+                                pose_para_evidencia = find_pose_by_track_id(
+                                    all_poses, cand, fall_track_id,
+                                )
+                                if pose_para_evidencia is not None:
+                                    ev_idx = cand
+                                    break
+                        if pose_para_evidencia is not None:
+                            break
+
+            # Fallback: seleciona pessoa com quadril mais baixo e tronco completo
+            # (comportamento antigo, robusto quando tracking não está ativo).
+            if pose_para_evidencia is None and ev_idx < len(all_poses) and all_poses[ev_idx]:
                 best_y = -1.0
                 for p in all_poses[ev_idx]:
                     if p is None:
@@ -404,12 +456,13 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
                     score=vy_score,
                     run_id=run_id,
                     persistence_frames=_PERSISTENCE_FRAMES,
+                    track_id=fall_track_id,
                 )
                 evidencia_principal = ev.evidence_id
                 todos_detalhes["queda"] = {
                     "frame": ev_idx,
                     "vy_max": vy_score,
-                    "person_idx": fall_person_idx,
+                    "track_id": fall_track_id,
                 }
         elif consolidated:
             # Um único artefato para o achado mais grave (maior score)
