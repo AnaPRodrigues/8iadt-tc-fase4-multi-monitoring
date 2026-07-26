@@ -296,14 +296,13 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         )
 
         # Validação dinâmica multi-pessoa com fallback para oclusão parcial.
-        # Itera sobre todas as poses detetadas — se qualquer pessoa satisfizer
-        # as condições de queda, o evento é registado (Requisito 1).
         velocities = vertical_velocity_robust(frames)
-        fall_verdict, fall_frame_idx, vy_score, vy_description = (
-            validate_fall_dynamic(
-                fall_verdict, fall_frame_idx, velocities, _MIN_VERTICAL_VELOCITY,
-                all_poses_per_frame=all_poses,
-            )
+        (
+            fall_verdict, fall_frame_idx, vy_score, vy_description,
+            fall_person_idx, fall_peak_frame,
+        ) = validate_fall_dynamic(
+            fall_verdict, fall_frame_idx, velocities, _MIN_VERTICAL_VELOCITY,
+            all_poses_per_frame=all_poses,
         )
 
         todos_detalhes: dict = {
@@ -359,34 +358,27 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         # --- Evidência única consolidada ---
         evidencia_principal: str | None = None
         if fall_detected:
-            # Pico da queda + offset para mostrar o resultado
-            above = [w for w in windows if w.center_of_mass_amplitude > _FALL_THRESHOLD]
-            if above:
-                pico = max(above, key=lambda w: w.center_of_mass_amplitude)
-                # Usa o meio da janela de pico + meia janela de offset
-                # (aproximadamente onde a pessoa já está no chão)
-                peak_mid = (pico.start_frame + pico.end_frame) // 2
-                best_frame = min(peak_mid + _JANELA_VIDEO // 2, len(frame_paths) - 1)
-            else:
-                best_frame = min(fall_frame_idx or 0, len(frame_paths) - 1)
-            safe_idx = min(best_frame, len(frame_paths) - 1, len(frames) - 1)
+            # Frame do pico de Vy (onde a queda foi mais rápida)
+            ev_idx = fall_peak_frame if fall_peak_frame is not None else (
+                fall_frame_idx or 0
+            )
+            ev_idx = min(ev_idx, len(frame_paths) - 1)
 
-            # Fallback: se a pessoa selecionada não tem pose, procura em outras
-            # pessoas no mesmo frame, depois em frames vizinhos (±10)
-            pose_para_evidencia = frames[safe_idx] if safe_idx < len(frames) else None
-            if pose_para_evidencia is None and safe_idx < len(all_poses):
-                for alt_pose in all_poses[safe_idx]:
-                    if alt_pose is not None:
-                        pose_para_evidencia = alt_pose
-                        break
-            # Fallback estendido: frames vizinhos
-            ev_idx = safe_idx
+            # Pose da pessoa que realmente caiu (não do acompanhante)
+            pose_para_evidencia = None
+            if fall_person_idx >= 0 and ev_idx < len(all_poses):
+                poses_no_frame = all_poses[ev_idx]
+                if fall_person_idx < len(poses_no_frame):
+                    pose_para_evidencia = poses_no_frame[fall_person_idx]
+            # Fallback: pessoa selecionada ou frames vizinhos
+            if pose_para_evidencia is None and ev_idx < len(frames):
+                pose_para_evidencia = frames[ev_idx]
             if pose_para_evidencia is None:
                 for delta in range(1, 11):
-                    for candidate in (safe_idx - delta, safe_idx + delta):
-                        if 0 <= candidate < len(frames) and frames[candidate] is not None:
-                            pose_para_evidencia = frames[candidate]
-                            ev_idx = candidate
+                    for cand in (ev_idx - delta, ev_idx + delta):
+                        if 0 <= cand < len(frames) and frames[cand] is not None:
+                            pose_para_evidencia = frames[cand]
+                            ev_idx = cand
                             break
                     if pose_para_evidencia is not None:
                         break
@@ -397,14 +389,15 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
                     frame_path=frame_paths[ev_idx],
                     pose_frame=pose_para_evidencia,
                     event_frame_index=ev_idx,
-                    score=pico.center_of_mass_amplitude if above else 0.0,
+                    score=vy_score,
                     run_id=run_id,
                     persistence_frames=_PERSISTENCE_FRAMES,
                 )
                 evidencia_principal = ev.evidence_id
                 todos_detalhes["queda"] = {
                     "frame": ev_idx,
-                    "score": round(pico.center_of_mass_amplitude if above else 0.0, 3),
+                    "vy_max": vy_score,
+                    "person_idx": fall_person_idx,
                 }
         elif consolidated:
             # Um único artefato para o achado mais grave (maior score)

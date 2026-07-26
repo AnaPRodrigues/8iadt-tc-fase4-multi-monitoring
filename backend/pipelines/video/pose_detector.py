@@ -247,17 +247,16 @@ def validate_fall_dynamic(
     velocities: list[float | None],
     min_vertical_velocity: float = 0.10,
     all_poses_per_frame: list[list[PoseFrame | None]] | None = None,
-) -> tuple[str, int | None, float, str]:
+) -> tuple[str, int | None, float, str, int, int | None]:
     """Validação dinâmica de queda multi-pessoa com fallback para oclusão.
 
     Itera sobre **todas** as poses detetadas no frame. Se qualquer pessoa
-    satisfizer as condições de queda, o evento é registado. Suporta fallback
-    para parte superior do corpo quando pernas/quadril estão ocluídos.
+    satisfizer as condições de queda, o evento é registado.
 
-    Devolve ``(verdict, frame_idx, velocity_score, description)``.
+    Devolve ``(verdict, frame_idx, velocity_score, description, person_index, peak_vy_frame)``.
     """
     if fall_verdict != "queda":
-        return (fall_verdict, fall_frame_idx, 0.0, "")
+        return (fall_verdict, fall_frame_idx, 0.0, "", -1, None)
 
     from pipelines.video.pose_features import (
         lateral_displacement,
@@ -266,78 +265,79 @@ def validate_fall_dynamic(
         vertical_velocity_robust,
     )
 
-    # Verifica todas as pessoas no frame (não só a selecionada)
     best_vy = 0.0
     best_description = ""
-    best_frame = fall_frame_idx
-    _MIN_TILT_FOR_FALL = 25.0  # tronco precisa inclinar pelo menos 25° para considerar queda
+    best_person = -1
+    best_peak_frame: int | None = None
+    _MIN_TILT_FOR_FALL = 25.0
 
-    # Lista de velocidades por pessoa: cada elemento é list[float | None]
     all_vy: list[list[float | None]] = [velocities]
+    all_person_frames: list[list[PoseFrame | None]] = []
 
     if all_poses_per_frame:
         max_people = max((len(p) for p in all_poses_per_frame if p), default=0)
         if max_people > 1:
             all_vy = []
             for p_idx in range(max_people):
-                person_frames: list[PoseFrame | None] = [
+                pf: list[PoseFrame | None] = [
                     poses[p_idx] if poses and p_idx < len(poses) else None
                     for poses in all_poses_per_frame
                 ]
-                all_vy.append(vertical_velocity_robust(person_frames))
+                all_person_frames.append(pf)
+                all_vy.append(vertical_velocity_robust(pf))
+        else:
+            all_person_frames = [all_poses_per_frame[0] if all_poses_per_frame else []]
+    else:
+        all_person_frames = [[]]
 
     for p_idx, vy_list in enumerate(all_vy):
-        # Obtém os frames desta pessoa para verificar inclinação do tronco
-        person_frames: list[PoseFrame | None] = []
-        if all_poses_per_frame and p_idx < len(all_vy):
-            person_frames = [
-                poses[p_idx] if poses and p_idx < len(poses) else None
-                for poses in all_poses_per_frame
-            ]
+        person_frames = all_person_frames[p_idx] if p_idx < len(all_person_frames) else []
 
-        # Verifica se o tronco alguma vez inclina o suficiente para ser queda.
-        # Um médico de pé tem tronco vertical (~0-10°); uma queda real atinge >30°.
         tilts = [t for f in person_frames if f is not None for t in [trunk_tilt(f)] if t is not None]
         max_tilt = max(tilts) if tilts else 0.0
 
-        # Velocidade robusta (fallback para upper body se quadril ocluído)
         max_vy = max_vertical_velocity(vy_list)
 
         if max_vy >= min_vertical_velocity and max_tilt >= _MIN_TILT_FOR_FALL:
             if max_vy > best_vy:
                 best_vy = max_vy
+                best_person = p_idx
+                # Frame do pico de Vy (onde a velocidade é máxima)
+                valid_vy = [(i, v) for i, v in enumerate(vy_list) if v is not None]
+                if valid_vy:
+                    best_peak_frame = max(valid_vy, key=lambda x: x[1])[0]
                 best_description = (
-                    f"Queda abrupta detectada no frame {fall_frame_idx} "
+                    f"Queda abrupta detectada no frame {best_peak_frame} "
                     f"(variação de velocidade vertical Vy = {max_vy:.3f}/frame, "
                     f"inclinação do tronco = {max_tilt:.0f}°)."
                 )
-                best_frame = fall_frame_idx
             continue
 
-        # Verifica rolamento/escorregamento: ΔX + inclinação do tronco
         dx_list = lateral_displacement(person_frames)
         valid_dx = [v for v in dx_list if v is not None]
         max_dx = max(valid_dx) if len(valid_dx) >= 5 else 0.0
 
         if max_dx > 0.05 and max_vy > 0.05:
-            # Movimento lateral com queda vertical moderada → rolamento
             combined = (max_dx + max_vy) / 2.0
             if combined > best_vy:
                 best_vy = combined
+                best_person = p_idx
+                valid_vy = [(i, v) for i, v in enumerate(vy_list) if v is not None]
+                best_peak_frame = max(valid_vy, key=lambda x: x[1])[0] if valid_vy else None
                 best_description = (
-                    f"Queda por rolamento/escorregamento detectada no frame {fall_frame_idx} "
+                    f"Queda por rolamento/escorregamento detectada "
                     f"(deslocamento lateral ΔX = {max_dx:.3f}, Vy = {max_vy:.3f})."
                 )
-                best_frame = fall_frame_idx
 
     if best_vy < min_vertical_velocity:
         return (
             "adl", None, round(best_vy, 3),
             "Postura reclinada/estática detectada — sem evidência de queda "
             f"(Vy max = {best_vy:.3f}/frame, abaixo do limiar {min_vertical_velocity}).",
+            -1, None,
         )
 
-    return ("queda", best_frame, round(best_vy, 3), best_description)
+    return ("queda", fall_frame_idx, round(best_vy, 3), best_description, best_person, best_peak_frame)
 
 
 def sumarizar_achados_video(

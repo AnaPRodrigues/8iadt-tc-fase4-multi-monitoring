@@ -166,6 +166,22 @@ def draw_annotated_frame(
                     2,
                 )
 
+    # Bounding box de destaque ao redor da pessoa (para clareza no relatório)
+    valid_points = [
+        (int(x * width), int(y * height))
+        for x, y, _z, v in pose_frame.landmarks if v >= _MIN_VISIBILITY
+    ]
+    if len(valid_points) >= 5:
+        xs = [p[0] for p in valid_points]
+        ys = [p[1] for p in valid_points]
+        padding = 15
+        cv2.rectangle(
+            image,
+            (max(0, min(xs) - padding), max(0, min(ys) - padding)),
+            (min(width, max(xs) + padding), min(height, max(ys) + padding)),
+            highlight_color, 2,
+        )
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(output_path), image)
     return output_path
