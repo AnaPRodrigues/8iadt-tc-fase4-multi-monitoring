@@ -303,10 +303,10 @@ def test_select_ground_person_mixed_frames():
 
 
 def test_select_ground_person_sporadic_ignored():
-    """Deteção esporádica (< 3 frames consecutivos) → ignorada."""
+    """Deteção esporádica (< 2 frames consecutivos) → ignorada (ITER2-08)."""
     frame = _make_full_frame()
-    # Apenas 2 frames — não atinge o mínimo de 3 consecutivos
-    all_poses = [[frame], [frame], [None], [None], [None]]
+    # Apenas 1 frame isolado — não atinge o mínimo de 2 consecutivos
+    all_poses = [[frame], [None], [None], [None], [None]]
 
     result, track_ids = select_ground_person(all_poses)
 
@@ -568,3 +568,60 @@ def test_group_poses_by_track_id_empty_input():
 
     assert group_poses_by_track_id([]) == {}
     assert group_poses_by_track_id([[], [], []]) == {}
+
+
+# --------------------------------------------------------------------------- #
+# T1: Unified visibility threshold (0.4) + reduced streak minimum (2)
+# --------------------------------------------------------------------------- #
+def test_hip_center_returns_coords_at_visibility_045():
+    """Visibilidade 0.45 → hip_center devolve coordenadas (threshold 0.4)."""
+    from pipelines.video.pose_features import hip_center
+
+    frame = _make_full_frame({
+        23: (0.50, 0.60, 0.0, 0.45),  # hip L — antes era < 0.5, agora > 0.4
+        24: (0.52, 0.60, 0.0, 0.45),  # hip R
+    })
+
+    result = hip_center(frame)
+    assert result is not None
+    assert result[0] == pytest.approx(0.51, abs=0.01)
+    assert result[1] == pytest.approx(0.60, abs=0.01)
+
+
+def test_hip_center_still_none_below_04():
+    """Visibilidade < 0.4 → hip_center continua a devolver None."""
+    from pipelines.video.pose_features import hip_center
+
+    frame = _make_full_frame({
+        23: (0.50, 0.60, 0.0, 0.3),  # abaixo do novo threshold
+        24: (0.52, 0.60, 0.0, 0.9),
+    })
+
+    result = hip_center(frame)
+    assert result is None
+
+
+def test_select_ground_person_two_consecutive_frames_included():
+    """Pessoa em 2 frames consecutivos → incluída (streak mínimo = 2)."""
+    from pipelines.video.pose_features import select_ground_person
+
+    frame = _make_full_frame()
+    # Apenas 2 frames consecutivos — antes era descartado (< 3), agora incluído (≥ 2)
+    all_poses = [[frame], [frame], [], [], []]
+
+    result, track_ids = select_ground_person(all_poses)
+
+    assert result[0] is not None
+    assert result[1] is not None
+
+
+def test_select_ground_person_single_isolated_frame_excluded():
+    """Pessoa em apenas 1 frame isolado → descartada (ruído)."""
+    from pipelines.video.pose_features import select_ground_person
+
+    frame = _make_full_frame()
+    all_poses = [[frame], [], [], [], []]
+
+    result, track_ids = select_ground_person(all_poses)
+
+    assert result == [None, None, None, None, None]

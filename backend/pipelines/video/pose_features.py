@@ -78,8 +78,7 @@ def windowed_features(frames: list[PoseFrame | None], window_size: int) -> list[
 # --------------------------------------------------------------------------- #
 # Constantes compartilhadas
 # --------------------------------------------------------------------------- #
-_MIN_VISIBILITY = 0.5
-_MIN_OCCLUSION_VIS = 0.4  # tolerância para oclusão parcial (lençóis)
+_MIN_VISIBILITY = 0.4  # threshold unificado de visibilidade (lençóis/oclusão parcial)
 _SHOULDER_LEFT = 11
 _SHOULDER_RIGHT = 12
 _HIP_LEFT = 23
@@ -87,6 +86,7 @@ _HIP_RIGHT = 24
 _NOSE = 0
 _EAR_LEFT = 7
 _EAR_RIGHT = 8
+_MIN_CONSECUTIVE_FRAMES = 2  # frames consecutivos mínimos para validar deteção
 
 
 # --------------------------------------------------------------------------- #
@@ -141,7 +141,7 @@ def _upper_body_center(frame: PoseFrame) -> tuple[float, float] | None:
     nose_v = frame.landmarks[_NOSE][3]
     sl_v = frame.landmarks[_SHOULDER_LEFT][3]
     sr_v = frame.landmarks[_SHOULDER_RIGHT][3]
-    if nose_v < _MIN_OCCLUSION_VIS or sl_v < _MIN_OCCLUSION_VIS or sr_v < _MIN_OCCLUSION_VIS:
+    if nose_v < _MIN_VISIBILITY or sl_v < _MIN_VISIBILITY or sr_v < _MIN_VISIBILITY:
         return None
     cx = (
         frame.landmarks[_NOSE][0] + frame.landmarks[_SHOULDER_LEFT][0]
@@ -294,10 +294,11 @@ def select_ground_person(
     """Seleciona, por frame, a pessoa com maior Y médio (mais próxima do chão).
 
     Aplica dois filtros anti-alucinação:
-    1. Visibilidade média ≥ 0.45 (pessoa real vs. objeto)
+    1. Visibilidade média ≥ _MIN_VISIBILITY (pessoa real vs. objeto)
     2. Consistência temporal: ignora "pessoas" que só aparecem em frames
-       isolados (< 3 frames consecutivos). Uma pessoa real é detetada
-       de forma contínua; uma impressora gera deteções esporádicas.
+       isolados (< _MIN_CONSECUTIVE_FRAMES frames consecutivos).
+       Uma pessoa real é detetada de forma contínua;
+       uma impressora gera deteções esporádicas.
 
     Com tracking ativo, devolve também ``track_ids`` alinhado frame a frame,
     permitindo que a evidência de queda referencie inequivocamente a pessoa
@@ -318,24 +319,23 @@ def select_ground_person(
                 continue
             avg_vis = sum(lm[3] for lm in p.landmarks) / len(p.landmarks)
             avg_y = sum(lm[1] for lm in p.landmarks) / len(p.landmarks)
-            if avg_vis >= 0.45:
+            if avg_vis >= _MIN_VISIBILITY:
                 frame_scores.append((p, avg_y, avg_vis))
         scored.append(frame_scores)
 
-    # Filtro temporal: só considera poses que aparecem em ≥ 3 frames consecutivos
+    # Filtro temporal: só considera poses que aparecem em ≥ _MIN_CONSECUTIVE_FRAMES frames consecutivos
     for i in range(n):
         if not scored[i]:
             continue
-        # Verifica se esta "pessoa" aparece em pelo menos 3 frames consecutivos
         streak = 0
         for j in range(max(0, i - 5), min(n, i + 6)):
             if scored[j]:
                 streak += 1
-                if streak >= 3:
+                if streak >= _MIN_CONSECUTIVE_FRAMES:
                     break
             else:
                 streak = 0
-        if streak < 3:
+        if streak < _MIN_CONSECUTIVE_FRAMES:
             scored[i] = []  # descarta — deteção esporádica
 
     # Seleciona a pessoa com maior Y em cada frame + respetivo track_id
