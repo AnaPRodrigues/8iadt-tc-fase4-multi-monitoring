@@ -198,28 +198,26 @@ def run(config_path: Path, run_id: str | None = None) -> int:
 
         # Evidência para cada finding
         for finding in consolidated:
-            # Usa o peak_frame (pico de Vy) como frame do evento,
-            # e find_pose_by_track_id para garantir que desenhamos
-            # a pessoa certa (não a primeira pose do frame).
+            # Para evidência visual, procura o frame onde a pessoa está
+            # no chão (Y máximo), não o pico de Vy (que pode ser braço/casaco).
+            # O pico de Vy é o momento mais rápido; o Y máximo é o resultado.
             event_frame = finding.peak_frame or finding.frame_index
             safe_idx = min(event_frame, len(seq.frame_paths) - 1)
             evidence_pose: PoseFrame | None = None
 
             if finding.track_id is not None:
                 from pipelines.video.pose_features import find_pose_by_track_id
-                # Procura no frame exato e nos frames vizinhos (±3)
-                for offset in range(0, 4):
-                    for direction in (1, -1) if offset > 0 else (1,):
-                        search_idx = safe_idx + (offset * direction)
-                        if 0 <= search_idx < len(all_poses):
-                            evidence_pose = find_pose_by_track_id(
-                                all_poses, search_idx, finding.track_id,
-                            )
-                            if evidence_pose is not None:
-                                safe_idx = search_idx
-                                break
-                    if evidence_pose is not None:
-                        break
+                # Procura o frame com Y máximo nos 60 frames após o pico
+                best_y = -1.0
+                for offset in range(0, 60):
+                    search_idx = min(safe_idx + offset, len(all_poses) - 1)
+                    pose = find_pose_by_track_id(all_poses, search_idx, finding.track_id)
+                    if pose is not None:
+                        y = sum(lm[1] for lm in pose.landmarks) / len(pose.landmarks)
+                        if y > best_y:
+                            best_y = y
+                            evidence_pose = pose
+                            safe_idx = search_idx
 
             if evidence_pose is None:
                 # Fallback: primeira pose válida no frame

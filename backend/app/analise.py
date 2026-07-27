@@ -158,16 +158,17 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
 
     evidence_pose = None
     if principal.track_id is not None:
-        for offset in range(0, 4):
-            for direction in (1, -1) if offset > 0 else (1,):
-                search_idx = safe_idx + (offset * direction)
-                if 0 <= search_idx < len(all_poses):
-                    evidence_pose = find_pose_by_track_id(all_poses, search_idx, principal.track_id)
-                    if evidence_pose is not None:
-                        safe_idx = search_idx
-                        break
-            if evidence_pose is not None:
-                break
+        # Procura o frame com Y máximo nos 60 frames após o pico
+        best_y = -1.0
+        for offset in range(0, 60):
+            search_idx = min(safe_idx + offset, len(all_poses) - 1)
+            pose = find_pose_by_track_id(all_poses, search_idx, principal.track_id)
+            if pose is not None:
+                y = sum(lm[1] for lm in pose.landmarks) / len(pose.landmarks)
+                if y > best_y:
+                    best_y = y
+                    evidence_pose = pose
+                    safe_idx = search_idx
 
     if evidence_pose is None:
         if safe_idx < len(all_poses) and all_poses[safe_idx]:
@@ -362,19 +363,19 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
 
         from pipelines.video.pose_features import find_pose_by_track_id
 
-        # Encontra a pose correta via track_id com busca em vizinhança
+        # Procura o frame com Y máximo nos 60 frames após o pico
         pose_para_evidencia = None
         if principal.track_id is not None:
-            for offset in range(0, 4):
-                for direction in (1, -1) if offset > 0 else (1,):
-                    search_idx = safe_idx + (offset * direction)
-                    if 0 <= search_idx < len(all_poses):
-                        pose_para_evidencia = find_pose_by_track_id(all_poses, search_idx, principal.track_id)
-                        if pose_para_evidencia is not None:
-                            safe_idx = search_idx
-                            break
-                if pose_para_evidencia is not None:
-                    break
+            best_y = -1.0
+            for offset in range(0, 60):
+                search_idx = min(safe_idx + offset, len(all_poses) - 1)
+                pose = find_pose_by_track_id(all_poses, search_idx, principal.track_id)
+                if pose is not None:
+                    y = sum(lm[1] for lm in pose.landmarks) / len(pose.landmarks)
+                    if y > best_y:
+                        best_y = y
+                        pose_para_evidencia = pose
+                        safe_idx = search_idx
 
         if pose_para_evidencia is None:
             if safe_idx < len(all_poses) and all_poses[safe_idx]:
