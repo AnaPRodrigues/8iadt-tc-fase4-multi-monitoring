@@ -276,6 +276,31 @@ def max_vertical_velocity(
     if not valid:
         return 0.0
     return max(valid)
+
+
+def max_consecutive_above(
+    values: list[float | None], threshold: float,
+) -> int:
+    """Maior número de valores consecutivos acima de ``threshold``.
+
+    Usado para distinguir descidas sustentadas (queda real) de picos
+    isolados de velocidade (glitch de detecção em ADL). Uma queda real
+    mantém Vy elevado por vários frames consecutivos; um glitch aparece
+    como um único frame isolado.
+
+    Devolve 0 se a lista estiver vazia ou sem valores acima do threshold.
+    """
+    max_streak = 0
+    current = 0
+    for v in values:
+        if v is not None and v > threshold:
+            current += 1
+            max_streak = max(max_streak, current)
+        else:
+            current = 0
+    return max_streak
+
+
 def _min_visibility(frame: PoseFrame, indices: list[int]) -> float:
     """Menor visibilidade entre os landmarks pedidos — gate de qualidade.
 

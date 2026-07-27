@@ -718,6 +718,40 @@ def validate_fall_dynamic(
     )
 
 
+def _compute_net_y_descent(
+    person_frames: list[PoseFrame | None],
+) -> float:
+    """Deslocamento vertical líquido do primeiro ao último frame válido.
+
+    Valores positivos indicam descida (Y aumenta = pessoa desce na imagem).
+    Usado como gate adicional no Vy-primary: uma queda real produz descida
+    líquida significativa (>0.15), enquanto movimentos normais que disparam
+    o Vy-primary por glitches têm pouco ou nenhum deslocamento líquido.
+
+    Devolve 0.0 se não houver frames válidos suficientes.
+    """
+    from pipelines.video.pose_features import hip_center, _upper_body_center
+
+    first_y: float | None = None
+    last_y: float | None = None
+
+    for f in person_frames:
+        if f is None:
+            continue
+        center = hip_center(f)
+        if center is None:
+            center = _upper_body_center(f)
+        if center is None:
+            continue
+        if first_y is None:
+            first_y = center[1]
+        last_y = center[1]
+
+    if first_y is None or last_y is None:
+        return 0.0
+    return last_y - first_y
+
+
 def analyze_all_persons(
     all_poses_per_frame: list[list[PoseFrame | None]],
     fps: float = 30.0,
@@ -754,6 +788,7 @@ def analyze_all_persons(
         classify_person_role,
         group_poses_by_track_id,
         is_recumbent,
+        max_consecutive_above,
         max_vertical_velocity,
         total_displacement,
         vertical_velocity_robust,
@@ -798,7 +833,14 @@ def analyze_all_persons(
                 velocities_fb = vertical_velocity_robust(person_frames)
                 max_vy_fb = max_vertical_velocity(velocities_fb)
                 total_dy_fb = total_displacement(velocities_fb)
-                if max_vy_fb >= 0.04 and total_dy_fb >= 0.35 and is_recumbent(person_frames):
+                # Vy-primary: requer descida sustentada (≥2 frames consecutivos
+                # com Vy>0.02) + deslocamento total + deslocamento líquido em Y.
+                # Filtra glitches de detecção (pico isolado) que são comuns em ADL.
+                consecutive_descending = max_consecutive_above(velocities_fb, 0.02)
+                y_descent = _compute_net_y_descent(person_frames)
+                if (consecutive_descending >= 2 and max_vy_fb >= 0.04
+                    and total_dy_fb >= 0.30 and y_descent >= 0.15
+                    and is_recumbent(person_frames)):
                     vy_fallback = True
                     fall_verdict = "queda"
                     valid_vy = [(i, v) for i, v in enumerate(velocities_fb) if v is not None and v > 0.01]

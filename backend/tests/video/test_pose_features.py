@@ -482,6 +482,39 @@ def test_is_recumbent_uses_fallback_when_hips_occluded():
 
 
 # --------------------------------------------------------------------------- #
+# max_consecutive_above — maior streak de valores consecutivos acima de threshold
+# --------------------------------------------------------------------------- #
+def test_max_consecutive_above_all_below_threshold():
+    """Nenhum valor acima do threshold → 0."""
+    from pipelines.video.pose_features import max_consecutive_above
+
+    assert max_consecutive_above([0.0, 0.01, 0.005, 0.0], 0.02) == 0
+
+
+def test_max_consecutive_above_mixed_streaks():
+    """Streaks interrompidos por valores abaixo do threshold."""
+    from pipelines.video.pose_features import max_consecutive_above
+
+    values = [0.03, 0.04, 0.01, 0.05, 0.06, 0.07, 0.0, 0.03]
+    assert max_consecutive_above(values, 0.02) == 3  # 0.05,0.06,0.07
+
+
+def test_max_consecutive_above_handles_none():
+    """None é tratado como interrupção da streak."""
+    from pipelines.video.pose_features import max_consecutive_above
+
+    values = [0.03, None, 0.04, 0.05]
+    assert max_consecutive_above(values, 0.02) == 2  # 0.04,0.05
+
+
+def test_max_consecutive_above_empty_list():
+    """Lista vazia → 0."""
+    from pipelines.video.pose_features import max_consecutive_above
+
+    assert max_consecutive_above([], 0.02) == 0
+
+
+# --------------------------------------------------------------------------- #
 # was_initially_recumbent — verifica se pessoa já estava deitada no INÍCIO
 # --------------------------------------------------------------------------- #
 def test_was_initially_recumbent_person_standing_initially():
