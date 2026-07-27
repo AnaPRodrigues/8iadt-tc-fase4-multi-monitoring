@@ -272,7 +272,7 @@ def max_vertical_velocity(
 
     Devolve 0.0 se nenhum valor ultrapassar o piso.
     """
-    valid = [v for v in velocities if v is not None and v > 0.08]
+    valid = [v for v in velocities if v is not None and v > 0.01]
     if not valid:
         return 0.0
     return max(valid)
@@ -521,6 +521,45 @@ def is_recumbent(
 
     y_values: list[float] = []
     for f in recent:
+        if f is None:
+            continue
+        center = hip_center(f)
+        if center is None:
+            center = _upper_body_center(f)
+        if center is not None:
+            y_values.append(center[1])
+
+    if len(y_values) < min_valid_frames:
+        return False
+
+    return (sum(y_values) / len(y_values)) > y_threshold
+
+
+def was_initially_recumbent(
+    person_frames: list[PoseFrame | None],
+    initial_window: int = 30,
+    min_valid_frames: int = 5,
+    y_threshold: float = 0.55,
+) -> bool:
+    """Verifica se a pessoa já estava deitada no INÍCIO da sequência.
+
+    Diferente de ``is_recumbent()``, que olha para os últimos 90 frames
+    (janela deslizante no final), esta função examina apenas os primeiros
+    ``initial_window`` frames. Se a pessoa já está com Y > ``y_threshold``
+    no início, é porque entrou na cena já deitada — não sofreu uma queda
+    durante este vídeo.
+
+    Usada como gate para pular a detecção de queda em pessoas que já
+    estavam no chão/cama antes da gravação começar. Pessoas que começam
+    de pé (Y < threshold) e depois caem NÃO são filtradas por esta função.
+
+    Devolve ``False`` se houver menos de ``min_valid_frames`` frames
+    válidos no início — conservador: na dúvida, executa o detector.
+    """
+    initial = person_frames[:initial_window]
+
+    y_values: list[float] = []
+    for f in initial:
         if f is None:
             continue
         center = hip_center(f)
