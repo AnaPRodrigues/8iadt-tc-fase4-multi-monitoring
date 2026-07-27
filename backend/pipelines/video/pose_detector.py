@@ -21,7 +21,7 @@ log = get_logger("video.pose_detector")
 # como ABRUPT_CHANGE_THRESHOLD): não é um valor fixado pela
 # spec, ajustável ao rodar o pipeline completo sobre o subconjunto curado.
 DEFAULT_FALL_THRESHOLD = 0.3
-DEFAULT_FALL_THRESHOLD_V2 = 0.55
+DEFAULT_FALL_THRESHOLD_V2 = 0.25
 
 _MIN_VISIBILITY = 0.5
 

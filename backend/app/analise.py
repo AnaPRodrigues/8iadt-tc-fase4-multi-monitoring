@@ -128,7 +128,7 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
     )
     from pipelines.video.pose_loader import load_sequence
 
-    _FALL_THRESHOLD = 0.55
+    _FALL_THRESHOLD = 0.25
 
     atividade.local("video", "avaliando postura e movimentação com MediaPipe Pose")
     seq = load_sequence(caminho)
@@ -265,7 +265,7 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         find_pose_by_track_id,
     )
 
-    _FALL_THRESHOLD = 0.55
+    _FALL_THRESHOLD = 0.25
     _PERSISTENCE_FRAMES = 1
     _NUM_POSES = 3
     _MIN_VERTICAL_VELOCITY = 0.15

@@ -53,7 +53,7 @@ _FEATURE = "video_pose"
 DEFAULTS: dict[str, Any] = {
     "sequences": None,
     "window_size": 30,
-    "fall_threshold": 0.55,
+    "fall_threshold": 0.25,
     "persistence_frames": 1,
     "num_poses": 3,
     "joint_targets": [],
