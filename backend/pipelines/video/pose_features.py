@@ -206,6 +206,7 @@ def torso_height(frame: PoseFrame) -> float | None:
 
 def vertical_velocity_robust(
     frames: list[PoseFrame | None],
+    max_gap: int = 5,
 ) -> list[float | None]:
     """Velocidade vertical com fallback para oclusão parcial.
 
@@ -213,16 +214,24 @@ def vertical_velocity_robust(
     usa a parte superior do corpo (cabeça + ombros). Devolve ``None`` se
     nenhuma das duas estiver disponível.
 
+    Resiste a gaps de deteção até ``max_gap`` frames: mantém a última
+    posição conhecida durante gaps curtos, permitindo calcular Vy mesmo
+    com deteção intermitente (comum em vídeos de baixa qualidade ou
+    pessoas distantes). Gaps maiores que ``max_gap`` resetam a referência.
+
     Uma transição rápida da cabeça/ombro para a borda inferior da imagem
     é suficiente para disparar a queda (Requisito 2).
     """
     velocities: list[float | None] = []
     prev_y: float | None = None
+    gap_count = 0
 
     for frame in frames:
         if frame is None:
+            gap_count += 1
+            if gap_count > max_gap:
+                prev_y = None
             velocities.append(None)
-            prev_y = None
             continue
 
         # Tenta quadril primeiro; fallback para upper body
@@ -231,10 +240,13 @@ def vertical_velocity_robust(
             center = _upper_body_center(frame)
 
         if center is None:
+            gap_count += 1
+            if gap_count > max_gap:
+                prev_y = None
             velocities.append(None)
-            prev_y = None
             continue
 
+        gap_count = 0
         current_y = center[1]
         if prev_y is not None:
             vy = current_y - prev_y

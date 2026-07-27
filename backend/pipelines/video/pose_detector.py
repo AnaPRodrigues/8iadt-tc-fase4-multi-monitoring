@@ -838,7 +838,7 @@ def analyze_all_persons(
     # Normaliza FPS: thresholds foram calibrados a 30fps. Converte Vy
     # de "por frame" para "por 1/30s" multiplicando por (30/fps).
     # Vídeos a 120fps têm Vy 4× menor por frame → compensação 4×.
-    _fps_scale = 30.0 / max(fps, 1.0)
+    _fps_scale = max(fps, 1.0) / 30.0
 
     all_findings: list[PosturalFinding] = []
     details: dict = {"pessoas_analisadas": 0, "por_papel": {}}
