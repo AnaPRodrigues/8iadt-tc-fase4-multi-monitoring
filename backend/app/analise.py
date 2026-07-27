@@ -150,14 +150,31 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
         return ResultadoAnalise(resumo="Sem queda detectada no período monitorado.", pontuacao=0.0)
 
     principal = fall_findings[0]
-    safe_idx = min(principal.frame_index, len(seq.frame_paths) - 1)
+    # Usa peak_frame (pico Vy) e find_pose_by_track_id para a pessoa certa
+    event_frame = principal.peak_frame or principal.frame_index
+    safe_idx = min(event_frame, len(seq.frame_paths) - 1)
+
+    from pipelines.video.pose_features import find_pose_by_track_id
 
     evidence_pose = None
-    if safe_idx < len(all_poses) and all_poses[safe_idx]:
-        for p in all_poses[safe_idx]:
-            if p is not None:
-                evidence_pose = p
+    if principal.track_id is not None:
+        for offset in range(0, 4):
+            for direction in (1, -1) if offset > 0 else (1,):
+                search_idx = safe_idx + (offset * direction)
+                if 0 <= search_idx < len(all_poses):
+                    evidence_pose = find_pose_by_track_id(all_poses, search_idx, principal.track_id)
+                    if evidence_pose is not None:
+                        safe_idx = search_idx
+                        break
+            if evidence_pose is not None:
                 break
+
+    if evidence_pose is None:
+        if safe_idx < len(all_poses) and all_poses[safe_idx]:
+            for p in all_poses[safe_idx]:
+                if p is not None:
+                    evidence_pose = p
+                    break
 
     if evidence_pose is None:
         return ResultadoAnalise(resumo="Sem queda detectada no período monitorado.", pontuacao=0.0)
@@ -170,6 +187,7 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
         score=principal.score,
         run_id=run_id,
         persistence_frames=1,
+        track_id=principal.track_id,
     )
     return ResultadoAnalise(
         resumo="Queda detectada.",
@@ -339,16 +357,31 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         # --- Evidência para o achado mais grave ---
         evidencia_principal: str | None = None
         principal = max(consolidated, key=lambda c: c.score)
-        safe_idx = min(principal.frame_index, len(frame_paths) - 1)
+        event_frame = principal.peak_frame or principal.frame_index
+        safe_idx = min(event_frame, len(frame_paths) - 1)
 
-        # Encontra a pose correta via track_id ou fallback
+        from pipelines.video.pose_features import find_pose_by_track_id
+
+        # Encontra a pose correta via track_id com busca em vizinhança
         pose_para_evidencia = None
-        if safe_idx < len(all_poses) and all_poses[safe_idx]:
-            # Tenta a primeira pose válida no frame
-            for p in all_poses[safe_idx]:
-                if p is not None:
-                    pose_para_evidencia = p
+        if principal.track_id is not None:
+            for offset in range(0, 4):
+                for direction in (1, -1) if offset > 0 else (1,):
+                    search_idx = safe_idx + (offset * direction)
+                    if 0 <= search_idx < len(all_poses):
+                        pose_para_evidencia = find_pose_by_track_id(all_poses, search_idx, principal.track_id)
+                        if pose_para_evidencia is not None:
+                            safe_idx = search_idx
+                            break
+                if pose_para_evidencia is not None:
                     break
+
+        if pose_para_evidencia is None:
+            if safe_idx < len(all_poses) and all_poses[safe_idx]:
+                for p in all_poses[safe_idx]:
+                    if p is not None:
+                        pose_para_evidencia = p
+                        break
 
         if pose_para_evidencia is not None:
             if principal.finding_type == "FALL_DETECTED":
@@ -360,6 +393,7 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
                     score=principal.score,
                     run_id=run_id,
                     persistence_frames=_PERSISTENCE_FRAMES,
+                    track_id=principal.track_id,
                 )
             else:
                 ev = save_postural_evidence(

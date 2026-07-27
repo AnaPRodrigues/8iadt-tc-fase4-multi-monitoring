@@ -853,6 +853,15 @@ def analyze_all_persons(
     n_pessoas_reais = len(person_timelines)
 
     for track_id, person_frames in person_timelines.items():
+        # Filtro de cobertura temporal: tracks com < 5% de frames
+        # válidos são ruído (frames isolados sem consistência).
+        # O filtro principal contra objetos estáticos é o y_descent
+        # (objetos não se deslocam verticalmente).
+        n_total = len(person_frames)
+        n_valid = sum(1 for f in person_frames if f is not None)
+        if n_total > 0 and n_valid / n_total < 0.05:
+            continue
+
         role = classify_person_role(person_frames)
         details["pessoas_analisadas"] += 1
         details["por_papel"][track_id] = role
@@ -893,6 +902,16 @@ def analyze_all_persons(
             if fall_verdict == "queda":
                 velocities_raw = vertical_velocity_robust(person_frames)
                 velocities = [v * _fps_scale if v is not None else None for v in velocities_raw]
+
+                # Verificação de deslocamento líquido: uma queda real
+                # produz descida significativa no frame (ΔY ≥ 0.10).
+                # Filtra objetos estáticos que o YOLO-NAS classifica
+                # como "person" (casacos, cadeiras) — estes têm amplitude
+                # alta por jitter da bbox mas Y quase constante.
+                y_descent_normal = _compute_net_y_descent(person_frames)
+                if y_descent_normal < 0.10:
+                    fall_verdict = "adl"  # ghost: objeto estático, não pessoa
+
                 min_vy = 0.02 if not vy_fallback else 0.04
                 verdict, _, vy_score, desc, tid, peak = validate_fall_dynamic(
                     fall_verdict, fall_frame_idx, velocities, min_vy,
@@ -913,6 +932,8 @@ def analyze_all_persons(
                         frame_index=peak or 0,
                         score=min(1.0, vy_score),
                         description=fall_desc,
+                        track_id=tid,
+                        peak_frame=peak,
                     ))
 
         # -- Vigilância contínua para pessoa deitada

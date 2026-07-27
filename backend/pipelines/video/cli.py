@@ -198,13 +198,36 @@ def run(config_path: Path, run_id: str | None = None) -> int:
 
         # Evidência para cada finding
         for finding in consolidated:
-            safe_idx = min(finding.frame_index, len(seq.frame_paths) - 1)
+            # Usa o peak_frame (pico de Vy) como frame do evento,
+            # e find_pose_by_track_id para garantir que desenhamos
+            # a pessoa certa (não a primeira pose do frame).
+            event_frame = finding.peak_frame or finding.frame_index
+            safe_idx = min(event_frame, len(seq.frame_paths) - 1)
             evidence_pose: PoseFrame | None = None
-            if safe_idx < len(all_poses) and all_poses[safe_idx]:
-                for p in all_poses[safe_idx]:
-                    if p is not None:
-                        evidence_pose = p
+
+            if finding.track_id is not None:
+                from pipelines.video.pose_features import find_pose_by_track_id
+                # Procura no frame exato e nos frames vizinhos (±3)
+                for offset in range(0, 4):
+                    for direction in (1, -1) if offset > 0 else (1,):
+                        search_idx = safe_idx + (offset * direction)
+                        if 0 <= search_idx < len(all_poses):
+                            evidence_pose = find_pose_by_track_id(
+                                all_poses, search_idx, finding.track_id,
+                            )
+                            if evidence_pose is not None:
+                                safe_idx = search_idx
+                                break
+                    if evidence_pose is not None:
                         break
+
+            if evidence_pose is None:
+                # Fallback: primeira pose válida no frame
+                if safe_idx < len(all_poses) and all_poses[safe_idx]:
+                    for p in all_poses[safe_idx]:
+                        if p is not None:
+                            evidence_pose = p
+                            break
 
             if evidence_pose is None:
                 continue
@@ -219,6 +242,7 @@ def run(config_path: Path, run_id: str | None = None) -> int:
                     run_id=run_id,
                     root=cfg.output_root,
                     persistence_frames=cfg.persistence_frames,
+                    track_id=finding.track_id,
                 )
                 n_fall_evidencias += 1
             else:
