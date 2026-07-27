@@ -346,8 +346,8 @@ def test_max_vertical_velocity_pico_isolado_aceito():
 
 
 def test_max_vertical_velocity_abaixo_do_piso_ignorado():
-    """Nenhum frame >0.08 → 0.0."""
-    vy = [0.0, 0.07, 0.05, 0.0, 0.0]
+    """Nenhum frame >0.01 → 0.0."""
+    vy = [0.0, 0.005, 0.008, 0.0, 0.0]
     max_v = max_vertical_velocity(vy, window_frames=5)
     assert max_v == 0.0
 
@@ -479,6 +479,100 @@ def test_is_recumbent_uses_fallback_when_hips_occluded():
         frames.append(f)
     # Upper body Y ≈ (0.70+0.75+0.75)/3 ≈ 0.733 > 0.45 → True
     assert is_recumbent(frames) is True
+
+
+# --------------------------------------------------------------------------- #
+# max_consecutive_above — maior streak de valores consecutivos acima de threshold
+# --------------------------------------------------------------------------- #
+def test_max_consecutive_above_all_below_threshold():
+    """Nenhum valor acima do threshold → 0."""
+    from pipelines.video.pose_features import max_consecutive_above
+
+    assert max_consecutive_above([0.0, 0.01, 0.005, 0.0], 0.02) == 0
+
+
+def test_max_consecutive_above_mixed_streaks():
+    """Streaks interrompidos por valores abaixo do threshold."""
+    from pipelines.video.pose_features import max_consecutive_above
+
+    values = [0.03, 0.04, 0.01, 0.05, 0.06, 0.07, 0.0, 0.03]
+    assert max_consecutive_above(values, 0.02) == 3  # 0.05,0.06,0.07
+
+
+def test_max_consecutive_above_handles_none():
+    """None é tratado como interrupção da streak."""
+    from pipelines.video.pose_features import max_consecutive_above
+
+    values = [0.03, None, 0.04, 0.05]
+    assert max_consecutive_above(values, 0.02) == 2  # 0.04,0.05
+
+
+def test_max_consecutive_above_empty_list():
+    """Lista vazia → 0."""
+    from pipelines.video.pose_features import max_consecutive_above
+
+    assert max_consecutive_above([], 0.02) == 0
+
+
+# --------------------------------------------------------------------------- #
+# was_initially_recumbent — verifica se pessoa já estava deitada no INÍCIO
+# --------------------------------------------------------------------------- #
+def test_was_initially_recumbent_person_standing_initially():
+    """Pessoa com Y baixo nos primeiros 30 frames → False."""
+    from pipelines.video.pose_features import was_initially_recumbent
+
+    frames = [_make_full_frame() for _ in range(30)]
+    assert was_initially_recumbent(frames) is False
+
+
+def test_was_initially_recumbent_person_on_floor_initially():
+    """Pessoa com Y > 0.65 nos primeiros 30 frames → True."""
+    from pipelines.video.pose_features import was_initially_recumbent
+
+    frames = []
+    for _ in range(30):
+        f = _make_full_frame()
+        f = PoseFrame(landmarks=[
+            (lm[0], 0.70, lm[2], lm[3]) for lm in f.landmarks
+        ])
+        frames.append(f)
+    assert was_initially_recumbent(frames) is True
+
+
+def test_was_initially_recumbent_insufficient_data():
+    """Menos de 5 frames válidos → False (conservador)."""
+    from pipelines.video.pose_features import was_initially_recumbent
+
+    frames = [_make_full_frame() for _ in range(3)]
+    frames += [None] * 27
+    assert was_initially_recumbent(frames) is False
+
+
+def test_was_initially_recumbent_handles_none_frames():
+    """Frames None são ignorados na média dos primeiros 30."""
+    from pipelines.video.pose_features import was_initially_recumbent
+
+    frames = [None] * 5 + [_make_full_frame() for _ in range(25)]
+    # Y=0.50 < 0.65 → False
+    assert was_initially_recumbent(frames) is False
+
+
+def test_was_initially_recumbent_uses_fallback_when_hips_occluded():
+    """Usa upper_body_center quando quadris estão ocluídos."""
+    from pipelines.video.pose_features import was_initially_recumbent
+
+    frames = []
+    for _ in range(30):
+        f = _make_full_frame()
+        # Oclui quadris (visibilidade < 0.4), upper body fica com Y=0.40
+        f = PoseFrame(landmarks=[
+            (lm[0], 0.40 if i in (0, 11, 12) else 0.70, lm[2],
+             0.3 if i in (23, 24) else lm[3])
+            for i, lm in enumerate(f.landmarks)
+        ])
+        frames.append(f)
+    # Upper body Y ≈ 0.40 < 0.65 → False
+    assert was_initially_recumbent(frames) is False
 
 
 # --------------------------------------------------------------------------- #

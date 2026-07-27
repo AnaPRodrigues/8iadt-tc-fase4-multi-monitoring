@@ -21,7 +21,7 @@ log = get_logger("video.pose_detector")
 # como ABRUPT_CHANGE_THRESHOLD): não é um valor fixado pela
 # spec, ajustável ao rodar o pipeline completo sobre o subconjunto curado.
 DEFAULT_FALL_THRESHOLD = 0.3
-DEFAULT_FALL_THRESHOLD_V2 = 0.55
+DEFAULT_FALL_THRESHOLD_V2 = 0.25
 
 _MIN_VISIBILITY = 0.5
 
@@ -343,7 +343,7 @@ def detect_agitation(
     frames: list[PoseFrame | None],
     fps: float,
     window_frames: int = 30,
-    min_changes_per_minute: int = 10,
+    min_changes_per_minute: int = 30,
     min_total_frames: int = 120,
 ) -> list[PosturalFinding]:
     """Deteta agitação psicomotora via frequência de mudanças de posição.
@@ -519,7 +519,7 @@ def validate_fall_dynamic(
     fall_verdict: str,
     fall_frame_idx: int | None,
     velocities: list[float | None],
-    min_vertical_velocity: float = 0.10,
+    min_vertical_velocity: float = 0.02,
     all_poses_per_frame: list[list[PoseFrame | None]] | None = None,
     n_pessoas: int | None = None,
 ) -> tuple[str, int | None, float, str, int | None, int | None]:
@@ -545,15 +545,18 @@ def validate_fall_dynamic(
         is_recumbent,
         lateral_displacement,
         max_vertical_velocity,
+        torso_height,
         total_displacement,
         trunk_tilt,
         vertical_velocity_robust,
+        was_initially_recumbent,
     )
 
-    # Thresholds base (single-person, calibrados contra URFD)
+    # Thresholds base (single-person, calibrados em torso-heights contra URFD)
+    # Sem normalização (torso_height=None), comportam-se como os absolutos antigos.
     _MIN_TILT_FOR_FALL = 25.0
     _MIN_TOTAL_DISPLACEMENT = 0.20
-    _MIN_VERTICAL_VELOCITY_FLOOR = 0.08
+    _MIN_VERTICAL_VELOCITY_FLOOR = 0.01
 
     # Determina se é cena multi-pessoa para thresholds adaptativos (C2)
     effective_n_pessoas = n_pessoas
@@ -565,7 +568,7 @@ def validate_fall_dynamic(
     if effective_n_pessoas is not None and effective_n_pessoas > 1:
         _MIN_TILT_FOR_FALL = 35.0
         _MIN_TOTAL_DISPLACEMENT = 0.30
-        min_vertical_velocity = max(min_vertical_velocity, 0.20)
+        min_vertical_velocity = max(min_vertical_velocity, 0.04)
     else:
         min_vertical_velocity = max(min_vertical_velocity, _MIN_VERTICAL_VELOCITY_FLOOR)
 
@@ -581,8 +584,13 @@ def validate_fall_dynamic(
         if person_timelines:
             # Analisa cada pessoa real independentemente
             for track_id, person_frames in person_timelines.items():
-                # Exclui pessoas já deitadas (B1)
-                if is_recumbent(person_frames):
+                # Exclui apenas pessoas que JÁ estavam deitadas no INÍCIO
+                # (não sofreram queda durante este vídeo).
+                # Usa was_initially_recumbent (primeiros 30 frames), não
+                # is_recumbent (últimos 90 frames) — uma pessoa que caiu
+                # durante o vídeo está deitada no final, e é exatamente
+                # essa transição que queremos detectar.
+                if was_initially_recumbent(person_frames):
                     continue
 
                 vy_list = vertical_velocity_robust(person_frames)
@@ -593,8 +601,20 @@ def validate_fall_dynamic(
                 ]
                 max_tilt = max(tilts) if tilts else 0.0
 
-                max_vy = max_vertical_velocity(vy_list)
-                total_dy = total_displacement(vy_list)
+                # Normalização por altura do tronco: Vy e deslocamento em
+                # body-heights (dividir pelo torso), tornando os thresholds
+                # independentes da distância da câmara. Os thresholds atuais
+                # foram calibrados com torso ≈ 0.14 (URFD típico).
+                torso_vals = [
+                    th for f in person_frames if f is not None
+                    for th in [torso_height(f)] if th is not None and th > 0.01
+                ]
+                norm_factor = (
+                    sum(torso_vals) / len(torso_vals) if torso_vals else 0.14
+                )
+
+                max_vy = max_vertical_velocity(vy_list) / norm_factor
+                total_dy = total_displacement(vy_list) / norm_factor
 
                 # Queda = Pico Vy + deslocamento total + tilt
                 if (
@@ -669,8 +689,8 @@ def validate_fall_dynamic(
         else:
             person_frames = []
 
-        # Exclui se já está deitado (B1, mesmo no fallback)
-        if is_recumbent(person_frames):
+        # Exclui apenas se já estava deitado no INÍCIO (fallback)
+        if was_initially_recumbent(person_frames):
             return (
                 "adl", None, 0.0,
                 "Postura reclinada/estática detectada — pessoa já se encontrava "
@@ -712,6 +732,40 @@ def validate_fall_dynamic(
     )
 
 
+def _compute_net_y_descent(
+    person_frames: list[PoseFrame | None],
+) -> float:
+    """Deslocamento vertical líquido do primeiro ao último frame válido.
+
+    Valores positivos indicam descida (Y aumenta = pessoa desce na imagem).
+    Usado como gate adicional no Vy-primary: uma queda real produz descida
+    líquida significativa (>0.15), enquanto movimentos normais que disparam
+    o Vy-primary por glitches têm pouco ou nenhum deslocamento líquido.
+
+    Devolve 0.0 se não houver frames válidos suficientes.
+    """
+    from pipelines.video.pose_features import hip_center, _upper_body_center
+
+    first_y: float | None = None
+    last_y: float | None = None
+
+    for f in person_frames:
+        if f is None:
+            continue
+        center = hip_center(f)
+        if center is None:
+            center = _upper_body_center(f)
+        if center is None:
+            continue
+        if first_y is None:
+            first_y = center[1]
+        last_y = center[1]
+
+    if first_y is None or last_y is None:
+        return 0.0
+    return last_y - first_y
+
+
 def analyze_all_persons(
     all_poses_per_frame: list[list[PoseFrame | None]],
     fps: float = 30.0,
@@ -719,14 +773,18 @@ def analyze_all_persons(
     fall_threshold: float = 0.55,
     persistence_frames: int = 1,
 ) -> tuple[str, float, list[PosturalFinding], dict]:
-    """Pipeline multi-pessoa: analisa cada pessoa com o detector do seu papel.
+    """Pipeline multi-pessoa: analisa cada pessoa com detector de queda + vigilância.
 
     Itera ``group_poses_by_track_id()`` — para cada pessoa identificada,
     classifica o papel via ``classify_person_role()`` e despacha os
     detectores adequados:
 
-    - "recumbent" → detect_agitation() + detect_bed_exit()
-    - "standing" / "transitioning" → validate_fall_dynamic()
+    - **Detector de queda** (2 estágios: amplitude → velocidade) executa
+      para TODAS as pessoas, exceto as que já estavam deitadas no INÍCIO
+      da sequência (``was_initially_recumbent()``). Uma pessoa que começa
+      de pé e cai durante o vídeo passa pelo detector.
+    - **Vigilância** (agitation, bed_exit) executa adicionalmente para
+      pessoas classificadas como "recumbent".
     - "unknown" → ignorada
 
     Consolida os findings de todas as pessoas. Sem tracking ativo, faz
@@ -743,7 +801,12 @@ def analyze_all_persons(
     from pipelines.video.pose_features import (
         classify_person_role,
         group_poses_by_track_id,
+        is_recumbent,
+        max_consecutive_above,
+        max_vertical_velocity,
+        total_displacement,
         vertical_velocity_robust,
+        was_initially_recumbent,
         windowed_features,
     )
 
@@ -764,42 +827,68 @@ def analyze_all_persons(
         details["pessoas_analisadas"] += 1
         details["por_papel"][track_id] = role
 
-        if role == "recumbent":
-            # Detectores para pessoa deitada
-            ag = detect_agitation(person_frames, fps)
-            be = detect_bed_exit(person_frames, fps)
-            all_findings.extend(ag)
-            all_findings.extend(be)
-
-        elif role in ("standing", "transitioning"):
-            # Detector de queda: 2 estágios (amplitude → velocidade)
-            # Estágio 1: amplitude do centro de massa nas janelas
-            windows = windowed_features(person_frames, 30)
+        # -- Detector de queda: executa para TODAS as pessoas, exceto
+        #    as que JÁ estavam deitadas no início da sequência.
+        #    Uma pessoa que começa de pé e cai durante o vídeo era
+        #    "standing" no início e "recumbent" no final — o detector
+        #    captura precisamente essa transição.
+        if not was_initially_recumbent(person_frames):
+            windows = windowed_features(person_frames, 30, stride=15)
             fall_verdict, fall_frame_idx = classify_with_persistence(
                 windows, fall_threshold, persistence_frames,
             )
 
+            # Via complementar: quedas lentas (ex.: fall-05) podem ter
+            # amplitude abaixo do threshold mas deslocamento total forte
+            # e terminar com a pessoa no chão. Só ativa quando o Estágio 1
+            # NÃO detetou e a pessoa está recumbent no final.
+            vy_fallback = False
             if fall_verdict != "queda":
-                continue
+                velocities_fb = vertical_velocity_robust(person_frames)
+                max_vy_fb = max_vertical_velocity(velocities_fb)
+                total_dy_fb = total_displacement(velocities_fb)
+                # Vy-primary: requer descida sustentada (≥2 frames consecutivos
+                # com Vy>0.02) + deslocamento total + deslocamento líquido em Y.
+                # Filtra glitches de detecção (pico isolado) que são comuns em ADL.
+                consecutive_descending = max_consecutive_above(velocities_fb, 0.02)
+                y_descent = _compute_net_y_descent(person_frames)
+                if (consecutive_descending >= 2 and max_vy_fb >= 0.04
+                    and total_dy_fb >= 0.30 and y_descent >= 0.15
+                    and is_recumbent(person_frames)):
+                    vy_fallback = True
+                    fall_verdict = "queda"
+                    valid_vy = [(i, v) for i, v in enumerate(velocities_fb) if v is not None and v > 0.01]
+                    fall_frame_idx = max(valid_vy, key=lambda x: x[1])[0] if valid_vy else 0
 
-            # Estágio 2: validação dinâmica com velocidade vertical
-            velocities = vertical_velocity_robust(person_frames)
-            verdict, _, vy_score, desc, tid, peak = validate_fall_dynamic(
-                fall_verdict, fall_frame_idx, velocities, 0.10,
-                all_poses_per_frame=all_poses_per_frame,
-                n_pessoas=n_pessoas_reais,
-            )
-            if verdict == "queda":
-                all_findings.append(PosturalFinding(
-                    finding_type="FALL_DETECTED",
-                    joint_name=None,
-                    measured_angle=vy_score,
-                    expected_angle=0.10,
-                    duration_s=0.0,
-                    frame_index=peak or 0,
-                    score=min(1.0, vy_score),
-                    description=desc,
-                ))
+            if fall_verdict == "queda":
+                velocities = vertical_velocity_robust(person_frames)
+                min_vy = 0.02 if not vy_fallback else 0.04
+                verdict, _, vy_score, desc, tid, peak = validate_fall_dynamic(
+                    fall_verdict, fall_frame_idx, velocities, min_vy,
+                    all_poses_per_frame=all_poses_per_frame,
+                    n_pessoas=n_pessoas_reais,
+                )
+                if verdict == "queda":
+                    fall_desc = desc
+                    if vy_fallback:
+                        fall_desc = f"[Vy-primary] {desc}"
+                    all_findings.append(PosturalFinding(
+                        finding_type="FALL_DETECTED",
+                        joint_name=None,
+                        measured_angle=vy_score,
+                        expected_angle=0.10,
+                        duration_s=0.0,
+                        frame_index=peak or 0,
+                        score=min(1.0, vy_score),
+                        description=fall_desc,
+                    ))
+
+        # -- Vigilância contínua para pessoa deitada
+        if role == "recumbent":
+            ag = detect_agitation(person_frames, fps)
+            be = detect_bed_exit(person_frames, fps)
+            all_findings.extend(ag)
+            all_findings.extend(be)
 
     # Consolida: todos os findings (queda + novos detectores)
     fall_detected = any(f.finding_type == "FALL_DETECTED" for f in all_findings)

@@ -53,7 +53,7 @@ _FEATURE = "video_pose"
 DEFAULTS: dict[str, Any] = {
     "sequences": None,
     "window_size": 30,
-    "fall_threshold": 0.55,
+    "fall_threshold": 0.25,
     "persistence_frames": 1,
     "num_poses": 3,
     "joint_targets": [],
@@ -175,9 +175,8 @@ def run(config_path: Path, run_id: str | None = None) -> int:
 
         # Extração multi-pessoa com tracking de identidade persistente
         all_poses = [extract_all_keypoints(p, landmarker) for p in seq.frame_paths]
-        n_pessoas = max(
-            (len(poses) for poses in all_poses if poses), default=0
-        )
+        from pipelines.video.pose_features import group_poses_by_track_id
+        n_pessoas = len(group_poses_by_track_id(all_poses))
 
         # Pipeline multi-pessoa unificado (ITER2-03)
         _, _, consolidated, _ = analyze_all_persons(
@@ -232,14 +231,18 @@ def run(config_path: Path, run_id: str | None = None) -> int:
                 )
                 n_postural_evidencias += 1
 
+        n_windows = len(seq.frame_paths) // cfg.window_size
+        fall_verdict = "queda" if fall_detected else "adl"
+        n_tilt = sum(1 for c in consolidated if c.finding_type == "TRUNK_TILT")
+        n_postural = sum(1 for c in consolidated if c.finding_type == "POSTURAL_DEVIATION")
         log.info(
             "%s: %d pessoa(s), %d janelas, %s, %d desvio(s), %d tilt(s)",
             seq.seq_id,
             n_pessoas,
-            len(windows),
+            n_windows,
             fall_verdict,
-            n_postural_evidencias,
-            len(tilt_findings),
+            n_postural,
+            n_tilt,
         )
 
     destino.mkdir(parents=True, exist_ok=True)

@@ -128,7 +128,7 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
     )
     from pipelines.video.pose_loader import load_sequence
 
-    _FALL_THRESHOLD = 0.55
+    _FALL_THRESHOLD = 0.25
 
     atividade.local("video", "avaliando postura e movimentação com MediaPipe Pose")
     seq = load_sequence(caminho)
@@ -181,7 +181,7 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
 
 def _extrair_frames(
     video_path: Path, output_dir: Path, max_frames: int = 500
-) -> list[Path]:
+) -> tuple[list[Path], float]:
     """Extrai frames de um ficheiro de vídeo como PNGs numerados.
 
     Usa ``cv2.VideoCapture`` para ler o vídeo e ``cv2.imwrite`` para gravar
@@ -195,8 +195,9 @@ def _extrair_frames(
         max_frames: Limite superior de frames a extrair.
 
     Returns:
-        Lista de caminhos dos PNGs extraídos, ordenados por número de frame.
-        Pode ser vazia se o vídeo não contiver frames.
+        Tuple de (lista de caminhos dos PNGs extraídos, fps do vídeo).
+        A lista pode ser vazia se o vídeo não contiver frames.
+        fps é 30.0 por omissão se o codec não reportar o valor.
 
     Raises:
         ErroDeAnalise: Se o ficheiro não existir ou o OpenCV não conseguir
@@ -212,6 +213,9 @@ def _extrair_frames(
 
     try:
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        video_fps = cap.get(cv2.CAP_PROP_FPS)
+        if video_fps <= 0:
+            video_fps = 30.0
         step = 1
         if total > max_frames:
             step = max(1, total // max_frames)
@@ -231,7 +235,7 @@ def _extrair_frames(
     finally:
         cap.release()
 
-    return frame_paths
+    return frame_paths, float(video_fps)
 
 
 def _razao_sem_queda(janelas: list, total_quadros: int) -> str:
@@ -265,7 +269,7 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         find_pose_by_track_id,
     )
 
-    _FALL_THRESHOLD = 0.55
+    _FALL_THRESHOLD = 0.25
     _PERSISTENCE_FRAMES = 1
     _NUM_POSES = 3
     _MIN_VERTICAL_VELOCITY = 0.15
@@ -274,7 +278,7 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
     # espera PNGs em disco (extract_all_keypoints usa cv2.imread).
     with tempfile.TemporaryDirectory(prefix="video_pose_") as tmp:
         frames_dir = Path(tmp) / "frames"
-        frame_paths = _extrair_frames(caminho, frames_dir)
+        frame_paths, video_fps = _extrair_frames(caminho, frames_dir)
 
         if not frame_paths:
             return ResultadoAnalise(
@@ -304,11 +308,10 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         all_poses = [extract_all_keypoints(p, landmarker) for p in frame_paths]
         n_pessoas = max((len(poses) for poses in all_poses if poses), default=0)
 
-        # Pipeline multi-pessoa unificado (ITER2-03)
-        fps = 30.0
+        # Pipeline multi-pessoa unificado — usa FPS real do vídeo
         resumo, pontuacao, consolidated, analise_details = analyze_all_persons(
             all_poses_per_frame=all_poses,
-            fps=fps,
+            fps=video_fps,
             fall_threshold=_FALL_THRESHOLD,
             persistence_frames=_PERSISTENCE_FRAMES if n_pessoas <= 1 else 3,
         )

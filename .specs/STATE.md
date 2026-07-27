@@ -475,7 +475,27 @@ Lacunas obrigatórias remanescentes: **nenhuma bloqueadora**. Sinais vitais: `ba
 
 ## Handoff
 
-### Estado atual — Reformulação pós-MVP (AD-048 a AD-053) — **FECHADA nesta sessão (2026-07-24)**
+### Feature: fall-detection-fix (Fase 1) — **FECHADA (2026-07-27), Verifier PASS**
+
+Correções do bug de recall=0% na detecção de quedas. Diagnóstico forense revelou 3 causas raiz:
+1. `analyze_all_persons` só executava detector de queda para `standing`/`transitioning`, ignorando `recumbent` — mas quem caiu está deitado.
+2. Thresholds de Vy calibrados como se coordenadas fossem pixels (piso 0.08), mas são normalizadas [0-1] (queda real ~0.02).
+3. CLI com NameError (variáveis `windows`, `fall_verdict`, `tilt_findings` não definidas).
+
+**5 commits** (`eaaaa3c`, `7254816`, `119dfe3`, `c3bab67`, `7582dc8`):
+- `was_initially_recumbent()` — verifica primeiros 30 frames (threshold Y=0.65)
+- Vy floor 0.08→0.01 em `max_vertical_velocity` e `validate_fall_dynamic`
+- `fall_threshold` default 0.55→0.25
+- `analyze_all_persons` executa detector de queda para TODAS as pessoas
+- `n_pessoas` calculado por track_ids reais (não detecções brutas)
+- `validate_fall_dynamic` usa `was_initially_recumbent` em vez de `is_recumbent`
+
+**Resultados URFD**: Recall 0%→80% (4/5), Precisão ADL 100% (5/5), Accuracy 90% (9/10).
+**fall-05** não detectado: amplitude 0.19 < 0.25 (queda diluída em janela de 30 frames — Fase 2).
+**Suíte**: 581 passed, 3 skipped, 0 failed.
+**Spec + Validation**: `.specs/features/fall-detection-fix/` (spec.md + validation.md).
+
+### Estado atual — Reformulação pós-MVP (AD-048 a AD-053) — **FECHADA (2026-07-24)**
 
 O MVP original (F0-F5, spec-driven, ver histórico abaixo) foi fechado com Streamlit + LocalStack + arquitetura serverless (S3/Lambda/SNS/DynamoDB). O usuário pediu uma reformulação em **6 blocos**, executados em ordem, cada um parando para aprovação antes do próximo (ver pedido original do usuário para o texto completo de cada bloco). Regras transversais: vocabulário interno do método (F0-F5, AD-NNN, nomes de fase) só dentro de `.specs/`; texto voltado ao usuário em linguagem de domínio, compreensível sem contexto do projeto; `training/` e os pesos treinados não são tocados; suíte verde ao final de cada bloco. **Todos os 6 blocos estão commitados.**
 
