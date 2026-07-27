@@ -175,9 +175,8 @@ def run(config_path: Path, run_id: str | None = None) -> int:
 
         # Extração multi-pessoa com tracking de identidade persistente
         all_poses = [extract_all_keypoints(p, landmarker) for p in seq.frame_paths]
-        n_pessoas = max(
-            (len(poses) for poses in all_poses if poses), default=0
-        )
+        from pipelines.video.pose_features import group_poses_by_track_id
+        n_pessoas = len(group_poses_by_track_id(all_poses))
 
         # Pipeline multi-pessoa unificado (ITER2-03)
         _, _, consolidated, _ = analyze_all_persons(

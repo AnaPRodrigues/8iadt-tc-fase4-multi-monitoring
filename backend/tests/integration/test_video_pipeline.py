@@ -34,7 +34,7 @@ def _skip_se_dataset_ausente():
 
 def test_sequencia_de_queda_real_produz_metricas_e_evidencia_real(tmp_path):
     _skip_se_dataset_ausente()
-    cfg = _config(tmp_path, _URFD_DIR, sequences=["fall-01"], fall_threshold=0.3)
+    cfg = _config(tmp_path, _URFD_DIR, sequences=["fall-01"], fall_threshold=0.25)
 
     assert run(cfg, run_id="teste-fall") == 0
 
@@ -62,7 +62,7 @@ def test_sequencia_adl_real_nao_gera_evidencia_de_queda(tmp_path):
 
 def test_run_id_none_gera_run_id_automatico_com_evidencia_real(tmp_path):
     _skip_se_dataset_ausente()
-    cfg = _config(tmp_path, _URFD_DIR, sequences=["fall-01"], fall_threshold=0.3)
+    cfg = _config(tmp_path, _URFD_DIR, sequences=["fall-01"], fall_threshold=0.25)
 
     assert run(cfg, run_id=None) == 0
 

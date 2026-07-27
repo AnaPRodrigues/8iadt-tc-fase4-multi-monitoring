@@ -346,8 +346,8 @@ def test_max_vertical_velocity_pico_isolado_aceito():
 
 
 def test_max_vertical_velocity_abaixo_do_piso_ignorado():
-    """Nenhum frame >0.08 → 0.0."""
-    vy = [0.0, 0.07, 0.05, 0.0, 0.0]
+    """Nenhum frame >0.01 → 0.0."""
+    vy = [0.0, 0.005, 0.008, 0.0, 0.0]
     max_v = max_vertical_velocity(vy, window_frames=5)
     assert max_v == 0.0
 

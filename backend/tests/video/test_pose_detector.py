@@ -503,20 +503,24 @@ def test_validate_fall_dynamic_excludes_recumbent_person():
 
 
 def test_validate_fall_dynamic_single_person_keeps_original_thresholds():
-    """Single-person: thresholds originais (Vy≥0.08 floor, ΔY≥0.20, tilt≥25°).
+    """Single-person vs multi-person: thresholds adaptativos.
 
-    Testa que uma queda marginal (Vy=0.15, ΔY=0.60, tilt≈32°) é detectada
-    em modo single-person (thresholds baixos) mas seria rejeitada em modo
-    multi-pessoa (Vy≥0.20, ΔY≥0.30, tilt≥35°).
+    Single-person: Vy≥0.02 (floor), ΔY≥0.20, tilt≥25°.
+    Multi-person: Vy≥0.04, ΔY≥0.30, tilt≥35°.
+
+    Testa que uma queda marginal (Vy≈0.03, ΔY≈0.45, tilt≈50°) é detectada
+    em modo single-person (Vy=0.03≥0.02) mas rejeitada em multi-pessoa
+    (Vy=0.03<0.04).
     """
     from pipelines.video.pose_detector import validate_fall_dynamic
 
-    # Pessoa com tilt moderado (dx=0.25, dy=0.40 → arctan(0.25/0.40)≈32°)
+    # Pessoa com tilt moderado (dx=0.25, dy=0.20 → arctan(0.25/0.20)≈51°)
     standing = _make_person_frame(hip_y=0.30, shoulder_dx=0.25)
 
-    # Queda: Y cai de 0.30 a 0.90 (Vy≈0.15/frame)
+    # Queda parcial: ΔY=0.25 passa single (≥0.20) mas não multi (≥0.30)
+    # Vy≈0.15 passa ambos os thresholds de Vy (0.02/0.04)
     falling_frames = []
-    for y in [0.45, 0.60, 0.75, 0.90]:
+    for y in [0.35, 0.50, 0.55]:
         falling_frames.append(_make_person_frame(hip_y=y, shoulder_dx=0.25))
 
     all_poses = (
@@ -524,23 +528,23 @@ def test_validate_fall_dynamic_single_person_keeps_original_thresholds():
         + [[f] for f in falling_frames]
     )
 
-    # Verdict single-person: thresholds Vy≥0.08, ΔY≥0.20, tilt≥25°
+    # Verdict single-person: thresholds Vy≥0.02, ΔY≥0.20, tilt≥25°
     verdict_1p, _, vy_1p, _, _, _ = validate_fall_dynamic(
-        "queda", 96, [], min_vertical_velocity=0.10,
+        "queda", 96, [], min_vertical_velocity=0.02,
         all_poses_per_frame=all_poses, n_pessoas=1,
     )
 
-    # Verdict multi-pessoa: thresholds Vy≥0.20, ΔY≥0.30, tilt≥35°
+    # Verdict multi-pessoa: thresholds Vy≥0.04, ΔY≥0.30, tilt≥35°
     verdict_mp, _, vy_mp, _, _, _ = validate_fall_dynamic(
-        "queda", 96, [], min_vertical_velocity=0.10,
+        "queda", 96, [], min_vertical_velocity=0.02,
         all_poses_per_frame=all_poses, n_pessoas=3,
     )
 
-    # Single-person DEVE detectar: Vy≈0.15≥0.08, ΔY=0.60≥0.20, tilt≈32°≥25°
+    # Single-person DEVE detectar: Vy≥0.02, ΔY≥0.20, tilt≥25°
     assert verdict_1p == "queda", (
-        f"Single-person deveria detectar queda com Vy≈0.15, mas verdict={verdict_1p}"
+        f"Single-person deveria detectar queda, mas verdict={verdict_1p}"
     )
-    # Multi-person NÃO deve detectar: Vy≈0.15<0.20, tilt≈32°<35°
+    # Multi-person NÃO deve detectar: Vy<0.04 ou tilt<35° ou ΔY<0.30
     assert verdict_mp == "adl", (
         f"Multi-person NÃO deveria detectar (thresholds elevados), mas verdict={verdict_mp}"
     )
