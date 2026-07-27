@@ -18,6 +18,7 @@ class Sequence:
 @dataclass(frozen=True)
 class PoseFrame:
     landmarks: list[tuple[float, float, float, float]]  # x, y, z, visibility (33 pontos)
+    track_id: int | None = None  # ID persistente de tracking multi-pessoa (ByteTrack/IoU)
 
 
 @dataclass(frozen=True)

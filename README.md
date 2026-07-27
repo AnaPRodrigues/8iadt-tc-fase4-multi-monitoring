@@ -15,7 +15,7 @@ equipe automaticamente quando algo preocupante é detectado.
 
 | Modalidade | O que analisa | Técnica / modelo |
 | --- | --- | --- |
-| **Vídeo — movimentação** | Postura, quedas (com filtro dinâmico de velocidade), desvios posturais, ângulos articulares, inclinação de tronco | MediaPipe Pose + YOLOv8n (crop de pessoa) + filtro temporal $V_y$ anti-falso-positivo |
+| **Vídeo — movimentação** | Postura, quedas (com filtro dinâmico de velocidade), desvios posturais, ângulos articulares, inclinação de tronco | MediaPipe Pose + detector de pessoas configurável (YOLOv8n / YOLO-NAS via ONNX ou SuperGradients) + rastreamento persistente de identidade (IoU tracker) + filtro temporal $V_y$ anti-falso-positivo |
 | **Vídeo — cirurgia** | Estruturas anatômicas críticas em vídeo cirúrgico (keyframes a cada 2s) | YOLOv8 fine-tuned (Endoscapes) com evidência anotada (bboxes) |
 | **Áudio** | Sons respiratórios (com anotação ICBHI) ou consultas (transcrição, termos críticos, fadiga vocal) — dispatch automático | Random Forest + faster-whisper + Parselmouth (jitter/shimmer/HNR) |
 | **Sinais vitais** | Séries temporais: cardiotocografia fetal (CTU-UHB) e internação adulta com HR/SpO2 (BIDMC) | z-score móvel + Isolation Forest sobre janelas |
@@ -224,6 +224,59 @@ PYTHONPATH=backend .venv/bin/python -m pipelines.video.cli --config <config>
 # Áudio — respiração/transcrição/fadiga (ICBHI + áudio de consulta)
 PYTHONPATH=backend .venv/bin/python -m pipelines.audio.cli --config <config>
 ```
+
+### Pipeline de vídeo — configuração do detector de pessoas
+
+A raia de postura/quedas suporta **três backends** de detecção de pessoas,
+configuráveis por variável de ambiente ou programaticamente:
+
+| Backend | Variável `POSE_DETECTOR_BACKEND` | O que precisa | Peso |
+| --- | --- | --- | --- |
+| YOLOv8n | `yolov8n` *(default)* | `ultralytics` (já instalado) | ~6 MB |
+| YOLO-NAS S (ONNX) | `yolo_nas_s` | `onnxruntime` (já instalado); modelo descarregado automaticamente | ~47 MB |
+| YOLO-NAS M (ONNX) | `yolo_nas_m` | mesmo que acima | ~80 MB |
+| YOLO-NAS (SuperGradients) | `yolo_nas_s` ou `yolo_nas_m` | `pip install super-gradients` (requer GPU ou ambiente com cmake) | gerido pelo pacote |
+
+O modelo ONNX do YOLO-NAS é descarregado automaticamente na primeira utilização
+e cached em `models/yolo_nas_s.onnx` (não versionado). Se o download automático
+falhar, basta colocar o ficheiro `.onnx` manualmente nesse diretório.
+
+**Exemplos:**
+
+```bash
+# Usar YOLO-NAS S via ONNX (recomendado — não precisa de GPU)
+POSE_DETECTOR_BACKEND=yolo_nas_s \
+  PYTHONPATH=backend .venv/bin/python -m pipelines.video.cli \
+  --config backend/pipelines/video/configs/demo.yaml
+
+# Usar YOLOv8n (default — não precisa de configurar nada)
+PYTHONPATH=backend .venv/bin/python -m pipelines.video.cli \
+  --config backend/pipelines/video/configs/demo.yaml
+```
+
+**No código Python:**
+
+```python
+from pipelines.video.pose import set_detector_backend
+
+set_detector_backend("yolo_nas_s")   # ativa YOLO-NAS
+set_detector_backend("yolov8n")      # volta ao default
+```
+
+### Rastreamento de identidade em cenas multi-pessoa
+
+Quando há mais de uma pessoa na cena (ex.: paciente + profissionais de saúde),
+o sistema mantém um **tracking persistente de identidade** via matching IoU entre
+frames consecutivos:
+
+- Cada esqueleto recebe um `track_id` estável ao longo da sequência.
+- Ao detetar uma queda, o sistema regista o `track_id` da pessoa que caiu.
+- A imagem de evidência (`save_fall_evidence`) usa **estritamente** o esqueleto
+  da pessoa com o `track_id` que disparou o evento — eliminando a possibilidade
+  de desenhar a pessoa errada quando a ordem da lista de poses muda entre frames.
+- O rastreador é reiniciado automaticamente entre sequências distintas.
+
+Não requer configuração adicional — o tracking está sempre ativo.
 
 Detalhes de cada análise em [`backend/README.md`](backend/README.md).
 

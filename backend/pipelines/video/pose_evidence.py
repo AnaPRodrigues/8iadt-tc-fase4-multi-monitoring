@@ -182,6 +182,18 @@ def draw_annotated_frame(
             highlight_color, 2,
         )
 
+    # Rótulo de track_id (canto superior esquerdo) para identificação da pessoa
+    if pose_frame.track_id is not None:
+        cv2.putText(
+            image,
+            f"ID:{pose_frame.track_id}",
+            (10, 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            highlight_color,
+            2,
+        )
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(output_path), image)
     return output_path
