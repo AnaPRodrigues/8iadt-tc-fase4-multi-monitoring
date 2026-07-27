@@ -539,7 +539,7 @@ def was_initially_recumbent(
     person_frames: list[PoseFrame | None],
     initial_window: int = 30,
     min_valid_frames: int = 5,
-    y_threshold: float = 0.55,
+    y_threshold: float = 0.65,
 ) -> bool:
     """Verifica se a pessoa já estava deitada no INÍCIO da sequência.
 

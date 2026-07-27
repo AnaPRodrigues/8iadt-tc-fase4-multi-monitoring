@@ -753,6 +753,9 @@ def analyze_all_persons(
     from pipelines.video.pose_features import (
         classify_person_role,
         group_poses_by_track_id,
+        is_recumbent,
+        max_vertical_velocity,
+        total_displacement,
         vertical_velocity_robust,
         was_initially_recumbent,
         windowed_features,
@@ -786,15 +789,33 @@ def analyze_all_persons(
                 windows, fall_threshold, persistence_frames,
             )
 
+            # Via complementar: quedas lentas (ex.: fall-05) podem ter
+            # amplitude abaixo do threshold mas deslocamento total forte
+            # e terminar com a pessoa no chão. Só ativa quando o Estágio 1
+            # NÃO detetou e a pessoa está recumbent no final.
+            vy_fallback = False
+            if fall_verdict != "queda":
+                velocities_fb = vertical_velocity_robust(person_frames)
+                max_vy_fb = max_vertical_velocity(velocities_fb)
+                total_dy_fb = total_displacement(velocities_fb)
+                if max_vy_fb >= 0.04 and total_dy_fb >= 0.35 and is_recumbent(person_frames):
+                    vy_fallback = True
+                    fall_verdict = "queda"
+                    valid_vy = [(i, v) for i, v in enumerate(velocities_fb) if v is not None and v > 0.01]
+                    fall_frame_idx = max(valid_vy, key=lambda x: x[1])[0] if valid_vy else 0
+
             if fall_verdict == "queda":
-                # Estágio 2: validação dinâmica com velocidade vertical
                 velocities = vertical_velocity_robust(person_frames)
+                min_vy = 0.02 if not vy_fallback else 0.04
                 verdict, _, vy_score, desc, tid, peak = validate_fall_dynamic(
-                    fall_verdict, fall_frame_idx, velocities, 0.02,
+                    fall_verdict, fall_frame_idx, velocities, min_vy,
                     all_poses_per_frame=all_poses_per_frame,
                     n_pessoas=n_pessoas_reais,
                 )
                 if verdict == "queda":
+                    fall_desc = desc
+                    if vy_fallback:
+                        fall_desc = f"[Vy-primary] {desc}"
                     all_findings.append(PosturalFinding(
                         finding_type="FALL_DETECTED",
                         joint_name=None,
@@ -803,7 +824,7 @@ def analyze_all_persons(
                         duration_s=0.0,
                         frame_index=peak or 0,
                         score=min(1.0, vy_score),
-                        description=desc,
+                        description=fall_desc,
                     ))
 
         # -- Vigilância contínua para pessoa deitada
