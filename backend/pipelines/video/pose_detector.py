@@ -801,17 +801,16 @@ def analyze_all_persons(
                     description=desc,
                 ))
 
-    # Consolida
+    # Consolida: todos os findings (queda + novos detectores)
+    fall_detected = any(f.finding_type == "FALL_DETECTED" for f in all_findings)
     resumo, pontuacao, consolidated = sumarizar_achados_video(
-        [], [], len([f for f in all_findings if f.finding_type == "FALL_DETECTED"]) > 0,
+        [], [], fall_detected,
     )
 
-    # Adiciona achados não-queda ao consolidated
+    # Adiciona TODOS os findings ao consolidated (incluindo FALL_DETECTED)
     for f in all_findings:
-        if f.finding_type not in ("FALL_DETECTED", "POSTURAL_DEVIATION", "TRUNK_TILT"):
-            consolidated.append(f)
-            if pontuacao == 0.0:
-                pontuacao = f.score
+        consolidated.append(f)
+        pontuacao = max(pontuacao, f.score)
 
     if not consolidated:
         return ("Sem alterações detectadas.", 0.0, [], details)
