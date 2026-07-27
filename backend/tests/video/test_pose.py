@@ -44,7 +44,7 @@ def test_ensure_pose_model_baixa_arquivo_valido(tmp_path):
     path = ensure_pose_model(tmp_path)
 
     assert path.is_file()
-    assert path.name == "pose_landmarker_lite.task"
+    assert path.name == "pose_landmarker_full.task"
     assert path.stat().st_size > 0
 
 
