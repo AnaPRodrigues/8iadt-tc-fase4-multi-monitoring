@@ -903,14 +903,18 @@ def analyze_all_persons(
                 velocities_raw = vertical_velocity_robust(person_frames)
                 velocities = [v * _fps_scale if v is not None else None for v in velocities_raw]
 
-                # Verificação de deslocamento líquido: uma queda real
-                # produz descida significativa no frame (ΔY ≥ 0.10).
-                # Filtra objetos estáticos que o YOLO-NAS classifica
-                # como "person" (casacos, cadeiras) — estes têm amplitude
-                # alta por jitter da bbox mas Y quase constante.
-                y_descent_normal = _compute_net_y_descent(person_frames)
-                if y_descent_normal < 0.10:
-                    fall_verdict = "adl"  # ghost: objeto estático, não pessoa
+                # Filtro anti-ghost: objetos estáticos (casacos, cadeiras)
+                # detetados como "person" têm amplitude alta por jitter
+                # da bbox mas o Y do quadril nunca varia significativamente.
+                # Usa a amplitude total de Y (max-min) em vez do deslocamento
+                # líquido — uma pessoa que cai e se levanta tem net≈0 mas
+                # amplitude total grande (>0.10).
+                y_vals = [lm[1] for f in person_frames if f is not None
+                          for lm in [f.landmarks[23], f.landmarks[24]]
+                          if lm[3] >= 0.4]
+                y_range = max(y_vals) - min(y_vals) if len(y_vals) >= 10 else 0.0
+                if y_range < 0.10:
+                    fall_verdict = "adl"  # ghost: Y do quadril não varia
 
                 min_vy = 0.02 if not vy_fallback else 0.04
                 verdict, _, vy_score, desc, tid, peak = validate_fall_dynamic(
