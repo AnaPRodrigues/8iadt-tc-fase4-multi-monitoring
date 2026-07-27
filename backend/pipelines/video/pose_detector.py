@@ -545,13 +545,15 @@ def validate_fall_dynamic(
         is_recumbent,
         lateral_displacement,
         max_vertical_velocity,
+        torso_height,
         total_displacement,
         trunk_tilt,
         vertical_velocity_robust,
         was_initially_recumbent,
     )
 
-    # Thresholds base (single-person, calibrados contra URFD)
+    # Thresholds base (single-person, calibrados em torso-heights contra URFD)
+    # Sem normalização (torso_height=None), comportam-se como os absolutos antigos.
     _MIN_TILT_FOR_FALL = 25.0
     _MIN_TOTAL_DISPLACEMENT = 0.20
     _MIN_VERTICAL_VELOCITY_FLOOR = 0.01
@@ -599,8 +601,20 @@ def validate_fall_dynamic(
                 ]
                 max_tilt = max(tilts) if tilts else 0.0
 
-                max_vy = max_vertical_velocity(vy_list)
-                total_dy = total_displacement(vy_list)
+                # Normalização por altura do tronco: Vy e deslocamento em
+                # body-heights (dividir pelo torso), tornando os thresholds
+                # independentes da distância da câmara. Os thresholds atuais
+                # foram calibrados com torso ≈ 0.14 (URFD típico).
+                torso_vals = [
+                    th for f in person_frames if f is not None
+                    for th in [torso_height(f)] if th is not None and th > 0.01
+                ]
+                norm_factor = (
+                    sum(torso_vals) / len(torso_vals) if torso_vals else 0.14
+                )
+
+                max_vy = max_vertical_velocity(vy_list) / norm_factor
+                total_dy = total_displacement(vy_list) / norm_factor
 
                 # Queda = Pico Vy + deslocamento total + tilt
                 if (
@@ -819,7 +833,7 @@ def analyze_all_persons(
         #    "standing" no início e "recumbent" no final — o detector
         #    captura precisamente essa transição.
         if not was_initially_recumbent(person_frames):
-            windows = windowed_features(person_frames, 30)
+            windows = windowed_features(person_frames, 30, stride=15)
             fall_verdict, fall_frame_idx = classify_with_persistence(
                 windows, fall_threshold, persistence_frames,
             )

@@ -28,19 +28,32 @@ def _asymmetry(frame: PoseFrame) -> float:
     return abs(ly - ry)
 
 
-def windowed_features(frames: list[PoseFrame | None], window_size: int) -> list[MovementWindow]:
+def windowed_features(
+    frames: list[PoseFrame | None], window_size: int, stride: int | None = None,
+) -> list[MovementWindow]:
     """Calcula amplitude/velocidade do centro de massa e assimetria por janela.
 
     Frames `None` (sem pessoa detectada) são excluídos do cálculo da
     janela em que caem, sem quebrar as demais. Uma janela sem nenhum frame
     válido não é gerada -- não existe `MovementWindow` com valores inventados.
     `end_frame` é inclusivo (último índice de frame coberto pela janela).
+
+    Args:
+        frames: Lista de PoseFrame por frame (None = sem deteção).
+        window_size: Tamanho da janela em frames.
+        stride: Passo entre janelas (default = window_size, sem overlap).
+            Com stride < window_size, as janelas sobrepõem-se, dando
+            melhor resolução temporal para detetar quedas rápidas.
     """
     if window_size <= 0:
         raise ValueError("window_size precisa ser positivo")
+    if stride is None:
+        stride = window_size
+    if stride <= 0:
+        raise ValueError("stride precisa ser positivo")
 
     windows: list[MovementWindow] = []
-    for start in range(0, len(frames), window_size):
+    for start in range(0, len(frames), stride):
         end = min(start + window_size, len(frames))
         indices_validos = [i for i in range(start, end) if frames[i] is not None]
         if not indices_validos:
@@ -167,6 +180,28 @@ def hip_center(frame: PoseFrame) -> tuple[float, float] | None:
         (frame.landmarks[_HIP_LEFT][0] + frame.landmarks[_HIP_RIGHT][0]) / 2.0,
         (frame.landmarks[_HIP_LEFT][1] + frame.landmarks[_HIP_RIGHT][1]) / 2.0,
     )
+
+
+def torso_height(frame: PoseFrame) -> float | None:
+    """Distância vertical ombros→quadris — altura do tronco em coords normalizadas.
+
+    Usada para normalizar Vy e thresholds: dividir Vy por torso_height
+    torna os limiares independentes da distância da câmara e do tamanho
+    da pessoa. Uma pessoa próxima (torso grande) e uma pessoa distante
+    (torso pequeno) produzem Vy normalizado comparável para o mesmo
+    movimento físico.
+
+    Devolve ``None`` se visibilidade insuficiente nos 4 landmarks.
+    """
+    sl_v = frame.landmarks[_SHOULDER_LEFT][3]
+    sr_v = frame.landmarks[_SHOULDER_RIGHT][3]
+    hl_v = frame.landmarks[_HIP_LEFT][3]
+    hr_v = frame.landmarks[_HIP_RIGHT][3]
+    if min(sl_v, sr_v, hl_v, hr_v) < _MIN_VISIBILITY:
+        return None
+    shoulder_y = (frame.landmarks[_SHOULDER_LEFT][1] + frame.landmarks[_SHOULDER_RIGHT][1]) / 2.0
+    hip_y = (frame.landmarks[_HIP_LEFT][1] + frame.landmarks[_HIP_RIGHT][1]) / 2.0
+    return abs(hip_y - shoulder_y)
 
 
 def vertical_velocity_robust(

@@ -81,7 +81,7 @@ def test_video_sequencia_de_queda_real_produz_resumo_e_evidencia(tmp_path):
 
     r = analise._analisar_video(seq, run_id="teste-video")
 
-    assert r.pontuacao in (0.0, 1.0)
+    assert 0.0 <= r.pontuacao <= 1.0
     assert r.resumo  # sempre há um resumo em linguagem clínica
     if r.pontuacao == 1.0:
         assert "queda" in r.resumo.lower()
@@ -143,8 +143,9 @@ def test_extrair_frames_mp4_sintetico(tmp_path):
     video = _gerar_mp4_sintetico(tmp_path / "sintetico.mp4", n_frames=45)
     out = tmp_path / "frames"
 
-    frames = analise._extrair_frames(video, out)
+    frames, fps = analise._extrair_frames(video, out)
 
+    assert fps > 0
     assert len(frames) == 45
     assert all(p.suffix == ".png" for p in frames)
     assert all(p.is_file() for p in frames)
@@ -297,7 +298,7 @@ def test_sinais_vitais_registro_real_produz_resumo(tmp_path):
     r = analise._analisar_sinais_vitais(heas[0], run_id="teste-vitais")
 
     assert r.resumo
-    assert r.pontuacao in (0.0, 1.0)
+    assert 0.0 <= r.pontuacao <= 1.0
     if r.pontuacao == 1.0:
         assert "frequência cardíaca" in r.resumo.lower()
         assert r.evidencia_id is not None

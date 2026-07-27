@@ -281,8 +281,9 @@ _tracker_state: dict = {
     "previous_ids": [],     # list[int]
     "lost_tracks": {},      # track_id -> (box, frames_since_seen)
 }
-_IOU_THRESHOLD = 0.3       # IoU mínimo para considerar a mesma pessoa
-_MAX_LOST_FRAMES = 10       # frames antes de descartar um track perdido
+_IOU_THRESHOLD = 0.4       # IoU mínimo para considerar a mesma pessoa
+_MAX_LOST_FRAMES = 15       # frames antes de descartar um track perdido
+_MAX_CENTER_DIST = 0.25     # distância máxima entre centros (relativa à diagonal)
 
 # Filtros anti-falso-positivo (POSE-22)
 _DETECTION_CONFIDENCE = 0.45  # confiança mínima do detector (0.25 → 0.45)
@@ -358,12 +359,22 @@ def _assign_track_ids(
     n_curr = len(boxes)
     n_prev = len(prev_boxes)
 
-    # Matriz de IoU
+    # Matriz de IoU com gate de distância entre centros
     pairs: list[tuple[int, int, float]] = []
     for i in range(n_curr):
+        cx_i = (boxes[i][0] + boxes[i][2]) / 2.0
+        cy_i = (boxes[i][1] + boxes[i][3]) / 2.0
+        diag_i = ((boxes[i][2] - boxes[i][0]) ** 2 + (boxes[i][3] - boxes[i][1]) ** 2) ** 0.5
         for j in range(n_prev):
             iou = _box_iou(boxes[i], prev_boxes[j])
-            if iou >= _IOU_THRESHOLD:
+            if iou < _IOU_THRESHOLD:
+                continue
+            # Gate de distância: centros não podem estar muito longe
+            cx_j = (prev_boxes[j][0] + prev_boxes[j][2]) / 2.0
+            cy_j = (prev_boxes[j][1] + prev_boxes[j][3]) / 2.0
+            center_dist = ((cx_i - cx_j) ** 2 + (cy_i - cy_j) ** 2) ** 0.5
+            max_dist = max(diag_i, 1.0) * _MAX_CENTER_DIST
+            if center_dist <= max_dist:
                 pairs.append((i, j, iou))
 
     # Matching guloso (maior IoU primeiro)
