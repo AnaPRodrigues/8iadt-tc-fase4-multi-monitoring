@@ -740,6 +740,13 @@ def analyze_all_persons(
         group_poses_by_track_id,
     )
 
+    from pipelines.video.pose_features import (
+        classify_person_role,
+        group_poses_by_track_id,
+        vertical_velocity_robust,
+        windowed_features,
+    )
+
     all_findings: list[PosturalFinding] = []
     details: dict = {"pessoas_analisadas": 0, "por_papel": {}}
 
@@ -748,6 +755,9 @@ def analyze_all_persons(
     if not person_timelines:
         # Fallback single-person (sem tracking)
         return ("Sem alterações detectadas.", 0.0, [], details)
+
+    # Conta apenas pessoas reais (com track_id), não ghosts do MediaPipe
+    n_pessoas_reais = len(person_timelines)
 
     for track_id, person_frames in person_timelines.items():
         role = classify_person_role(person_frames)
@@ -762,14 +772,22 @@ def analyze_all_persons(
             all_findings.extend(be)
 
         elif role in ("standing", "transitioning"):
-            # Detector de queda para pessoa em pé ou em transição
-            from pipelines.video.pose_features import (
-                vertical_velocity_robust,
+            # Detector de queda: 2 estágios (amplitude → velocidade)
+            # Estágio 1: amplitude do centro de massa nas janelas
+            windows = windowed_features(person_frames, 30)
+            fall_verdict, fall_frame_idx = classify_with_persistence(
+                windows, fall_threshold, persistence_frames,
             )
+
+            if fall_verdict != "queda":
+                continue
+
+            # Estágio 2: validação dinâmica com velocidade vertical
             velocities = vertical_velocity_robust(person_frames)
             verdict, _, vy_score, desc, tid, peak = validate_fall_dynamic(
-                "queda", 0, velocities, 0.10,
+                fall_verdict, fall_frame_idx, velocities, 0.10,
                 all_poses_per_frame=all_poses_per_frame,
+                n_pessoas=n_pessoas_reais,
             )
             if verdict == "queda":
                 all_findings.append(PosturalFinding(
