@@ -167,3 +167,73 @@ exigência central de "dificuldade respiratória" já está coberta pelo P1 com 
 - [ ] Precision, recall e F1 por classe (crackle/wheeze/normal) reportados no relatório técnico, contra rótulo real.
 - [ ] Ao menos um áudio de consulta gravado pelo grupo processado com transcript, termos críticos e score de fadiga vocal gerados corretamente.
 - [ ] Toda anomalia/termo crítico detectado tem evidência visual/textual correspondente na saída (critério de aceite global do projeto).
+
+---
+## Amendment 1 — Dispatch de áudio geral via upload (2026-07-25)
+
+**Contexto:** Até esta emenda, a análise de áudio (`_analisar_audio` em `app/analise.py`)
+exigia sempre um ficheiro `.txt` de anotação de ciclos respiratórios (padrão ICBHI) ao
+lado da gravação. Um áudio de consulta (fala, sem anotação) enviado pelo frontend
+resultava no erro "a análise de áudio espera a anotação de ciclos (arquivo .txt) ao
+lado da gravação" — o que tornava a funcionalidade inutilizável para qualquer áudio
+que não fosse do dataset ICBHI.
+
+Com esta emenda, `_analisar_audio` passa a ser um **dispatcher** (mesmo padrão de
+`_analisar_video`): se existir `.txt` ao lado → análise respiratória ICBHI
+(`_analisar_audio_respiratorio`); senão → análise de consulta
+(`_analisar_audio_consulta`), que compõe transcrição (faster-whisper), features
+acústicas (jitter, shimmer, HNR), score de fadiga vocal, termos críticos e
+sentimento — todas funções já existentes nos pipelines de F2.
+
+**AD relacionada:** AD-055 (STATE.md)
+
+### P4: Upload de áudio de consulta (sem anotação) ⭐
+
+**User Story**: Como utilizador do painel, quero fazer upload de um áudio de consulta
+(.wav, .mp3, etc.) sem precisar de um ficheiro `.txt` de anotação ao lado, e obter
+transcrição, termos críticos, sentimento e score de fadiga vocal.
+
+**Why P4**: Remove a barreira artificial do `.txt` obrigatório que tornava a análise
+de áudio inutilizável para qualquer ficheiro que não viesse do dataset ICBHI.
+
+**Acceptance Criteria**:
+
+1. WHEN um ficheiro de áudio é enviado SEM `.txt` de anotação ao lado THEN o sistema
+   SHALL transcrevê-lo com faster-whisper, extrair features acústicas, calcular score
+   de fadiga, classificar sentimento e buscar termos críticos.
+2. WHEN um ficheiro de áudio é enviado COM `.txt` de anotação ao lado THEN o sistema
+   SHALL executar a análise respiratória ICBHI (comportamento preservado).
+3. WHEN a transcrição não é confiável (silêncio/ruído) THEN o sistema SHALL devolver
+   "Não foi possível obter uma transcrição confiável" com `pontuacao=None`.
+4. WHEN o áudio está corrompido ou em formato não suportado THEN o sistema SHALL
+   devolver `ErroDeAnalise` com mensagem clara.
+
+**Independent Test**: Criar um `.wav` sintético sem `.txt`, dublar o `transcribe` e o
+`extract_acoustic_features`, verificar que o dispatcher chama `_analisar_audio_consulta`
+e devolve `ResultadoAnalise` com termos críticos encontrados.
+
+---
+## Requirement Traceability (atualizada)
+
+| Requirement ID | Story | Phase | Status |
+| --- | --- | --- | --- |
+| AUDIO-01 | P1: Carga de ciclo ICBHI + extração de features | Tasks | ✅ Verified |
+| AUDIO-02 | P1: Classificador respiratório leve (CPU) | Tasks | ✅ Verified |
+| AUDIO-03 | P1: Predição de classe + score de confiança | Tasks | ✅ Verified |
+| AUDIO-04 | P1: Métricas precision/recall/F1 por classe | Tasks | ✅ Verified |
+| AUDIO-05 | P1: Evidência de classe anômala (espectrograma) | Tasks | ✅ Verified |
+| AUDIO-06 | P2: Transcrição faster-whisper (pt-BR) | Tasks | ✅ Verified |
+| AUDIO-07 | P2: Busca de termos críticos configuráveis | Tasks | ✅ Verified |
+| AUDIO-08 | P2: Sentimento local (sem nuvem) | Tasks | ✅ Verified |
+| AUDIO-09 | P2: Evidência de termo crítico | Tasks | ✅ Verified |
+| AUDIO-10 | Edge: transcrição vazia/não confiável | Tasks | ✅ Verified |
+| AUDIO-11 | P3: Features acústicas + score de fadiga vocal | Tasks | ✅ Verified |
+| AUDIO-12 | Edge: arquivo corrompido/formato não suportado | Tasks | ✅ Verified |
+| AUDIO-13 | Edge: ciclo ICBHI sem anotação excluído das métricas | Tasks | ✅ Verified |
+| AUDIO-14 | Edge: determinismo de reprocessamento | Tasks | ✅ Verified |
+| **AUDIO-15** | **P4**: Dispatch de áudio sem .txt → consulta | **Done** | 🟡 Implemented |
+| **AUDIO-16** | **P4**: Dispatch de áudio com .txt → respiratório (preservado) | **Done** | 🟡 Implemented |
+| **AUDIO-17** | **P4**: Transcrição não confiável → mensagem clara | **Done** | 🟡 Implemented |
+| **AUDIO-18** | **P4**: Áudio corrompido → ErroDeAnalise | **Done** | 🟡 Implemented |
+
+**Coverage:** 18 total, 14 Verified + 4 Implemented — 18/18 mapped.

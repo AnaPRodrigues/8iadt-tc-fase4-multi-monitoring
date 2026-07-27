@@ -8,7 +8,7 @@ import { LinhaDoTempo } from "../components/LinhaDoTempo.jsx";
 import { PainelModalidade } from "../components/PainelModalidade.jsx";
 import { dataLegivel, nivelInfo, tempoDeMonitoramento } from "../formatos.js";
 
-const MODALIDADES = ["video", "audio", "sinais_vitais", "documento"];
+const MODALIDADES = ["video", "video_cirurgico", "audio", "sinais_vitais", "documento"];
 
 export function PacienteDetalhe() {
   const { id } = useParams();

@@ -190,3 +190,112 @@ procedimento"; é uma camada de apresentação sobre os eventos já produzidos p
 - [ ] Ao menos um lote de frames processado com sucesso pelo Rekognition, com labels anexados como evidência complementar.
 - [ ] Relatório automático gerado para cada sequência/vídeo processado (com ou sem eventos).
 - [ ] Toda anomalia detectada tem evidência visual/textual correspondente na saída (critério de aceite global do projeto).
+
+---
+## Amendment 1 — Suporte a ficheiros de vídeo (2026-07-25)
+
+**Contexto:** O enunciado exige "Processar vídeos clínicos (ex: sessões de fisioterapia
+ou cirurgias gravadas)". Até esta emenda, o sistema só aceitava sequências de PNGs
+(formato URFD, raia pose) e JPEGs únicos (formato Endoscapes, raia objeto). Com esta
+emenda, ficheiros de vídeo reais (.mp4, .avi, .mov, .mkv, .webm) são aceites em ambas
+as raias via upload pelo frontend. A extração de frames usa `cv2.VideoCapture`
+(`opencv-python>=4.9` já presente no projeto). Nenhuma dependência nova.
+
+**AD relacionada:** AD-054 (STATE.md)
+
+### P4: Upload de ficheiro de vídeo → análise de postura/movimentação ⭐
+
+**User Story**: Como utilizador do painel, quero fazer upload de um ficheiro de vídeo
+(.mp4, .avi, etc.) com modalidade "Vídeo — movimentação", e que o sistema extraia os
+frames, aplique o MediaPipe Pose e classifique queda/ADL, sem eu precisar converter o
+vídeo para PNGs manualmente.
+
+**Why P4**: Remove a barreira artificial de "só diretórios de PNGs" que contradizia o
+enunciado. Um ficheiro .mp4 é o formato natural de vídeo; o sistema deve aceitá-lo.
+
+**Acceptance Criteria**:
+
+1. WHEN um ficheiro com extensão de vídeo (.mp4, .avi, .mov, .mkv, .webm) é enviado
+   com modalidade "video" THEN o sistema SHALL extrair frames com `cv2.VideoCapture`
+   e encaminhá-los para o pipeline de pose/movimentação.
+2. WHEN o vídeo tem menos frames que o tamanho mínimo da janela de movimento (30
+   frames) THEN o sistema SHALL devolver "Vídeo muito curto para análise" com
+   `pontuacao=None`.
+3. WHEN o vídeo não contém pessoas em nenhum frame THEN o sistema SHALL devolver "Sem
+   queda detectada" com a nota "Nenhuma pessoa identificada" e `pontuacao=0.0`.
+4. WHEN o vídeo é corrompido ou ilegível THEN o sistema SHALL devolver `ErroDeAnalise`
+   com mensagem clara, sem crash.
+5. WHEN uma queda é detectada THEN o sistema SHALL gerar evidência no mesmo contrato
+   da raia pose (frame anotado + JSON), com `formato: video` nos detalhes.
+
+**Independent Test**: Gerar um .mp4 sintético com `cv2.VideoWriter`, enviar via
+`_analisar_video()`, verificar que o dispatch roteia para o pipeline de pose e devolve
+`ResultadoAnalise` com `detalhes.formato == "video"`. Testar vídeo corrompido,
+curto, e regressão de JPEG (continua no ramo cirúrgico).
+
+### P5: Upload de vídeo cirúrgico → YOLOv8 por keyframe
+
+**User Story**: Como utilizador do painel, quero fazer upload de um vídeo cirúrgico
+com a nova modalidade "Vídeo — cirurgia", e que o sistema extraia keyframes a cada 2
+segundos e rode o YOLOv8 (ou Rekognition, conforme `ENV`) em cada um, agregando as
+estruturas críticas encontradas.
+
+**Why P5**: O enunciado exemplifica "vídeos de cirurgias" para detecção de objeto/área
+crítica. Antes desta emenda, a raia objeto só aceitava um JPEG único — o que não é um
+vídeo.
+
+**Acceptance Criteria**:
+
+1. WHEN um ficheiro de vídeo é enviado com a nova modalidade "video_cirurgico" THEN o
+   sistema SHALL extrair um keyframe a cada 2 segundos e analisar cada um com o
+   `ImageAnalyzer` (YOLOv8 local ou Rekognition cloud, conforme `ENV`).
+2. WHEN uma estrutura crítica (`cystic_artery`, `cystic_duct`, `cystic_plate`) é
+   detectada em pelo menos um keyframe THEN o sistema SHALL devolver um resumo
+   agregado com os nomes clínicos (ex.: "artéria cística, ducto cístico") e o
+   instante da primeira detecção, com `pontuacao=1.0`.
+3. WHEN nenhuma estrutura crítica é detectada em nenhum keyframe THEN o sistema SHALL
+   devolver "Nenhuma estrutura crítica identificada no vídeo cirúrgico" com
+   `pontuacao=0.0`.
+4. WHEN o ficheiro enviado em "video_cirurgico" é uma imagem (.jpg, .png) THEN o
+   sistema SHALL analisá-lo como quadro único (comportamento idêntico ao antigo
+   `_analisar_quadro_cirurgico`), mantendo compatibilidade.
+5. WHEN o vídeo não pode ser aberto THEN o sistema SHALL devolver `ErroDeAnalise`.
+
+**Independent Test**: Gerar .mp4 sintético, dublar o `ImageAnalyzer` para devolver
+`cystic_duct`, verificar `pontuacao=1.0`, resumo com "ducto cístico", e
+`detalhes.formato == "video"`. Testar vídeo sem estruturas críticas → pontuação 0.
+Testar JPEG → dispatch para quadro único.
+
+---
+## Requirement Traceability (atualizada)
+
+| Requirement ID | Story | Phase | Status |
+| --- | --- | --- | --- |
+| VIDEO-01 | P1: Carga de sequência URFD + extração de keypoints (MediaPipe Pose) | Tasks | ✅ Verified |
+| VIDEO-02 | P1: Métricas de movimento por janela (centro de massa, assimetria) | Tasks | ✅ Verified |
+| VIDEO-03 | P1: Classificação da sequência como queda ou ADL | Tasks | ✅ Verified |
+| VIDEO-04 | P1: Métricas precision/recall/F1 da raia pose contra o rótulo real | Tasks | ✅ Verified |
+| VIDEO-05 | P1: Evidência da raia pose (frame anotado + metadados) | Tasks | ✅ Verified |
+| VIDEO-06 | P2: Carga de frame Endoscapes-BBox201 + anotação COCO real | Tasks | ✅ Verified |
+| VIDEO-07 | P2: Detecção via `ImageAnalyzer` (YOLOv8 local / Rekognition cloud) | Tasks | ✅ Verified |
+| VIDEO-08 | P2: Métricas precision/recall/F1 por classe contra anotação COCO | Tasks | ✅ Verified |
+| VIDEO-09 | P2: Evidência da raia objeto (frame anotado + metadados) | Tasks | ✅ Verified |
+| VIDEO-10 | P2: Tratamento de falha/limite do Rekognition | Tasks | ⚠️ Verified with gap |
+| VIDEO-11 | P3: Relatório automático consolidado (ambas as raias) | Tasks | ✅ Verified |
+| VIDEO-12 | P3: Relatório mesmo sem eventos detectados | Tasks | ✅ Verified |
+| VIDEO-13 | Edge: frame sem pessoa detectável descartado da janela (raia pose) | Tasks | ✅ Verified |
+| VIDEO-14 | Edge: sequência curta demais para uma janela ("dados insuficientes") | Tasks | ✅ Verified |
+| VIDEO-15 | Edge: isolamento de eventos entre sequências/vídeos no mesmo lote | Tasks | ✅ Verified |
+| VIDEO-16 | Dimensão: dedupe de keyframe reenviado ao S3 | Tasks | ✅ Verified |
+| **VIDEO-17** | **P4**: Dispatch de .mp4 para pipeline de pose no upload | **Done** | 🟡 Implemented |
+| **VIDEO-18** | **P4**: Vídeo curto demais (< 30 frames) → mensagem clara | **Done** | 🟡 Implemented |
+| **VIDEO-19** | **P4**: Vídeo sem pessoas → "Nenhuma pessoa identificada" | **Done** | 🟡 Implemented |
+| **VIDEO-20** | **P4**: Vídeo corrompido → ErroDeAnalise | **Done** | 🟡 Implemented |
+| **VIDEO-21** | **P4**: Evidência de queda com `formato: video` | **Done** | 🟡 Implemented |
+| **VIDEO-22** | **P5**: Keyframes a cada 2 s → YOLOv8 em cada um | **Done** | 🟡 Implemented |
+| **VIDEO-23** | **P5**: Estrutura crítica detectada → resumo clínico agregado | **Done** | 🟡 Implemented |
+| **VIDEO-24** | **P5**: Nenhuma estrutura → pontuação 0, sem evidência | **Done** | 🟡 Implemented |
+| **VIDEO-25** | **P5**: Imagem JPEG em video_cirurgico → quadro único | **Done** | 🟡 Implemented |
+| **VIDEO-26** | **P5**: Vídeo ilegível → ErroDeAnalise | **Done** | 🟡 Implemented |
+| **VIDEO-27** | **P4**: Regressão — JPEG continua no ramo cirúrgico | **Done** | 🟡 Implemented |
+| **VIDEO-28** | **P4**: Regressão — diretório URFD continua no ramo pose | **Done** | 🟡 Implemented |

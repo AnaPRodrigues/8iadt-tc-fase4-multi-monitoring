@@ -486,3 +486,87 @@ Nenhuma violação.
 | VIDEO-16 | T11 | Mapeado |
 
 **Coverage:** 16 de 16 requisitos mapeados, nenhum diferido.
+
+---
+## Amendment 1 — Suporte a ficheiros de vídeo (2026-07-25)
+
+**Spec:** `.specs/features/video-analysis/spec.md` § Amendment 1
+**Design:** `.specs/features/video-analysis/design.md` § Amendment 1
+**Status:** Done
+
+### T14 — Extração de frames e pipeline de pose para ficheiros de vídeo
+
+- **What:** Adicionar `_EXTENSOES_VIDEO`, `_extrair_frames()`, `_razao_sem_queda()`
+  e `_analisar_video_pose()` em `backend/app/analise.py`. Modificar
+  `_analisar_video()` para rotear ficheiros com extensão de vídeo para o novo ramo.
+- **Where:** `backend/app/analise.py` (funções novas + dispatch atualizado)
+- **Depends on:** Nenhum — opencv-python já é dependência do projeto
+- **Reuses:** `pipelines.video.pose` (extract_keypoints), `pipelines.video.pose_features`
+  (windowed_features), `pipelines.video.pose_detector` (classify_sequence,
+  save_fall_evidence)
+- **Requirement(s):** VIDEO-17, VIDEO-18, VIDEO-19, VIDEO-20, VIDEO-21
+- **Done-when:**
+  - [x] `_extrair_frames()` extrai PNGs com `cv2.VideoCapture`, subamostra vídeos longos
+  - [x] `_analisar_video_pose()` corre o pipeline de pose completo sobre frames extraídos
+  - [x] `_analisar_video()` roteia .mp4/.avi/.mov/.mkv/.webm para pose
+  - [x] JPEG e diretório URFD mantêm comportamento inalterado (regressão)
+  - [x] Testes: 8 novos, todos passam (484→492 na suíte completa)
+- **Tests:** unit · **Gate:** quick
+- **Commit:** (working tree — a commitar)
+
+### T15 — Modalidade video_cirurgico e pipeline YOLOv8 sobre keyframes
+
+- **What:** Adicionar modalidade `video_cirurgico` (repositorio, rotas, servico,
+  frontend, atividade). Adicionar `_analisar_video_cirurgico()` que extrai
+  keyframes a cada 2 s e corre YOLOv8/Rekognition em cada um.
+- **Where:** `backend/app/analise.py`, `backend/app/servico.py`,
+  `backend/app/repositorio.py`, `backend/common/atividade.py`,
+  `frontend/src/formatos.js`, `frontend/src/components/AreaEnvio.jsx`
+- **Depends on:** T14 (reusa `_EXTENSOES_VIDEO` para dispatch)
+- **Reuses:** `_analisar_quadro_cirurgico()` (para JPEG único), `_pesos_yolo()`,
+  `aws.adapters.get_image_analyzer`, `pipelines.video.adapters.register_local_adapters`,
+  `pipelines.video.object_detector.CRITICAL_STRUCTURES`
+- **Requirement(s):** VIDEO-22, VIDEO-23, VIDEO-24, VIDEO-25, VIDEO-26
+- **Done-when:**
+  - [x] `_analisar_video_cirurgico()` extrai keyframes a cada 2 s de vídeo
+  - [x] YOLOv8 (ou Rekognition) analisa cada keyframe
+  - [x] Estruturas críticas são agregadas num resumo clínico único
+  - [x] JPEG em video_cirurgico delega para quadro único
+  - [x] Frontend mostra "Vídeo — cirurgia" como nova opção
+  - [x] Testes: 3 novos, todos passam (492→495 na suíte completa)
+- **Tests:** unit · **Gate:** quick
+- **Commit:** (working tree — a commitar)
+
+### T16 — Testes de regressão e integração para os novos ramos
+
+- **What:** Adicionar testes unitários para `_extrair_frames`, dispatch de vídeo
+  (pose e cirúrgico), e regressão dos caminhos existentes.
+- **Where:** `backend/tests/app/test_analise.py`
+- **Depends on:** T14, T15
+- **Requirement(s):** VIDEO-27, VIDEO-28 (regressão), cobertura de VIDEO-17 a VIDEO-26
+- **Done-when:**
+  - [x] 11 testes novos (8 pose vídeo + 3 cirúrgico) passam
+  - [x] `_gerar_mp4_sintetico()` fixture gera .mp4 válido com `cv2.VideoWriter`
+  - [x] Suíte completa: 495 passed, 3 skipped, 0 failed
+  - [x] Ruff check limpo em todos os ficheiros modificados
+- **Tests:** unit · **Gate:** full
+- **Commit:** (working tree — a commitar)
+
+### Requirement Traceability (novos)
+
+| Requirement | Tarefas | Status |
+| --- | --- | --- |
+| VIDEO-17 | T14 | Mapeado |
+| VIDEO-18 | T14 | Mapeado |
+| VIDEO-19 | T14 | Mapeado |
+| VIDEO-20 | T14 | Mapeado |
+| VIDEO-21 | T14 | Mapeado |
+| VIDEO-22 | T15 | Mapeado |
+| VIDEO-23 | T15 | Mapeado |
+| VIDEO-24 | T15 | Mapeado |
+| VIDEO-25 | T15 | Mapeado |
+| VIDEO-26 | T15 | Mapeado |
+| VIDEO-27 | T16 | Mapeado |
+| VIDEO-28 | T16 | Mapeado |
+
+**Coverage:** 28 de 28 requisitos mapeados (16 originais + 12 da Amendment 1).

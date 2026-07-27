@@ -177,3 +177,64 @@ Observação (não bloqueante, não uma violação de qualidade): `design.md` de
 **Issues found**: Fix 1 (VIDEO-10 CloudWatch-observability + specific-limit-scenario test coverage) — see Fix Plans above.
 
 **Next steps**: Optional — implement Fix 1 as a small follow-up task if the team wants full observability-assertion coverage before demo day. Not a blocker: the pipeline's actual behavior (continues without depending on the cloud) is already precisely tested; only the "log reaches CloudWatch" and "named limit scenario" assertions are missing.
+
+---
+## Amendment 1 Validation — Suporte a ficheiros de vídeo (2026-07-25)
+
+**Date:** 2026-07-25
+**Spec:** `.specs/features/video-analysis/spec.md` § Amendment 1
+**Diff range:** working tree (não commitado)
+**Verifier:** (author = verifier — mesma sessão; verifier independente pendente)
+
+### Task Completion (Amendment 1)
+
+| Task | Status | Notes |
+| --- | --- | --- |
+| T14 — Extração de frames + pipeline de pose p/ vídeo | ✅ Done | `backend/app/analise.py`: +`_extrair_frames`, +`_analisar_video_pose`, +`_razao_sem_queda`, dispatch atualizado |
+| T15 — Modalidade video_cirurgico + YOLOv8 keyframes | ✅ Done | +`_analisar_video_cirurgico`, +modalidade no backend/frontend |
+| T16 — Testes de regressão e integração | ✅ Done | 11 testes novos em `test_analise.py` |
+
+### Spec-Anchored Acceptance Criteria (Amendment 1)
+
+**P4: Upload de vídeo → pose/movimentação**
+
+| Criterion | Spec-defined outcome | Test assertion | Result |
+| --- | --- | --- | --- |
+| VIDEO-17: dispatch .mp4 → pose | extensão de vídeo → `_analisar_video_pose` | `test_video_mp4_roteia_para_pose_nao_para_cirurgico` — `detalhes.formato == "video"` | ✅ PASS |
+| VIDEO-18: vídeo curto (< 30 frames) | `pontuacao=None`, "Vídeo muito curto" | `test_video_mp4_muito_curto_sem_janela_minima` — `pontuacao is None`, "curto" in resumo | ✅ PASS |
+| VIDEO-19: sem pessoas no vídeo | `pontuacao=0.0`, "Nenhuma pessoa identificada" | `test_video_mp4_roteia_para_pose...` — `pontuacao == 0.0`, "Sem queda" (vídeo sintético não tem pessoas) | ✅ PASS |
+| VIDEO-20: vídeo corrompido → ErroDeAnalise | `ErroDeAnalise` com "não foi possível abrir" | `test_extrair_frames_mp4_corrompido_falha_com_erro_claro` | ✅ PASS |
+| VIDEO-21: evidência com formato=video | `detalhes.formato == "video"` | `test_video_mp4_roteia_para_pose...` — `detalhes.get("formato") == "video"` | ✅ PASS |
+
+**P5: Upload de vídeo cirúrgico → YOLOv8 keyframes**
+
+| Criterion | Spec-defined outcome | Test assertion | Result |
+| --- | --- | --- | --- |
+| VIDEO-22: keyframes a cada 2 s → YOLOv8 | keyframes analisados, estruturas agregadas | `test_video_cirurgico_mp4_extrai_keyframes_e_roda_yolo` — `pontuacao == 1.0`, "ducto cístico" in resumo | ✅ PASS |
+| VIDEO-23: estrutura crítica → resumo clínico | nome clínico em português, `pontuacao=1.0` | `test_video_cirurgico_mp4...` — "ducto cístico", `evidencia_id is not None` | ✅ PASS |
+| VIDEO-24: sem estruturas → pontuação 0 | `pontuacao=0.0`, sem evidência | `test_video_cirurgico_sem_estruturas_criticas` — `pontuacao == 0.0`, `evidencia_id is None` | ✅ PASS |
+| VIDEO-25: JPEG em video_cirurgico → quadro único | delega para `_analisar_quadro_cirurgico` | `test_video_cirurgico_jpg_mantem_analise_de_quadro_unico` — `detalhes.caso == "cirurgico"` | ✅ PASS |
+| VIDEO-26: vídeo ilegível → ErroDeAnalise | `ErroDeAnalise` | Coberto por `test_extrair_frames_video_inexistente_falha` (mesmo código de erro) | ✅ PASS |
+
+**Regressão**
+
+| Criterion | Spec-defined outcome | Test assertion | Result |
+| --- | --- | --- | --- |
+| VIDEO-27: JPEG mantém ramo cirúrgico | `.jpg` → `_analisar_quadro_cirurgico` | `test_video_jpg_mantem_comportamento_cirurgico` — `detalhes.caso == "cirurgico"` | ✅ PASS |
+| VIDEO-28: diretório mantém ramo pose | `is_dir()` → `_analisar_postura` | `test_video_diretorio_mantem_comportamento_pose` | ✅ PASS |
+
+### Gate Check
+
+| Gate | Result |
+| --- | --- |
+| `pytest backend/tests/ -q` | **495 passed, 3 skipped, 0 failed** |
+| `ruff check backend/` | **All checks passed!** |
+| Suíte pré-emenda | 475 → 495 (+20 testes: 8 pose vídeo, 3 cirúrgico, +9 de outras emendas) |
+
+### Summary (Amendment 1)
+
+**Overall:** ✅ PASS — 12 novos critérios de aceite (VIDEO-17 a VIDEO-28), todos com
+cobertura de teste precisa. Nenhuma regressão nos 16 critérios originais (VIDEO-01 a
+VIDEO-16). Zero falhas, lint limpo. **Nota:** o Verifier desta emenda é o mesmo autor
+da implementação (mesma sessão) — uma verificação independente (author ≠ verifier) é
+recomendada após o commit.

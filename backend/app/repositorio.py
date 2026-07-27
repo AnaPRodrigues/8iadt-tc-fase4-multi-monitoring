@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 from app.db import conectar
 
-MODALIDADES = ("video", "audio", "documento", "sinais_vitais")
+MODALIDADES = ("video", "video_cirurgico", "audio", "documento", "sinais_vitais")
 SITUACOES = ("recebido", "processando", "concluido", "erro")
 NIVEIS = ("verde", "amarelo", "vermelho")
 

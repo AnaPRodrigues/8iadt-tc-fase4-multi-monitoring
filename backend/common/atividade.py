@@ -15,6 +15,7 @@ log = get_logger("atividade")
 
 _LABEL_MODALIDADE = {
     "video": "vídeo",
+    "video_cirurgico": "vídeo cirúrgico",
     "audio": "áudio",
     "sinais_vitais": "sinais vitais",
     "documento": "prescrição",

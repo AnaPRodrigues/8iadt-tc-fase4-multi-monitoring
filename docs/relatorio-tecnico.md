@@ -71,13 +71,21 @@ Duas raias independentes, cobrindo os dois modelos pedidos no enunciado:
 
 | Raia | Modelo | Dataset | O que detecta |
 | --- | --- | --- | --- |
-| Postura / movimentação | **MediaPipe Pose** (33 keypoints) | UR Fall Detection (URFD) | Quedas e padrões de movimentação, por métricas de movimento por janela (amplitude, velocidade, assimetria do centro de massa) classificadas contra um limiar |
-| Objetos / áreas críticas | **YOLOv8 fine-tuned** | Endoscapes2023 | Estruturas anatômicas e instrumentos em cirurgia laparoscópica (ex.: artéria/ducto cístico como estruturas críticas) |
+| Postura / movimentação | **MediaPipe Pose** (33 keypoints) + YOLOv8n crop | UR Fall Detection (URFD) | Quedas (filtro dinâmico $V_y$ anti-falso-positivo), desvios posturais (ângulos articulares, inclinação de tronco), suporte multi-pessoa com seleção ao nível do solo e filtro de consistência temporal anti-alucinação |
+| Objetos / áreas críticas | **YOLOv8 fine-tuned** | Endoscapes2023 | Estruturas anatômicas e instrumentos em cirurgia laparoscópica; evidência com bboxes desenhadas no keyframe de maior densidade de achados |
 
 **Substituição do OpenPose:** o enunciado sugere OpenPose para análise postural; usamos
 **MediaPipe Pose** como equivalente moderno (mesma finalidade — extração de esqueleto 2D
 — porém CPU-friendly e sem a barreira de build do OpenPose). A saída (keypoints por
 frame) e a lógica de detecção de queda são próprias e testadas.
+
+**Melhorias anti-falso-positivo (AD-056):** três filtros foram adicionados para eliminar
+falsos positivos: (a) validação dinâmica via $V_y$ — a classificação de queda exige pico
+de velocidade vertical sustentado (>0.10, ≥5 frames, média top-5), distinguindo queda
+real de postura reclinada estática; (b) consistência temporal — ≥3 frames consecutivos
+para validar uma pose, filtrando alucinações do MediaPipe em objetos; (c) YOLO person
+crop — stock YOLOv8n recorta a região da pessoa antes do MediaPipe, reduzindo ruído de
+fundo.
 
 **Treino do YOLOv8:** o detector foi fine-tunado à parte (Google Colab, GPU gratuita) —
 ver seção 5.1 para os resultados. O sistema em produção nunca treina; só carrega o peso
@@ -92,6 +100,15 @@ publicado.
 | Termos clínicos críticos | Léxico curado sobre o transcript | áudio de consulta |
 | Sentimento | Léxico curado (positivo/negativo) | áudio de consulta |
 | Fadiga vocal | Score heurístico (jitter/shimmer/HNR via Parselmouth), marcado explicitamente como heurística não validada clinicamente | áudio de consulta |
+
+**Dispatch automático de áudio:** o sistema agora deteta automaticamente se o áudio
+enviado tem anotação de ciclos (`.txt` ao lado) e escolhe o pipeline adequado: com
+anotação → análise respiratória ICBHI; sem anotação → análise de consulta (transcrição
++ acústica + termos críticos + sentimento).
+
+**Geração de prescrições avulsas:** o módulo de prescrições inclui um gerador standalone
+(`make gen-presc ARGS="..."`) que produz PDFs de receituário completo com dados
+institucionais, do médico e do paciente, sem afetar o seed demo.
 
 **Substituição do Azure:** o enunciado pede Azure Speech to Text e Azure Text Analytics.
 Substituímos por equivalentes **locais** (faster-whisper para transcrição; léxicos
@@ -253,11 +270,12 @@ tudo sem nenhuma dependência de nuvem.
 
 Registradas com transparência (nada foi mascarado como "coberto" sem código real):
 
-- **Oxigenação (SpO₂) e batimentos de UTI adulta**: o dataset BIDMC (HR/SpO₂ de UTI) já
-  é baixado, mas o pipeline de vitais processa apenas o CTU-UHB (cardiotocografia
-  fetal). A técnica de detecção de anomalia (z-score + Isolation Forest sobre janelas) é
-  geral e se aplicaria ao BIDMC, mas o loader/features específicos ainda não foram
-  escritos. **Batimentos** estão cobertos via FHR; **SpO₂** fica como trabalho futuro.
+- **Oxigenação (SpO₂) e batimentos de UTI adulta**: coberto. O pipeline de vitais lê o
+  BIDMC (`pipelines/vitals/bidmc.py`) além do CTU-UHB, reaproveitando os mesmos
+  detectores (z-score + Isolation Forest sobre janelas) contra critérios clínicos
+  publicados (hipoxemia SpO₂ < 90% sustentada; bradicardia/taquicardia fora de 60–100
+  bpm) — o BIDMC não tem desfecho anotado, por isso a avaliação usa referência clínica
+  em vez de rótulo do dataset.
 - **Pressão arterial**: sem fonte aberta em waveform sem credenciamento (a fonte
   identificada, VitalDB, fica como trabalho futuro).
 - **Disartria (áudio)**: sem dataset aberto rotulado; deferido com justificativa.

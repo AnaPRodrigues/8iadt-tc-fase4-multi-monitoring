@@ -28,6 +28,7 @@ _OUTPUT_ROOT = _REPO_ROOT / "output"
 # Modalidade no banco -> modalidade no motor de fusão (que usa os nomes das análises).
 _MODALIDADE_FUSAO = {
     "video": "video",
+    "video_cirurgico": "video",
     "audio": "audio",
     "documento": "prescription",
     "sinais_vitais": "vitals",
@@ -142,6 +143,8 @@ def _despachar(upload: repositorio.Upload, caminho: Path) -> ResultadoAnalise:
         return analise._analisar_documento(caminho, anterior)
     if upload.modalidade == "video":
         return analise._analisar_video(caminho, run_id)
+    if upload.modalidade == "video_cirurgico":
+        return analise._analisar_video_cirurgico(caminho, run_id)
     if upload.modalidade == "audio":
         return analise._analisar_audio(caminho, run_id, _dataset_icbhi())
     if upload.modalidade == "sinais_vitais":

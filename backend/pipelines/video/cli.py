@@ -25,15 +25,19 @@ import yaml
 from common.evidence import evidence_dir
 from common.logging import get_logger
 from common.metrics import save_report
-from pipelines.video.models import MovementWindow, PoseFrame, SequenceVerdict
-from pipelines.video.pose import create_landmarker, ensure_pose_model, extract_keypoints
+from pipelines.video.models import JointTarget, PoseFrame, SequenceVerdict
+from pipelines.video.pose import (
+    create_landmarker,
+    ensure_pose_model,
+    extract_all_keypoints,
+    reset_person_tracker,
+)
 from pipelines.video.pose_detector import (
-    DEFAULT_FALL_THRESHOLD,
-    classify_sequence,
+    analyze_all_persons,
     save_fall_evidence,
+    save_postural_evidence,
 )
 from pipelines.video.pose_evaluate import evaluate
-from pipelines.video.pose_features import windowed_features
 from pipelines.video.pose_loader import load_sequence
 
 log = get_logger("video.cli")
@@ -49,10 +53,32 @@ _FEATURE = "video_pose"
 DEFAULTS: dict[str, Any] = {
     "sequences": None,
     "window_size": 30,
-    "fall_threshold": DEFAULT_FALL_THRESHOLD,
+    "fall_threshold": 0.55,
+    "persistence_frames": 1,
+    "num_poses": 3,
+    "joint_targets": [],
+    "trunk_tilt_max": 30.0,
+    "tilt_persistence_frames": 90,
     "output_root": "output",
     "model_cache_dir": "models",
 }
+
+
+def _parse_joint_targets(raw: list[dict] | None) -> list[JointTarget]:
+    """Converte a lista de dicionários do YAML em ``JointTarget`` validados."""
+    if not raw:
+        return []
+    targets = []
+    for entry in raw:
+        targets.append(JointTarget(
+            joint_name=str(entry["joint_name"]),
+            landmark_a=int(entry["landmark_a"]),
+            landmark_b=int(entry["landmark_b"]),
+            landmark_c=int(entry["landmark_c"]),
+            min_angle=float(entry["min_angle"]),
+            target_angle=float(entry["target_angle"]),
+        ))
+    return targets
 
 
 @dataclass(frozen=True)
@@ -61,6 +87,11 @@ class Config:
     sequences: list[str] | None
     window_size: int
     fall_threshold: float
+    persistence_frames: int
+    num_poses: int
+    joint_targets: list[JointTarget]
+    trunk_tilt_max: float
+    tilt_persistence_frames: int
     output_root: Path
     model_cache_dir: Path
 
@@ -83,12 +114,18 @@ def load_config(path: Path) -> Config:
 
     merged = {**DEFAULTS, **raw}
     sequences = merged["sequences"]
+    joint_raw = merged.get("joint_targets", [])
 
     return Config(
         dataset_dir=Path(merged["dataset_dir"]),
         sequences=list(sequences) if sequences else None,
         window_size=int(merged["window_size"]),
         fall_threshold=float(merged["fall_threshold"]),
+        persistence_frames=int(merged["persistence_frames"]),
+        num_poses=int(merged["num_poses"]),
+        joint_targets=_parse_joint_targets(joint_raw),
+        trunk_tilt_max=float(merged["trunk_tilt_max"]),
+        tilt_persistence_frames=int(merged["tilt_persistence_frames"]),
         output_root=Path(merged["output_root"]),
         model_cache_dir=Path(merged["model_cache_dir"]),
     )
@@ -108,18 +145,13 @@ def _sequence_dirs(dataset_dir: Path, sequences: list[str] | None) -> list[Path]
     )
 
 
-def _representative_frame_index(window: MovementWindow, frames: list[PoseFrame | None]) -> int:
-    """Primeiro frame com pose detectada dentro da janela que disparou a queda --
-    `windowed_features` garante que ao menos um exista (janela sem frame válido não é gerada)."""
-    for idx in range(window.start_frame, window.end_frame + 1):
-        if frames[idx] is not None:
-            return idx
-    raise ValueError("janela sem nenhum frame com pose detectada")
-
-
 def run(config_path: Path, run_id: str | None = None) -> int:
-    """Executa a raia pose ponta a ponta. Devolve 0 em sucesso, 1 quando não há
-    sequência utilizável no dataset configurado."""
+    """Pipeline unificado: queda + fisioterapia sobre os mesmos frames.
+
+    Extrai keypoints uma vez, roda ambos os detetores em sequência, e gera
+    evidência para cada finding encontrado. Mantém retrocompatibilidade com
+    o formato URFD.
+    """
     cfg = load_config(Path(config_path))
     run_id = run_id or _novo_run_id()
     destino = evidence_dir(_FEATURE, run_id, cfg.output_root)
@@ -130,40 +162,97 @@ def run(config_path: Path, run_id: str | None = None) -> int:
         return 1
 
     model_path = ensure_pose_model(cfg.model_cache_dir)
-    landmarker = create_landmarker(model_path)
+    landmarker = create_landmarker(model_path, num_poses=cfg.num_poses)
 
     verdicts: list[SequenceVerdict] = []
-    n_evidencias = 0
+    n_fall_evidencias = 0
+    n_postural_evidencias = 0
 
     for seq_dir in seq_dirs:
         seq = load_sequence(seq_dir)
-        frames = [extract_keypoints(p, landmarker) for p in seq.frame_paths]
-        windows = windowed_features(frames, cfg.window_size)
-        predicted = classify_sequence(windows, cfg.fall_threshold)
-        verdicts.append(SequenceVerdict(seq_id=seq.seq_id, predicted=predicted, label=seq.label))
+        # Reinicia o rastreador de identidade para cada sequência (vídeo distinto)
+        reset_person_tracker()
 
-        if predicted == "queda":
-            evento = next(w for w in windows if w.center_of_mass_amplitude > cfg.fall_threshold)
-            idx = _representative_frame_index(evento, frames)
-            save_fall_evidence(
-                seq_id=seq.seq_id,
-                frame_path=seq.frame_paths[idx],
-                pose_frame=frames[idx],
-                event_frame_index=idx,
-                score=evento.center_of_mass_amplitude,
-                run_id=run_id,
-                root=cfg.output_root,
-            )
-            n_evidencias += 1
+        # Extração multi-pessoa com tracking de identidade persistente
+        all_poses = [extract_all_keypoints(p, landmarker) for p in seq.frame_paths]
+        n_pessoas = max(
+            (len(poses) for poses in all_poses if poses), default=0
+        )
+
+        # Pipeline multi-pessoa unificado (ITER2-03)
+        _, _, consolidated, _ = analyze_all_persons(
+            all_poses_per_frame=all_poses,
+            fps=30.0,
+            joint_targets=cfg.joint_targets if cfg.joint_targets else None,
+            fall_threshold=cfg.fall_threshold,
+            persistence_frames=cfg.persistence_frames if n_pessoas <= 1 else 3,
+        )
+
+        fall_detected = any(
+            c.finding_type == "FALL_DETECTED" for c in consolidated
+        )
+        verdicts.append(SequenceVerdict(
+            seq_id=seq.seq_id,
+            predicted="queda" if fall_detected else "adl",
+            label=seq.label,
+        ))
+
+        # Evidência para cada finding
+        for finding in consolidated:
+            safe_idx = min(finding.frame_index, len(seq.frame_paths) - 1)
+            evidence_pose: PoseFrame | None = None
+            if safe_idx < len(all_poses) and all_poses[safe_idx]:
+                for p in all_poses[safe_idx]:
+                    if p is not None:
+                        evidence_pose = p
+                        break
+
+            if evidence_pose is None:
+                continue
+
+            if finding.finding_type == "FALL_DETECTED":
+                save_fall_evidence(
+                    seq_id=seq.seq_id,
+                    frame_path=seq.frame_paths[safe_idx],
+                    pose_frame=evidence_pose,
+                    event_frame_index=safe_idx,
+                    score=finding.score,
+                    run_id=run_id,
+                    root=cfg.output_root,
+                    persistence_frames=cfg.persistence_frames,
+                )
+                n_fall_evidencias += 1
+            else:
+                save_postural_evidence(
+                    finding=finding,
+                    frame_path=seq.frame_paths[safe_idx],
+                    pose_frame=evidence_pose,
+                    run_id=run_id,
+                    root=cfg.output_root,
+                )
+                n_postural_evidencias += 1
+
+        log.info(
+            "%s: %d pessoa(s), %d janelas, %s, %d desvio(s), %d tilt(s)",
+            seq.seq_id,
+            n_pessoas,
+            len(windows),
+            fall_verdict,
+            n_postural_evidencias,
+            len(tilt_findings),
+        )
 
     destino.mkdir(parents=True, exist_ok=True)
     save_report(evaluate(verdicts), destino / "metrics.json")
 
+    total_evidencias = n_fall_evidencias + n_postural_evidencias
     log.info(
-        "run %s: %d sequência(s), %d evidência(s) em %s",
+        "run %s: %d sequência(s), %d evidência(s) (%d queda, %d postural) em %s",
         run_id,
         len(seq_dirs),
-        n_evidencias,
+        total_evidencias,
+        n_fall_evidencias,
+        n_postural_evidencias,
         destino,
     )
     return 0
