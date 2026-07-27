@@ -286,11 +286,11 @@ _MAX_LOST_FRAMES = 15       # frames antes de descartar um track perdido
 _MAX_CENTER_DIST = 0.25     # distância máxima entre centros (relativa à diagonal)
 
 # Filtros anti-falso-positivo (POSE-22)
-_DETECTION_CONFIDENCE = 0.45  # confiança mínima do detector (0.25 → 0.45)
-_MIN_BOX_WIDTH = 30           # largura mínima da bbox (px) — ignora ruídos
-_MIN_BOX_HEIGHT = 50          # altura mínima da bbox (px) — pessoa real vs. objeto
-_MIN_BOX_AREA_RATIO = 0.015   # área mínima da bbox relativa ao frame (1.5%)
-_MIN_BOX_PIXEL_AREA = 1500    # área mínima absoluta (px²)
+_DETECTION_CONFIDENCE = 0.50  # confiança mínima do detector (0.45 → 0.50)
+_MIN_BOX_WIDTH = 40           # largura mínima da bbox (px) — ignora ruídos
+_MIN_BOX_HEIGHT = 60          # altura mínima da bbox (px) — pessoa real vs. objeto
+_MIN_BOX_AREA_RATIO = 0.02    # área mínima da bbox relativa ao frame (2%)
+_MIN_BOX_PIXEL_AREA = 2000    # área mínima absoluta (px²)
 
 
 def reset_person_tracker() -> None:

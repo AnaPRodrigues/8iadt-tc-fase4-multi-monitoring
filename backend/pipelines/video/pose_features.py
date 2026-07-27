@@ -629,6 +629,22 @@ def was_initially_recumbent(
             y_values.append(center[1])
 
     if len(y_values) < min_valid_frames:
+        # Poucos frames no início: tenta janela alargada (90 frames).
+        # Se a pessoa aparece tarde mas está consistentemente deitada,
+        # assume que já estava recumbent desde o início (ex.: paciente
+        # acamado que o detector só encontra após alguns frames).
+        extended = person_frames[:90]
+        y_ext: list[float] = []
+        for f in extended:
+            if f is None:
+                continue
+            center = hip_center(f)
+            if center is None:
+                center = _upper_body_center(f)
+            if center is not None:
+                y_ext.append(center[1])
+        if len(y_ext) >= min_valid_frames:
+            return (sum(y_ext) / len(y_ext)) > y_threshold
         return False
 
     return (sum(y_values) / len(y_values)) > y_threshold
