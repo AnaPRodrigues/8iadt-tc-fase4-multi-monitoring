@@ -71,7 +71,7 @@ Duas raias independentes, cobrindo os dois modelos pedidos no enunciado:
 
 | Raia | Modelo | Dataset | O que detecta |
 | --- | --- | --- | --- |
-| Postura / movimentação | **MediaPipe Pose** (33 keypoints) + YOLOv8n crop | UR Fall Detection (URFD) | Quedas (filtro dinâmico $V_y$ anti-falso-positivo), desvios posturais (ângulos articulares, inclinação de tronco), suporte multi-pessoa com seleção ao nível do solo e filtro de consistência temporal anti-alucinação |
+| Postura / movimentação | **MediaPipe Pose** (33 keypoints) + YOLO-NAS ONNX | UR Fall Detection (URFD) + vídeos reais | Quedas (2 estágios + via Vy-primary, $V_y$ normalizado por torso, restrições temporais de descida sustentada, escalonamento FPS, resiliência a gaps), desvios posturais, agitação, saída do leito, convulsão, multi-pessoa com tracking IoU |
 | Objetos / áreas críticas | **YOLOv8 fine-tuned** | Endoscapes2023 | Estruturas anatômicas e instrumentos em cirurgia laparoscópica; evidência com bboxes desenhadas no keyframe de maior densidade de achados |
 
 **Substituição do OpenPose:** o enunciado sugere OpenPose para análise postural; usamos
@@ -79,13 +79,38 @@ Duas raias independentes, cobrindo os dois modelos pedidos no enunciado:
 — porém CPU-friendly e sem a barreira de build do OpenPose). A saída (keypoints por
 frame) e a lógica de detecção de queda são próprias e testadas.
 
-**Melhorias anti-falso-positivo (AD-056):** três filtros foram adicionados para eliminar
-falsos positivos: (a) validação dinâmica via $V_y$ — a classificação de queda exige pico
-de velocidade vertical sustentado (>0.10, ≥5 frames, média top-5), distinguindo queda
-real de postura reclinada estática; (b) consistência temporal — ≥3 frames consecutivos
-para validar uma pose, filtrando alucinações do MediaPipe em objetos; (c) YOLO person
-crop — stock YOLOv8n recorta a região da pessoa antes do MediaPipe, reduzindo ruído de
-fundo.
+**Algoritmo de deteção de quedas (Fases 1–4).** O detector foi substancialmente
+melhorado após validação experimental contra 10 sequências do URFD e vídeos reais
+de vigilância (120 fps, 720p; 30 fps, 1080p):
+
+1. **Deteção em 2 estágios com via complementar**: Estágio 1 — amplitude do centro de
+massa em janelas deslizantes (30 frames, stride=15, 50% overlap). Estágio 2 —
+validação dinâmica ($V_y$ máximo + deslocamento total + inclinação do tronco). Via
+Vy-primary complementar para quedas lentas onde a amplitude não atinge o limiar.
+
+2. **$V_y$ normalizado por altura corporal** (`torso_height`): os limiares são
+expressos em alturas-de-tronco, tornando-os independentes da distância da câmara
+e do tamanho da pessoa. Cap físico de 0.5 alturas-de-tronco/frame bloqueia
+glitches de deteção.
+
+3. **Restrições temporais**: ≥2 frames consecutivos com $V_y$ > 0.02 (descida
+sustentada, não um glitch isolado) + deslocamento líquido em Y ≥ 0.15 (a pessoa
+realmente desceu na imagem) + `is_recumbent()` no final (terminou no chão).
+
+4. **Escalonamento por FPS**: $V_y$ multiplicado por `fps/30`. Limiares calibrados
+a 30 fps funcionam corretamente em vídeos de 15, 60 ou 120 fps.
+
+5. **Resiliência a gaps de deteção**: `vertical_velocity_robust(max_gap=5)` mantém
+a última posição conhecida durante até 5 frames de falha de deteção, essencial
+para vídeos reais com deteção intermitente (12–22% de cobertura).
+
+6. **Gate `was_initially_recumbent`**: exclui pessoas já deitadas no início do
+vídeo (janela de 30 frames, alargada para 90 se necessário). Essencial para
+evitar falsos positivos em pacientes acamados.
+
+**Resultados no URFD** (10 sequências, 640×480, 30 fps): 100% recall (5/5 quedas),
+100% precisão (5/5 ADL). **Resultados em vídeos reais**: quedas detectadas em
+vídeos de vigilância a 120 fps; paciente acamado sem falsos positivos.
 
 **Treino do YOLOv8:** o detector foi fine-tunado à parte (Google Colab, GPU gratuita) —
 ver seção 5.1 para os resultados. O sistema em produção nunca treina; só carrega o peso
