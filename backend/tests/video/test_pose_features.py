@@ -482,6 +482,67 @@ def test_is_recumbent_uses_fallback_when_hips_occluded():
 
 
 # --------------------------------------------------------------------------- #
+# was_initially_recumbent — verifica se pessoa já estava deitada no INÍCIO
+# --------------------------------------------------------------------------- #
+def test_was_initially_recumbent_person_standing_initially():
+    """Pessoa com Y baixo nos primeiros 30 frames → False."""
+    from pipelines.video.pose_features import was_initially_recumbent
+
+    frames = [_make_full_frame() for _ in range(30)]
+    assert was_initially_recumbent(frames) is False
+
+
+def test_was_initially_recumbent_person_on_floor_initially():
+    """Pessoa com Y > 0.65 nos primeiros 30 frames → True."""
+    from pipelines.video.pose_features import was_initially_recumbent
+
+    frames = []
+    for _ in range(30):
+        f = _make_full_frame()
+        f = PoseFrame(landmarks=[
+            (lm[0], 0.70, lm[2], lm[3]) for lm in f.landmarks
+        ])
+        frames.append(f)
+    assert was_initially_recumbent(frames) is True
+
+
+def test_was_initially_recumbent_insufficient_data():
+    """Menos de 5 frames válidos → False (conservador)."""
+    from pipelines.video.pose_features import was_initially_recumbent
+
+    frames = [_make_full_frame() for _ in range(3)]
+    frames += [None] * 27
+    assert was_initially_recumbent(frames) is False
+
+
+def test_was_initially_recumbent_handles_none_frames():
+    """Frames None são ignorados na média dos primeiros 30."""
+    from pipelines.video.pose_features import was_initially_recumbent
+
+    frames = [None] * 5 + [_make_full_frame() for _ in range(25)]
+    # Y=0.50 < 0.65 → False
+    assert was_initially_recumbent(frames) is False
+
+
+def test_was_initially_recumbent_uses_fallback_when_hips_occluded():
+    """Usa upper_body_center quando quadris estão ocluídos."""
+    from pipelines.video.pose_features import was_initially_recumbent
+
+    frames = []
+    for _ in range(30):
+        f = _make_full_frame()
+        # Oclui quadris (visibilidade < 0.4), upper body fica com Y=0.40
+        f = PoseFrame(landmarks=[
+            (lm[0], 0.40 if i in (0, 11, 12) else 0.70, lm[2],
+             0.3 if i in (23, 24) else lm[3])
+            for i, lm in enumerate(f.landmarks)
+        ])
+        frames.append(f)
+    # Upper body Y ≈ 0.40 < 0.65 → False
+    assert was_initially_recumbent(frames) is False
+
+
+# --------------------------------------------------------------------------- #
 # group_poses_by_track_id — agrupamento de poses por identidade
 # --------------------------------------------------------------------------- #
 def test_group_poses_by_track_id_two_consistent_people():

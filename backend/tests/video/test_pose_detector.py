@@ -696,16 +696,16 @@ def test_seizure_occluded_joint_excluded():
 # T4: detect_agitation — agitação psicomotora (ITER2-05)
 # --------------------------------------------------------------------------- #
 def test_agitation_detected_with_frequent_position_changes():
-    """20 mudanças de posição em 60s → 1 finding AGITATION."""
+    """40 mudanças de posição em 60s → 1 finding AGITATION."""
     from pipelines.video.pose_detector import detect_agitation
 
-    # Simula 20 mudanças em 1800 frames (~60s a 30fps)
-    # Cada ~90 frames: Y muda de 0.50 para 0.55 (ΔY=0.05 > 0.03)
+    # Simula 40 mudanças em 1800 frames (~60s a 30fps)
+    # Cada ~45 frames: Y muda de 0.50 para 0.55 (ΔY=0.05 > 0.03)
     frames = []
     y_base = 0.50
     for i in range(1800):
-        if i > 0 and i % 90 == 0:
-            y_base = 0.55 if y_base == 0.50 else 0.50  # alterna Y
+        if i > 0 and i % 45 == 0:
+            y_base = 0.60 if y_base == 0.50 else 0.50  # ΔY=0.10 > 0.03
         frames.append(_make_person_frame(hip_y=y_base, track_id=0))
 
     findings = detect_agitation(frames, fps=30.0)
@@ -713,7 +713,7 @@ def test_agitation_detected_with_frequent_position_changes():
     assert len(findings) == 1
     f = findings[0]
     assert f.finding_type == "AGITATION"
-    assert f.measured_angle > 10.0  # taxa de mudanças/min
+    assert f.measured_angle > 30.0  # taxa de mudanças/min (> threshold 30)
     assert 0.0 <= f.score <= 1.0
 
 
@@ -820,8 +820,8 @@ def test_analyze_all_persons_recumbent_dispatch():
     frames = []
     y_base = 0.80
     for i in range(1800):
-        if i > 0 and i % 90 == 0:
-            y_base = 0.85 if y_base == 0.80 else 0.80
+        if i > 0 and i % 45 == 0:
+            y_base = 0.90 if y_base == 0.80 else 0.80  # ΔY=0.10 > 0.03
         landmarks = [(0.5, 0.5, 0.0, 0.9) for _ in range(33)]
         landmarks[23] = (0.50, y_base, 0.0, 0.9)
         landmarks[24] = (0.52, y_base, 0.0, 0.9)

@@ -343,7 +343,7 @@ def detect_agitation(
     frames: list[PoseFrame | None],
     fps: float,
     window_frames: int = 30,
-    min_changes_per_minute: int = 10,
+    min_changes_per_minute: int = 30,
     min_total_frames: int = 120,
 ) -> list[PosturalFinding]:
     """Deteta agitação psicomotora via frequência de mudanças de posição.
