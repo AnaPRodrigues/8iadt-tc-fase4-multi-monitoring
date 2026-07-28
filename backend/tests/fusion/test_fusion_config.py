@@ -33,15 +33,15 @@ def test_config_minima_aplica_todos_os_defaults_documentados(tmp_path):
         cfg.weights
         == DEFAULTS["weights"]
         == {
-            "video": 0.25,
-            "audio": 0.25,
-            "vitals": 0.25,
-            "prescription": 0.25,
+            "video": 0.40,
+            "audio": 0.30,
+            "vitals": 0.40,
+            "prescription": 0.45,
         }
     )
     assert cfg.decay_half_life_s == DEFAULTS["decay_half_life_s"] == 600.0
-    assert cfg.threshold_amarelo == DEFAULTS["threshold_amarelo"] == 0.3
-    assert cfg.threshold_vermelho == DEFAULTS["threshold_vermelho"] == 0.7
+    assert cfg.threshold_amarelo == DEFAULTS["threshold_amarelo"] == 0.15
+    assert cfg.threshold_vermelho == DEFAULTS["threshold_vermelho"] == 0.35
     assert cfg.hysteresis == DEFAULTS["hysteresis"] == 0.05
     assert cfg.window_size_s == DEFAULTS["window_size_s"] == 60.0
     assert cfg.alert_level == DEFAULTS["alert_level"] == "vermelho"

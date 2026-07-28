@@ -348,6 +348,8 @@ def _com_evidencia(
         record.record_id, nome_sinal, unidade, serie, record.fs, inicio_s, fim_s,
         destino / f"{evidencia_id}.png",
     )
+    # SpO2 < 90% é emergência clínica → CRITICAL; HR fora da faixa → MEDIUM
+    severidade = "CRITICAL" if nome_sinal == "SpO2" else "MEDIUM"
     evidencia = save_evidence(
         feature="vitals",
         run_id=run_id,
@@ -356,6 +358,7 @@ def _com_evidencia(
         artifact_path=artefato,
         metadata={"sinal": nome_sinal, "inicio_s": inicio_s, "fim_s": fim_s, "resumo": resumo},
         root=root,
+        severity=severidade,
     )
     return AchadoBidmc(
         resumo=resumo,

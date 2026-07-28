@@ -44,14 +44,24 @@ def test_find_terms_sem_nenhum_termo_no_transcript_retorna_lista_vazia():
 def test_load_terms_none_retorna_lista_padrao_documentada():
     terms = load_terms(None)
 
-    assert terms == ["dor no peito", "falta de ar", "tontura"]
+    # A lista padrão cobre dor, respiratório, mobilidade, neurológico,
+    # cardiovasculares e estado geral — os 3 termos originais continuam presentes.
+    assert "dor no peito" in terms
+    assert "falta de ar" in terms
+    assert "tontura" in terms
+    assert "dor" in terms
+    assert "doendo" in terms
+    assert len(terms) > 10  # lista expandida, não o mínimo original
 
 
 def test_load_terms_arquivo_vazio_retorna_lista_padrao(tmp_path):
     vazio = tmp_path / "vazio.yaml"
     vazio.write_text("", encoding="utf-8")
 
-    assert load_terms(vazio) == ["dor no peito", "falta de ar", "tontura"]
+    terms = load_terms(vazio)
+    assert "dor no peito" in terms
+    assert "falta de ar" in terms
+    assert len(terms) > 10
 
 
 def test_load_terms_arquivo_valido_usa_os_termos_do_yaml(tmp_path):

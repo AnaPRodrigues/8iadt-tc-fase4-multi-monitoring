@@ -14,9 +14,62 @@ from pipelines.audio.models import CriticalTermHit, Transcript, TranscriptSegmen
 _FEATURE = "audio"
 _CONTEXT_CHARS = 40
 
-# Termos citados explicitamente no brief; lista adicional fica a critério da
-# config do grupo (``critical_terms_path``), nunca inventada aqui.
-_DEFAULT_TERMS = ["dor no peito", "falta de ar", "tontura"]
+# Termos clínicos padrão com cobertura de domínios relevantes para
+# monitoramento hospitalar: dor, respiratório, mobilidade, neurológico,
+# cardiovasculares e estado geral. A lista pode ser estendida via YAML
+# (``critical_terms_path`` na config do pipeline).
+_DEFAULT_TERMS = [
+    # Dor — substantivo, verbo (infinitivo e gerúndio) e flexões comuns
+    "dor",
+    "doendo",
+    "doer",
+    "dói",
+    "dolor",
+    "dolorido",
+    "dolorida",
+    # Respiratório
+    "falta de ar",
+    "dificuldade para respirar",
+    "chiado",
+    "cansaço",
+    "cansaço excessivo",
+    "fôlego curto",
+    # Mobilidade / fisioterapia
+    "não consigo dobrar",
+    "não consigo mexer",
+    "travado",
+    "travada",
+    "inchado",
+    "inchada",
+    "inflamado",
+    "inflamada",
+    "rigidez",
+    "rígido",
+    # Neurológico
+    "tontura",
+    "tonto",
+    "tonta",
+    "desmaio",
+    "desmaiar",
+    "formigamento",
+    "dormência",
+    "convulsão",
+    # Cardiovasculares
+    "dor no peito",
+    "palpitação",
+    "coração acelerado",
+    "pressão alta",
+    "pressão baixa",
+    # Estado geral
+    "febre",
+    "febril",
+    "náusea",
+    "vômito",
+    "vomitar",
+    "suor frio",
+    "mal-estar",
+    "fraqueza",
+]
 
 
 def normalize_text(s: str) -> str:

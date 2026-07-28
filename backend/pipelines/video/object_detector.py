@@ -31,8 +31,10 @@ class YoloDetector:
         results = self._model.predict(
             str(image_path), conf=self._confidence_threshold, verbose=False, save=False
         )
-        result = results[0]
+        if not results or results[0].boxes is None:
+            return []
 
+        result = results[0]
         detections = []
         for box in result.boxes:
             class_name = result.names[int(box.cls[0])]

@@ -18,10 +18,10 @@ _VALID_MODALITIES = {"video", "audio", "vitals", "prescription"}
 _REQUIRED = ("patient_demo_id", "events")
 
 DEFAULTS: dict[str, Any] = {
-    "weights": {"video": 0.25, "audio": 0.25, "vitals": 0.25, "prescription": 0.25},
+    "weights": {"video": 0.40, "audio": 0.30, "vitals": 0.40, "prescription": 0.45},
     "decay_half_life_s": 600.0,
-    "threshold_amarelo": 0.3,
-    "threshold_vermelho": 0.7,
+    "threshold_amarelo": 0.15,
+    "threshold_vermelho": 0.35,
     "hysteresis": 0.05,
     "window_size_s": 60.0,
     "alert_level": "vermelho",

@@ -45,15 +45,35 @@ def check_dose_range(
     return result
 
 
+def _dose_in_range(dose: float, drug_range: DrugRange | None) -> bool | None:
+    """Verifica se a dose está dentro da faixa terapêutica.
+
+    Devolve ``None`` quando não há referência (catálogo) para decidir.
+    """
+    if drug_range is None:
+        return None
+    return drug_range.min_dose <= dose <= drug_range.max_dose
+
+
 def check_abrupt_change(
     record: PrescriptionRecord,
     previous: PrescriptionRecord | None,
     threshold: float = ABRUPT_CHANGE_THRESHOLD,
+    drug_range: DrugRange | None = None,
 ) -> AnomalyResult:
     """Compara a dose atual com a do registro anterior do mesmo fármaco.
 
     Só se aplica quando o medicamento é o mesmo — variação entre fármacos
     diferentes é tratada por ``check_high_risk_substitution``.
+
+    Quando a faixa terapêutica é conhecida, uma mudança **em direção à faixa**
+    não é anomalia:
+    - Se a dose anterior estava fora da faixa e a atual está dentro, é uma
+      **correção** (ex.: 350mg → 35mg com faixa [10, 60]mg).
+    - Se ambas estão dentro da faixa, a variação não representa risco clínico
+      (a faixa terapêutica é a janela segura por definição).
+    - Sem faixa de referência (catálogo), o comportamento original é mantido
+      (avalia apenas a magnitude da variação).
     """
     if previous is None:
         return AnomalyResult(kind="normal", reason="sem histórico anterior")
@@ -66,13 +86,35 @@ def check_abrupt_change(
             reason="fármacos diferentes — variação de dose não comparável",
         )
 
+    # Se a faixa é conhecida e a dose atual está dentro dela, a mudança só é
+    # benigna quando a dose anterior estava FORA da faixa — é uma correção
+    # (ex.: 350mg → 35mg com faixa [10, 60]mg).
+    # Se ambas estão dentro da faixa, uma variação grande ainda é sinalizada
+    # (ex.: 50mg → 100mg no topo da faixa [25, 100]mg).
+    current_in_range = _dose_in_range(record.dose, drug_range)
+    if current_in_range is True:
+        previous_in_range = _dose_in_range(previous.dose, drug_range)
+        if previous_in_range is False:
+            return AnomalyResult(
+                kind="normal",
+                reason="dose corrigida para dentro da faixa terapêutica",
+            )
+        # Ambas dentro da faixa: segue para verificação de magnitude.
+
     relative_change = abs(record.dose - previous.dose) / previous.dose
     if relative_change > threshold:
+        direction = ""
+        if drug_range is not None:
+            if record.dose > drug_range.max_dose:
+                direction = " (acima da faixa)"
+            elif record.dose < drug_range.min_dose:
+                direction = " (abaixo da faixa)"
         return AnomalyResult(
             kind="mudanca_abrupta",
             reason=(
                 f"variação de {relative_change:.0%} em relação à dose anterior "
                 f"({previous.dose}{previous.unit} -> {record.dose}{record.unit})"
+                + direction
             ),
         )
     return AnomalyResult(kind="normal", reason="variação dentro do esperado")
@@ -198,8 +240,10 @@ def evaluate_prescription(
     sub_result = check_high_risk_substitution(record, previous, lookup)
     results.append(sub_result)
 
-    # 3. Variação abrupta (mesmo fármaco)
-    change_result = check_abrupt_change(record, previous)
+    # 3. Variação abrupta (mesmo fármaco) — passa a faixa para evitar
+    #    sinalizar correções (dose voltando para dentro da faixa).
+    drug_range = lookup(record.drug)
+    change_result = check_abrupt_change(record, previous, drug_range=drug_range)
     results.append(change_result)
 
     return results

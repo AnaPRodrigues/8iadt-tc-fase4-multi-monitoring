@@ -13,8 +13,8 @@ import { nivelInfo, nomeModalidade, porcentagem, tempoLegivel } from "../formato
 // Linha do tempo da pontuação de risco. Eixo horizontal em tempo legível desde o
 // início do monitoramento; linhas de atenção (30%) e alerta (70%); um marcador
 // maior nos instantes em que alguma modalidade gerou um evento (clicável).
-const ATENCAO = 0.3;
-const ALERTA = 0.7;
+const ATENCAO = 0.15;
+const ALERTA = 0.35;
 
 function DicaPersonalizada({ active, payload }) {
   if (!active || !payload || !payload.length) return null;
@@ -40,7 +40,7 @@ export function LinhaDoTempo({ pontos, aoSelecionarEvento }) {
 
   const dados = pontos.map((p) => ({
     t: p.t,
-    minuto: Math.round(p.t / 60),
+    minuto: +(p.t / 60).toFixed(1),
     score: p.score,
     nivel: p.level,
     eventos: p.contributing_events,

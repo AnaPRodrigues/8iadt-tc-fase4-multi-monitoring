@@ -134,6 +134,7 @@ def _para_analise_schema(a: repositorio.Analise) -> AnaliseSchema:
         pontuacao=a.pontuacao,
         evidencia_id=a.resultado.get("evidencia_id"),
         criado_em=a.criado_em,
+        detalhes=a.resultado.get("detalhes"),
     )
 
 

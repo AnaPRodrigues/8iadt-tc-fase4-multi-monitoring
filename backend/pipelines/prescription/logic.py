@@ -43,6 +43,25 @@ def _save_anomaly_evidence(
     anomalies: list[AnomalyResult],
     source_id: str,
 ) -> str:
+    # Severidade depende do tipo de anomalia e da criticalidade do fármaco.
+    # Dose acima da faixa com fármaco de Alta Vigilância (MAV, criticality=3)
+    # → CRITICAL (alerta VERMELHO). Criticality ≤2 → HIGH (AMARELO).
+    kinds = {a.kind for a in anomalies}
+    if "dose_fora_de_faixa" in kinds:
+        from pipelines.prescription import catalog
+
+        drug_range = catalog.lookup(record.drug)
+        if drug_range and drug_range.criticality >= 3:
+            severidade = "CRITICAL"
+        else:
+            severidade = "HIGH"
+    elif "substituicao_critica" in kinds:
+        severidade = "HIGH"
+    elif "mudanca_abrupta" in kinds:
+        severidade = "MEDIUM"
+    else:
+        severidade = "MEDIUM"
+
     run_id = datetime.now(UTC).strftime("%Y%m%d")
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
         f.write(pdf_bytes)
@@ -61,6 +80,7 @@ def _save_anomaly_evidence(
                 "unit": record.unit,
                 "anomalies": [{"kind": a.kind, "reason": a.reason} for a in anomalies],
             },
+            severity=severidade,
         )
     finally:
         tmp_path.unlink(missing_ok=True)

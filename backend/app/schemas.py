@@ -59,6 +59,7 @@ class AnaliseSchema(BaseModel):
     pontuacao: float | None
     evidencia_id: str | None
     criado_em: str
+    detalhes: dict | None = None
 
 
 # --- Alertas ---

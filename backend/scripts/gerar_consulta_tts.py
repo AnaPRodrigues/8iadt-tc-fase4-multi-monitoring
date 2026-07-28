@@ -30,23 +30,10 @@ logger = logging.getLogger("tts-consulta")
 # para gerar contraste de sentimento e fadiga entre as gravações.
 _CONSULTAS: list[dict[str, str]] = [
     {
-        "nome": "consulta_calma",
-        "voz": "pt-BR-FranciscaNeural",
-        "texto": (
-            "Bom dia, doutora. Eu queria falar sobre uns sintomas que apareceram "
-            "essa semana. Tive um pouco de falta de ar quando subi a escada de casa, "
-            "e ontem senti uma tontura ao levantar da cama. Não senti dor no peito, "
-            "mas fiquei preocupada. Também notei que ando mais cansada que o normal."
-        ),
-    },
-    {
-        "nome": "consulta_preocupada",
+        "nome": "Francisco_consulta",
         "voz": "pt-BR-AntonioNeural",
         "texto": (
-            "Doutor, estou muito mal. Sinto uma dor no peito forte desde ontem, "
-            "e a falta de ar está piorando... mal consigo andar até a cozinha. "
-            "Também tive tontura, quase desmaiei. Estou realmente assustado "
-            "com isso, nunca senti nada assim antes."
+            "Oi. Bom dia, tudo bem? Vim para uma avaliação de rotina. "
         ),
     },
 ]
@@ -56,7 +43,13 @@ async def _gerar_audio(texto: str, voz: str, saida: Path) -> None:
     """Gera um arquivo WAV via edge-tts."""
     import edge_tts
 
-    comunicador = edge_tts.Communicate(texto, voz)
+    comunicador = edge_tts.Communicate(
+        text=texto, 
+        voice=voz, 
+        # rate="-15%",
+        # pitch="-20Hz",
+        # volume="+0%"
+    )
     await comunicador.save(str(saida))
 
 

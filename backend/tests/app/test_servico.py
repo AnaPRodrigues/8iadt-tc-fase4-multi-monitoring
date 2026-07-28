@@ -77,7 +77,7 @@ def test_analise_sem_anomalia_nao_entra_na_linha_do_tempo(_ambiente):
 
 def test_alerta_registrado_quando_quatro_modalidades_cruzam_o_limiar(_ambiente):
     p = repositorio.criar_paciente("P")
-    # 4 modalidades no mesmo instante, severidade 1.0 -> score 4*0.25 = 1.0 > 0.75 (vermelho)
+    # 4 modalidades no mesmo instante, severidade 1.0 -> score 4*0.25 = 1.0 > 0.40 (vermelho)
     _analise_com_evidencia(p.id, "video", "video_pose", "ev-v", 0.0, _ambiente)
     _analise_com_evidencia(p.id, "audio", "audio", "ev-a", 0.0, _ambiente)
     _analise_com_evidencia(p.id, "sinais_vitais", "vitals", "ev-s", 0.0, _ambiente)
