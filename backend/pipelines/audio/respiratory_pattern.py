@@ -54,7 +54,7 @@ def _autocorr_peak_period(signal: np.ndarray, sr: float, min_hz: float = 0.15, m
     peak_val = corr[peak_lag]
     if peak_val < 0.3:
         return None
-    return peak_lag / sr
+    return float(peak_lag / sr)
 
 
 def detect_respiratory_pattern(
@@ -119,14 +119,14 @@ def detect_respiratory_pattern(
         freqs, psd = scipy_signal.welch(audio, sr, nperseg=min(1024, len(audio)))
         low_band = np.sum(psd[(freqs >= 50) & (freqs <= 500)])
         total = np.sum(psd[freqs >= 50])
-        low_ratio = low_band / total if total > 0 else 0.0
+        low_ratio = float(low_band / total) if total > 0 else 0.0
     else:
         low_ratio = 0.5  # neutro
 
     if period is not None:
-        breath_rate = 60.0 / period
+        breath_rate = float(60.0 / period)
         # Confiança baseada na força da autocorrelação + energia em banda baixa
-        confidence = round(min(1.0, 0.5 + 0.5 * low_ratio), 2)
+        confidence = round(float(min(1.0, 0.5 + 0.5 * low_ratio)), 2)
         return {
             "detected": True,
             "breath_rate_bpm": round(breath_rate, 1),
@@ -139,7 +139,7 @@ def detect_respiratory_pattern(
         return {
             "detected": True,
             "breath_rate_bpm": None,
-            "confidence": round(low_ratio, 2),
+            "confidence": round(float(low_ratio), 2),
             "method": f"energia predominante em banda baixa (<500 Hz: {low_ratio:.0%})",
         }
 
