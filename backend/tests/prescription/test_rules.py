@@ -87,3 +87,75 @@ def test_regulatory_info_tem_dose_de_referencia():
     assert "0.125" in info["reference_dose"]
     assert "0.5" in info["reference_dose"]
     assert "mg" in info["reference_dose"]
+
+
+# --- PRESC-11: check_high_risk_substitution (spec prescription-criticality) ---
+
+from pipelines.prescription.rules import check_high_risk_substitution
+
+
+def test_substituicao_salto_2_niveis_deteta_critica():
+    """PRESC-11: dipirona(crit=1) → morfina(crit=3) = substituicao_critica."""
+    previous = _record(drug="dipirona")
+    current = _record(drug="morfina")
+    result = check_high_risk_substitution(current, previous)
+    assert result.kind == "substituicao_critica"
+    assert "Dipirona" in result.reason
+    assert "Morfina" in result.reason
+    assert "nível 1" in result.reason
+    assert "nível 3" in result.reason
+
+
+def test_substituicao_salto_1_nivel_para_2_nao_deteta():
+    """PRESC-11: paracetamol(crit=1) → tramadol(crit=2) = normal (delta=1 < 2)."""
+    previous = _record(drug="paracetamol")
+    current = _record(drug="tramadol")
+    result = check_high_risk_substitution(current, previous)
+    assert result.kind == "normal"
+
+
+def test_substituicao_salto_1_para_3_deteta_critica():
+    """PRESC-11: ibuprofeno(crit=1) → fentanil(crit=3) = substituicao_critica (delta=2)."""
+    previous = _record(drug="ibuprofeno")
+    current = _record(drug="fentanil")
+    result = check_high_risk_substitution(current, previous)
+    assert result.kind == "substituicao_critica"
+
+
+def test_substituicao_mesmo_nivel_nao_deteta():
+    """PRESC-11: morfina(crit=3) → fentanil(crit=3) = normal."""
+    previous = _record(drug="morfina")
+    current = _record(drug="fentanil")
+    result = check_high_risk_substitution(current, previous)
+    assert result.kind == "normal"
+
+
+def test_substituicao_mesmo_farmaco_nao_deteta():
+    """PRESC-11: mesmo fármaco = normal (não é substituição)."""
+    previous = _record(drug="paracetamol", dose=500)
+    current = _record(drug="paracetamol", dose=1000)
+    result = check_high_risk_substitution(current, previous)
+    assert result.kind == "normal"
+
+
+def test_substituicao_sem_historico_nao_deteta():
+    """PRESC-11: sem prescrição anterior = normal."""
+    result = check_high_risk_substitution(_record(drug="morfina"), previous=None)
+    assert result.kind == "normal"
+
+
+def test_substituicao_farmaco_fora_do_catalogo():
+    """PRESC-11: fármaco atual fora do catálogo = sem_referencia."""
+    previous = _record(drug="dipirona")
+    current = _record(drug="medicamento-inventado-xyz")
+    result = check_high_risk_substitution(current, previous)
+    assert result.kind == "sem_referencia"
+
+
+def test_substituicao_farmaco_anterior_fora_do_catalogo():
+    """PRESC-11: fármaco anterior fora do catálogo → assume criticality=0, deteta se atual ≥2."""
+    previous = _record(drug="medicamento-inventado-xyz")
+    current = _record(drug="morfina")
+    result = check_high_risk_substitution(current, previous)
+    # previous desconhecido → assume criticality=0; atual=3 → salto ≥2 → crítico
+    assert result.kind == "substituicao_critica"
