@@ -737,9 +737,9 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
     """
     import json
 
-    from common.evidence import evidence_dir
+    from common.evidence import evidence_dir, save_evidence
     from pipelines.audio.acoustic_features import extract as extract_acoustic_features
-    from pipelines.audio.critical_terms import find_terms, load_terms, save_term_evidence
+    from pipelines.audio.critical_terms import find_terms, load_terms
     from pipelines.audio.fatigue_score import is_fatigued
     from pipelines.audio.fatigue_score import score as fatigue_score
     from pipelines.audio.sentiment import classify as classify_sentiment
@@ -766,8 +766,6 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
     except Exception as exc:
         raise ErroDeAnalise(f"não foi possível extrair features acústicas: {exc}") from exc
 
-    # Score de fadiga com baseline de 1 áudio (z-score = 0.0 por construção —
-    # desvio-padrão zero). A heurística é documentada como limitada no design de F2.
     fadiga = fatigue_score(features, baseline=[features])
     fatigado = is_fatigued(fadiga, threshold=1.0)
 
@@ -776,41 +774,73 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
     termos = load_terms(None)
     hits = find_terms(transcript, termos)
 
-    # Evidência
+    # -- Evidência consolidada --
     destino = evidence_dir("audio", run_id, "output")
     destino.mkdir(parents=True, exist_ok=True)
     stem = caminho.stem
-    evidencia_id = None
+    evidencia_id = f"{stem}-consulta"
 
-    # Guarda um artefato com o transcript completo
+    # Artefato: transcript completo
     artefato_txt = destino / f"{stem}-transcript.txt"
     artefato_txt.write_text(transcript.text, encoding="utf-8")
 
-    if hits:
-        for hit in hits:
-            ev = save_term_evidence(hit, transcript, run_id, "output")
-            if evidencia_id is None:
-                evidencia_id = ev.evidence_id
+    # Determina severity e evento principal
+    termos_encontrados = sorted({h.term for h in hits})
+    if hits and fatigado:
+        severity = "HIGH"
+        event_type = "critical_terms_and_fatigue"
+    elif hits:
+        severity = "MEDIUM"
+        event_type = "critical_terms"
+    elif fatigado:
+        severity = "LOW"
+        event_type = "vocal_fatigue"
+    elif sentimento.label != "neutro":
+        severity = "INFO"
+        event_type = "sentiment"
+    else:
+        severity = "INFO"
+        event_type = "speech_analysis"
 
-    # Sidecar de metadados da consulta (contrato AD-026)
+    # Sidecar consolidado com todos os achados
     metadados = {
+        "transcription": transcript.text,
+        "transcription_reliable": transcript.reliable,
         "sentimento": sentimento.label,
         "sentimento_score": round(sentimento.score, 3),
         "termos_criticos_encontrados": len(hits),
+        "termos_criticos": [
+            {"termo": h.term, "contexto": h.context} for h in hits
+        ],
         "fadiga_vocal_score": round(fadiga, 3),
         "fadiga_vocal_detectada": fatigado,
-        "transcript_confiavel": transcript.reliable,
+        "jitter": features.jitter_local,
+        "shimmer": features.shimmer_local,
+        "hnr_db": features.hnr_db,
     }
-    (destino / f"{stem}-summary.json").write_text(
-        json.dumps(metadados, indent=2, ensure_ascii=False), encoding="utf-8"
+
+    evidencia = save_evidence(
+        feature="audio",
+        run_id=run_id,
+        evidence_id=evidencia_id,
+        source_record_id=stem,
+        artifact_path=artefato_txt,
+        metadata=metadados,
+        modality="audio",
+        event_type=event_type,
+        severity=severity,
+        confidence=0.85 if (hits or fatigado) else 0.5,
+        status="positive" if (hits or fatigado) else "negative",
     )
 
     # Monta resumo clínico
     partes: list[str] = []
 
     if hits:
-        termos_encontrados = ", ".join(sorted({h.term for h in hits}))
-        partes.append(f"termo(s) crítico(s) encontrado(s): {termos_encontrados}")
+        partes.append(f"termo(s) crítico(s) encontrado(s): {', '.join(termos_encontrados)}")
+
+    if fatigado:
+        partes.append("suspeita de fadiga vocal")
 
     if sentimento.label != "neutro":
         partes.append(f"sentimento {sentimento.label}")
@@ -819,6 +849,7 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
         return ResultadoAnalise(
             resumo="Áudio de consulta sem alterações relevantes detectadas.",
             pontuacao=0.0,
+            evidencia_id=evidencia.evidence_id,
             detalhes=metadados,
         )
 
@@ -834,7 +865,7 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
     return ResultadoAnalise(
         resumo=resumo.capitalize(),
         pontuacao=pontuacao,
-        evidencia_id=evidencia_id,
+        evidencia_id=evidencia.evidence_id,
         detalhes=metadados,
     )
 

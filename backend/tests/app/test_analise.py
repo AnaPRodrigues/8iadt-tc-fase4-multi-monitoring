@@ -381,6 +381,18 @@ def test_audio_sem_txt_roteia_para_consulta_nao_para_respiratorio(monkeypatch, t
     assert r.pontuacao is not None
     assert "dor no peito" in r.resumo.lower()
     assert r.detalhes.get("termos_criticos_encontrados", 0) >= 1
+    # AUDIO-01: evidência consolidada com campos do novo contrato
+    assert r.evidencia_id is not None
+    assert "consulta" in r.evidencia_id
+    # verifica que o sidecar JSON foi escrito
+    import json
+    sidecar = tmp_path / "output" / "audio" / "teste-consulta" / f"{r.evidencia_id}.json"
+    assert sidecar.is_file(), f"sidecar não encontrado: {sidecar}"
+    payload = json.loads(sidecar.read_text())
+    assert payload["modality"] == "audio"
+    assert payload["severity"] in ("MEDIUM", "HIGH")
+    assert payload["status"] == "positive"
+    assert len(payload["metadata"]["termos_criticos"]) >= 1
 
 
 def test_audio_com_txt_roteia_para_respiratorio(monkeypatch, tmp_path):
