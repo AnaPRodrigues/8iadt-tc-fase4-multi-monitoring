@@ -165,9 +165,42 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
         )
         consolidated.extend(physio_findings)
 
+    # Determina o tipo de achado principal (queda ou fisioterapia)
     fall_findings = [c for c in consolidated if c.finding_type == "FALL_DETECTED"]
-    if not fall_findings:
-        return ResultadoAnalise(resumo="Sem queda detectada no período monitorado.", pontuacao=0.0)
+    physio_findings = [c for c in consolidated if c.finding_type != "FALL_DETECTED"]
+
+    if not fall_findings and not physio_findings:
+        return ResultadoAnalise(resumo="Sem alterações detectadas no período monitorado.", pontuacao=0.0)
+
+    # Se há achados de fisioterapia mas não queda, usa o mais relevante
+    if not fall_findings and physio_findings:
+        principal = max(physio_findings, key=lambda c: c.score)
+        safe_idx = min(principal.frame_index, len(seq.frame_paths) - 1)
+        # Obtém a primeira pose válida para desenhar evidência
+        evidence_pose = None
+        if safe_idx < len(all_poses) and all_poses[safe_idx]:
+            for p in all_poses[safe_idx]:
+                if p is not None:
+                    evidence_pose = p
+                    break
+        if evidence_pose is None:
+            return ResultadoAnalise(
+                resumo=" | ".join(pf.description for pf in physio_findings) + ".",
+                pontuacao=float(principal.score),
+                detalhes={"findings": [pf.description for pf in physio_findings]},
+            )
+        evidencia = save_postural_evidence(
+            finding=principal,
+            frame_path=seq.frame_paths[safe_idx],
+            pose_frame=evidence_pose,
+            run_id=run_id,
+        )
+        return ResultadoAnalise(
+            resumo=" | ".join(pf.description for pf in physio_findings) + ".",
+            pontuacao=float(principal.score),
+            evidencia_id=evidencia.evidence_id,
+            detalhes={"quadro": safe_idx, "findings": [pf.description for pf in physio_findings]},
+        )
 
     principal = fall_findings[0]
     # Usa peak_frame (pico Vy) e find_pose_by_track_id para a pessoa certa
@@ -356,9 +389,6 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         )
 
         # -- Análise de fisioterapia: ROM, assimetria, amplitude de movimento.
-        #    Executada adicionalmente ao detector de queda, para a pessoa
-        #    principal. Mede ângulos ao longo de toda a sequência (não apenas
-        #    streaks contínuas) e deteta assimetrias esquerda/direita.
         from pipelines.video.pose_detector import detect_physiotherapy_findings
         from pipelines.video.pose_features import group_poses_by_track_id
 
@@ -372,6 +402,13 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
                 main_track[1], fps=video_fps,
             )
             consolidated.extend(physio_findings)
+            # Atualiza resumo e pontuação com os achados de fisioterapia
+            if physio_findings:
+                for pf in physio_findings:
+                    pontuacao = max(pontuacao, pf.score)
+                if pontuacao > 0 and resumo == "Sem alterações detectadas.":
+                    nomes = sorted({pf.finding_type for pf in physio_findings})
+                    resumo = " | ".join(pf.description for pf in physio_findings) + "."
 
         todos_detalhes: dict = {
             "quadros_analisados": len(frame_paths),

@@ -1173,7 +1173,7 @@ def save_postural_evidence(
     from pipelines.video.pose_evidence import draw_annotated_frame
 
     source_id = Path(frame_path).stem
-    joint_slug = finding.joint_name or "tilt"
+    joint_slug = (finding.joint_name or "tilt").replace("/", "-")
     evidence_id = f"{source_id}-{joint_slug}-{finding.measured_angle:.0f}deg"
 
     dest_dir = evidence_dir("video_pose", run_id, root)
