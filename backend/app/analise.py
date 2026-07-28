@@ -152,19 +152,19 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
 
     # -- Análise de fisioterapia adicional
     from pipelines.video.pose_detector import detect_physiotherapy_findings
-    from pipelines.video.pose_features import group_poses_by_track_id, is_recumbent
+    from pipelines.video.pose_features import group_poses_by_track_id, hip_center
 
     person_timelines = group_poses_by_track_id(all_poses)
     if person_timelines:
-        # Seleciona a pessoa deitada (paciente), não o fisioterapeuta de pé
-        recumbent_tracks = {
-            tid: frames for tid, frames in person_timelines.items()
-            if is_recumbent(frames)
-        }
-        target = recumbent_tracks if recumbent_tracks else person_timelines
+        # Seleciona a pessoa mais baixa no frame (maior Y do quadril)
+        def _avg_hip_y(person_frames):
+            ys = [hip_center(f)[1] for f in person_frames
+                  if f is not None and hip_center(f) is not None]
+            return sum(ys) / len(ys) if ys else 0.0
+
         main_track = max(
-            target.items(),
-            key=lambda kv: sum(1 for f in kv[1] if f is not None),
+            person_timelines.items(),
+            key=lambda kv: _avg_hip_y(kv[1]),
         )
         physio_findings = detect_physiotherapy_findings(
             main_track[1], fps=30.0,
@@ -396,21 +396,22 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
 
         # -- Análise de fisioterapia: ROM, assimetria, amplitude de movimento.
         from pipelines.video.pose_detector import detect_physiotherapy_findings
-        from pipelines.video.pose_features import group_poses_by_track_id, is_recumbent
+        from pipelines.video.pose_features import group_poses_by_track_id, hip_center
 
         person_timelines = group_poses_by_track_id(all_poses)
         if person_timelines:
-            # Seleciona a pessoa deitada (a paciente na maca), não o
-            # fisioterapeuta de pé. Se houver mais de uma pessoa deitada,
-            # escolhe a com mais frames válidos.
-            recumbent_tracks = {
-                tid: frames for tid, frames in person_timelines.items()
-                if is_recumbent(frames)
-            }
-            target = recumbent_tracks if recumbent_tracks else person_timelines
+            # Seleciona a pessoa mais baixa no frame (maior Y do quadril).
+            # A paciente está deitada na maca (hip_y ≈ 0.90) enquanto o
+            # fisioterapeuta está de pé (hip_y ≈ 0.64). O is_recumbent()
+            # não distingue porque o threshold é 0.45 — ambos passam.
+            def _avg_hip_y(person_frames):
+                ys = [hip_center(f)[1] for f in person_frames
+                      if f is not None and hip_center(f) is not None]
+                return sum(ys) / len(ys) if ys else 0.0
+
             main_track = max(
-                target.items(),
-                key=lambda kv: sum(1 for f in kv[1] if f is not None),
+                person_timelines.items(),
+                key=lambda kv: _avg_hip_y(kv[1]),
             )
             physio_findings = detect_physiotherapy_findings(
                 main_track[1], fps=video_fps,
