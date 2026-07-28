@@ -86,7 +86,7 @@ def _para_upload_schema(u: repositorio.Upload) -> UploadSchema:
 
 @app.post("/patients/{paciente_id}/uploads", response_model=UploadSchema, status_code=201)
 async def enviar_arquivo(
-    paciente_id: str, modalidade: str, arquivo: UploadFile = File(...)  # noqa: B008
+    paciente_id: str, modalidade: str, arquivos: list[UploadFile] = File(...)  # noqa: B008
 ) -> UploadSchema:
     if repositorio.obter_paciente(paciente_id) is None:
         raise HTTPException(status_code=404, detail=f"paciente inexistente: {paciente_id}")
@@ -96,11 +96,22 @@ async def enviar_arquivo(
             detail=f"modalidade inválida: {modalidade!r} "
             f"(esperado uma de {', '.join(repositorio.MODALIDADES)})",
         )
-    conteudo = await arquivo.read()
-    nome = arquivo.filename or "arquivo"
-    caminho = armazenamento.salvar_arquivo(paciente_id, modalidade, nome, conteudo)
-    u = repositorio.criar_upload(paciente_id, modalidade, str(caminho), nome)
-    atividade.arquivo_recebido(paciente_id, modalidade, nome, len(conteudo))
+    if not arquivos:
+        raise HTTPException(status_code=422, detail="nenhum arquivo enviado")
+
+    # Salva todos os ficheiros na mesma diretoria. Para modalidades como
+    # sinais_vitais, que precisam de .dat + .hea, ambos ficam lado a lado.
+    caminhos: list[str] = []
+    for f in arquivos:
+        conteudo = await f.read()
+        nome = f.filename or "arquivo"
+        caminho = armazenamento.salvar_arquivo(paciente_id, modalidade, nome, conteudo)
+        caminhos.append(str(caminho))
+        atividade.arquivo_recebido(paciente_id, modalidade, nome, len(conteudo))
+
+    # O registo usa o primeiro ficheiro como nome representativo.
+    nome_principal = (arquivos[0].filename or "arquivo")
+    u = repositorio.criar_upload(paciente_id, modalidade, caminhos[0], nome_principal)
     return _para_upload_schema(u)
 
 

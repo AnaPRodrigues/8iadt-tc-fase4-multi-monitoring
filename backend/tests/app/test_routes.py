@@ -59,7 +59,7 @@ def test_enviar_arquivo_e_listar_uploads():
     envio = client.post(
         f"/patients/{pid}/uploads",
         params={"modalidade": "documento"},
-        files={"arquivo": ("receita.pdf", b"conteudo", "application/pdf")},
+        files=[("arquivos", ("receita.pdf", b"conteudo", "application/pdf"))],
     )
     assert envio.status_code == 201
     assert envio.json()["situacao"] == "recebido"
@@ -76,7 +76,7 @@ def test_enviar_arquivo_modalidade_invalida_recusa():
     resp = client.post(
         f"/patients/{pid}/uploads",
         params={"modalidade": "raio-x"},
-        files={"arquivo": ("x.bin", b"x", "application/octet-stream")},
+        files=[("arquivos", ("x.bin", b"x", "application/octet-stream"))],
     )
     assert resp.status_code == 422
 
@@ -85,7 +85,7 @@ def test_enviar_arquivo_para_paciente_inexistente_404():
     resp = client.post(
         "/patients/nao-existe/uploads",
         params={"modalidade": "documento"},
-        files={"arquivo": ("x.pdf", b"x", "application/pdf")},
+        files=[("arquivos", ("x.pdf", b"x", "application/pdf"))],
     )
     assert resp.status_code == 404
 
@@ -97,7 +97,7 @@ def _upload(pid, modalidade="documento"):
     return client.post(
         f"/patients/{pid}/uploads",
         params={"modalidade": modalidade},
-        files={"arquivo": ("f.pdf", b"x", "application/pdf")},
+        files=[("arquivos", ("f.pdf", b"x", "application/pdf"))],
     ).json()["id"]
 
 
