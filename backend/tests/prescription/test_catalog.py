@@ -89,3 +89,34 @@ def test_controlled_substances_lista_apenas_controlados():
 def test_catalogo_tem_24_ou_mais_farmacos():
     """O catálogo expandido cobre as 4 listas ANVISA + não controlados."""
     assert len(catalog.all_drugs()) >= 24
+
+
+# --- PRESC-10: DrugRange.criticality (spec prescription-criticality) ---
+
+def test_medicamento_risco_baixo_tem_criticality_1():
+    """PRESC-10: dipirona e paracetamol são risco baixo (criticality=1)."""
+    for nome in ("dipirona", "paracetamol", "ibuprofeno", "amoxicilina"):
+        entry = catalog.lookup(nome)
+        assert entry is not None, f"{nome} ausente do catálogo"
+        assert entry.criticality == 1, f"{nome} devia ser criticality=1, é {entry.criticality}"
+
+
+def test_medicamento_risco_medio_tem_criticality_2():
+    """PRESC-10: tramadol e codeína são risco médio (criticality=2)."""
+    for nome in ("tramadol", "codeína"):
+        entry = catalog.lookup(nome)
+        assert entry is not None, f"{nome} ausente do catálogo"
+        assert entry.criticality == 2, f"{nome} devia ser criticality=2, é {entry.criticality}"
+
+
+def test_medicamento_alta_vigilancia_tem_criticality_3():
+    """PRESC-10: morfina, fentanil, metadona são MAV (criticality=3)."""
+    for nome in ("morfina", "fentanil", "metadona"):
+        entry = catalog.lookup(nome)
+        assert entry is not None, f"{nome} ausente do catálogo"
+        assert entry.criticality == 3, f"{nome} devia ser criticality=3, é {entry.criticality}"
+
+
+def test_lookup_medicamento_desconhecido_retorna_none_sem_fallback():
+    """PRESC-10: lookup de fármaco inexistente retorna None (sem_referencia)."""
+    assert catalog.lookup("medicamento-inventado-xyz") is None
