@@ -629,10 +629,11 @@ def validate_fall_dynamic(
                 max_vy = max_vertical_velocity(vy_list) / norm_factor
                 total_dy = total_displacement(vy_list) / norm_factor
 
-                # Cap físico: ninguém move mais de 50% do torso num frame
-                # nem se desloca mais de 10× o torso. Vy acima disto é
-                # glitch de deteção (bbox a saltar entre pessoas/objetos).
-                max_vy = min(max_vy, 0.5)
+                # Cap físico: Vy acima de 1.5 body-heights/frame é glitch.
+                # O cap anterior (0.5) era demasiado restritivo e produzia
+                # scores artificialmente idênticos (0.5000) para qualquer
+                # queda com Vy real ≥ 0.5.
+                max_vy = min(max_vy, 1.5)
                 total_dy = min(total_dy, 10.0)
 
                 # Queda = Pico Vy + deslocamento total + tilt
@@ -852,8 +853,15 @@ def analyze_all_persons(
         # Fallback single-person (sem tracking)
         return ("Sem alterações detectadas.", 0.0, [], details)
 
-    # Conta apenas pessoas reais (com track_id), não ghosts do MediaPipe
-    n_pessoas_reais = len(person_timelines)
+    # Conta apenas tracks com ≥5% de cobertura — tracks com 1-2 frames
+    # são ghosts do MediaPipe (objetos, sombras) e não devem ativar
+    # thresholds multi-pessoa mais restritivos.
+    n_pessoas_reais = sum(
+        1 for frames in person_timelines.values()
+        if len(frames) > 0 and sum(1 for f in frames if f is not None) / len(frames) >= 0.05
+    )
+    if n_pessoas_reais == 0:
+        return ("Sem alterações detectadas.", 0.0, [], details)
 
     for track_id, person_frames in person_timelines.items():
         # Filtro de cobertura temporal: tracks com < 5% de frames
@@ -936,6 +944,11 @@ def analyze_all_persons(
                     fall_desc = desc
                     if vy_fallback:
                         fall_desc = f"[Vy-primary] {desc}"
+                    # Score heurístico baseado em Vy normalizado.
+                    # O cap físico de 0.5 foi removido — o score reflete
+                    # a magnitude real do Vy, escalado para [0, 1].
+                    # Vy ≥ 0.40 → score ≈ 1.0; Vy = 0.10 → score = 0.25.
+                    fall_score = round(min(1.0, vy_score / 0.40), 3)
                     all_findings.append(PosturalFinding(
                         finding_type="FALL_DETECTED",
                         joint_name=None,
@@ -943,7 +956,7 @@ def analyze_all_persons(
                         expected_angle=0.10,
                         duration_s=0.0,
                         frame_index=peak or 0,
-                        score=min(1.0, vy_score),
+                        score=fall_score,
                         description=fall_desc,
                         track_id=tid,
                         peak_frame=peak,
