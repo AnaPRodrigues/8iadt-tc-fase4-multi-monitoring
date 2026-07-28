@@ -177,36 +177,114 @@ make test
 
 ---
 
-## Rodar o painel localmente (API + interface)
+## Rodar o sistema
 
-São **dois processos**, cada um num terminal:
+O sistema funciona em dois modos — **local** (padrão) e **aws**. Em ambos os casos
+são dois processos (API + interface), cada um no seu terminal.
+
+### Modo local (padrão — não precisa de nada na nuvem)
+
+No modo local, todo o processamento roda na própria máquina: extração de PDF por
+pdfplumber, deteção de objetos por YOLOv8 local. **Não precisa de credencial, rede,
+Docker, nem conta AWS.**
 
 ```bash
 # Terminal 1 — a API (fica em http://localhost:8000)
 make serve-api
 
-# Terminal 2 — a interface (abre em http://localhost:5173; rode make frontend-install antes na 1a vez)
+# Terminal 2 — a interface (abre em http://localhost:5173; na 1ª vez: make frontend-install)
 make serve-front
 ```
 
-Abra `http://localhost:5173`, cadastre um paciente e envie arquivos para ele — ou rode
-`make seed-demo` para já ter 3 pacientes com dados reais (queda + monitoramento fetal,
-cirurgia + prescrição, ausculta + internação), sem precisar cadastrar nada na mão. As
-portas são ajustáveis: `make serve-api API_PORT=9000` e `make serve-front API_PORT=9000`
-sobem o par noutra porta.
+Abra `http://localhost:5173`, cadastre um paciente e envie arquivos — ou rode
+`make seed-demo` para criar 3 pacientes de demonstração com dados reais.
 
-**Log de atividade no terminal.** Enquanto a API roda, o terminal mostra, de forma
-legível, o que o sistema está fazendo — arquivo recebido, início/fim de cada análise,
-cálculo de risco e alertas — com a **origem do processamento marcada**: `[LOCAL]` quando
-resolvido na própria máquina, `[AWS]` quando houve chamada a um serviço gerenciado (com
-o serviço, a duração e o id da resposta). Exemplo:
+### Modo AWS (Textract + Rekognition)
+
+No modo `aws`, o sistema delega duas tarefas a serviços gerenciados da AWS:
+
+- **Prescrições**: chama `Textract.analyze_document()` em vez do pdfplumber local
+- **Vídeo cirúrgico**: chama `Rekognition.detect_labels()` em vez do YOLOv8 local
+- **Tudo o resto** (áudio, sinais vitais, pose): continua 100% local
+
+A troca é controlada por **um ficheiro `.env`** e **credenciais no ambiente**.
+Nenhum código muda — o factory de cliente (`backend/aws/clients.py`) injeta o
+endpoint correto e os adapters (`backend/aws/adapters/`) isolam a diferença.
+
+#### 1. Criar o ficheiro `.env`
+
+Na raiz do projeto, ao lado do `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+Edite o `.env` e mude `ENV=local` para `ENV=aws`:
+
+```ini
+ENV=aws
+AWS_REGION=us-east-1
+```
+
+*(`AWS_REGION` já vem preenchida com `us-east-1` — é a região do Learner Lab. O
+`.env` está no `.gitignore` e não vai parar no Git.)*
+
+#### 2. Exportar as credenciais da AWS
+
+O sistema usa a cadeia de credenciais padrão do boto3. **No terminal onde a API
+vai rodar**, exporte as variáveis da sua sessão AWS:
+
+```bash
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_SESSION_TOKEN=...
+```
+
+No **AWS Academy Learner Lab**, estas variáveis aparecem no painel "AWS Details"
+do ambiente de laboratório. Basta copiá-las e colá-las no terminal.
+
+Se preferir usar um perfil nomeado (ex.: `AWS_PROFILE=lab`), certifique-se de que
+ele está configurado em `~/.aws/credentials`.
+
+#### 3. Subir a API e a interface
+
+```bash
+# Terminal 1 — API (agora com ENV=aws + credenciais no ambiente)
+make serve-api
+
+# Terminal 2 — interface (igual ao modo local)
+make serve-front
+```
+
+#### 4. Confirmar que está a usar a nuvem
+
+O terminal da API mostra a origem de cada processamento. Com `ENV=aws`, as
+chamadas aos serviços gerenciados aparecem com a etiqueta `[AWS]`:
 
 ```
-14:32:07 [paciente:p-0007] arquivo recebido — modalidade=áudio, consulta_01.wav (2.3 MB)
-14:32:11 [áudio][LOCAL] classificando ciclos respiratórios (treino sob demanda)
-14:32:12 [risco] pontuação 0.31 -> 0.55 — nível AMARELO
-14:35:04 [prescrição][AWS] 34 blocos extraídos em 1.8s — requestId=a1b2c3d4
+14:35:04 [prescrição][AWS] Textract analyze_document — 34 blocos extraídos em 1.8s — requestId=a1b2c3d4
+14:35:10 [vídeo][AWS] Rekognition detect_labels — 12 rótulos em 0.9s — requestId=e5f6g7h8
 ```
+
+No modo `local` essas mesmas linhas mostram `[LOCAL]` (pdfplumber / YOLOv8).
+Assim é fácil ver, durante a demonstração, que as chamadas de nuvem são reais.
+
+#### Resumo: o que muda entre modos
+
+| | `local` (padrão) | `aws` |
+|---|---|---|
+| Extração de texto de PDF | pdfplumber | Amazon Textract |
+| Rótulos de objeto em imagem | YOLOv8 local | Amazon Rekognition |
+| Áudio, pose, sinais vitais | sempre local | sempre local |
+| Precisa de `.env`? | não (não lê o ficheiro) | sim (`ENV=aws`) |
+| Precisa de credenciais? | não | sim (variáveis de ambiente) |
+| Precisa de rede? | não | sim |
+| Docker? | não | não |
+
+**Nota sobre a nuvem.** O enunciado original sugere Azure Cognitive Services; este
+projeto usa **AWS** (Textract/Rekognition) como equivalente gerenciado. A
+justificativa e o mapeamento serviço-a-serviço estão no relatório técnico
+([`docs/relatorio-tecnico.md`](docs/relatorio-tecnico.md)).
 
 ---
 
@@ -341,26 +419,19 @@ YOLOv8n vs. YOLOv8s e publicando o melhor), veja
 
 ---
 
-## Dois modos de operação (`ENV`)
+## Log de atividade
 
-O sistema tem dois modos, escolhidos pela variável de ambiente `ENV`:
+Enquanto a API roda, o terminal mostra cada passo com a **origem do processamento
+marcada**: `[LOCAL]` quando resolvido na própria máquina, `[AWS]` quando houve
+chamada a um serviço gerenciado (com o serviço, a duração e o `requestId` da
+resposta AWS). Exemplo:
 
-- **`local` (padrão)** — todo o processamento roda na máquina, **sem nenhuma chamada de
-  nuvem**: extração de PDF por pdfplumber, rótulos de imagem pelo modelo YOLOv8 local.
-  Não precisa de credencial, rede nem Docker. É o modo usado para desenvolver, testar e
-  rodar a demonstração completa.
-- **`aws`** — usa **exatamente dois serviços gerenciados**, chamados de forma síncrona
-  com o arquivo embutido na requisição (sem bucket intermediário): **Amazon Textract**
-  (`analyze_document`) para extrair texto/campos de prescrições e **Amazon Rekognition**
-  (`detect_labels`) para rótulos de objetos em quadros de vídeo. O resultado volta para
-  o processamento local. Nenhum outro serviço de nuvem é usado.
-
-Trocar de modo é trocar a variável `ENV` — o resto do código é idêntico.
-
-> **Nota sobre a nuvem.** O enunciado sugere Azure Cognitive Services; este projeto usa
-> **AWS** (Textract/Rekognition) como equivalente gerenciado. A justificativa e o
-> mapeamento serviço-a-serviço estão no relatório técnico
-> ([`docs/relatorio-tecnico.md`](docs/relatorio-tecnico.md)).
+```
+14:32:07 [paciente:p-0007] arquivo recebido — modalidade=áudio, consulta_01.wav (2.3 MB)
+14:32:11 [áudio][LOCAL] classificando ciclos respiratórios (treino sob demanda)
+14:32:12 [risco] pontuação 0.31 -> 0.55 — nível AMARELO
+14:35:04 [prescrição][AWS] Textract analyze_document — 34 blocos em 1.8s — requestId=a1b2c3d4
+```
 
 ---
 
