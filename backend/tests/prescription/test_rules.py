@@ -1,5 +1,5 @@
 from pipelines.prescription.models import PrescriptionRecord
-from pipelines.prescription.rules import check_abrupt_change, check_dose_range, regulatory_info
+from pipelines.prescription.rules import check_abrupt_change, check_dose_range, evaluate_prescription, regulatory_info
 
 
 def _record(drug="paracetamol", dose=500, unit="mg", patient_id="p1", ts="2026-01-01T00:00:00"):
@@ -159,3 +159,42 @@ def test_substituicao_farmaco_anterior_fora_do_catalogo():
     result = check_high_risk_substitution(current, previous)
     # previous desconhecido → assume criticality=0; atual=3 → salto ≥2 → crítico
     assert result.kind == "substituicao_critica"
+
+
+# --- PRESC-12: evaluate_prescription (spec prescription-criticality) ---
+
+def test_evaluate_prescription_dose_fora_de_faixa_primeiro_que_substituicao():
+    """PRESC-12: dose_fora_de_faixa deve vir antes de substituicao_critica (mais grave).
+
+    dipirona(crit=1, faixa 500–1000mg) → morfina 200mg(crit=3, faixa 10–60mg):
+    dispara dose_fora_de_faixa (200 fora de [10,60]) E substituicao_critica
+    (salto crit=1→3). O resultado de dose deve aparecer antes na lista.
+    """
+    previous = _record(drug="dipirona", dose=500)
+    # morfina 200mg — fora da faixa [10, 60] E salto de crit 1→3
+    current = _record(drug="morfina", dose=200, unit="mg")
+    results = evaluate_prescription(current, previous)
+
+    # a lista deve ter as 3 regras: [dose, substituicao, mudanca_abrupta]
+    kinds = [r.kind for r in results]
+    assert kinds[0] == "dose_fora_de_faixa", (
+        f"dose_fora_de_faixa devia ser o primeiro (mais grave), mas a ordem foi {kinds}"
+    )
+    assert "substituicao_critica" in kinds
+    # mudanca_abrupta não se aplica (fármacos diferentes)
+    assert kinds[2] == "normal"
+
+
+def test_evaluate_prescription_sem_anomalias_todas_regras_normal():
+    """PRESC-12: sem anomalias → todos os resultados têm kind='normal'.
+
+    paracetamol 500mg está na faixa [500, 1000]; sem histórico não dispara
+    nem substituição nem variação abrupta.
+    """
+    results = evaluate_prescription(_record(drug="paracetamol", dose=500), previous=None)
+
+    assert len(results) == 3  # dose, substituicao, mudanca_abrupta
+    for r in results:
+        assert r.kind == "normal", (
+            f"esperado 'normal' para todas as regras, mas obteve kind='{r.kind}': {r.reason}"
+        )
