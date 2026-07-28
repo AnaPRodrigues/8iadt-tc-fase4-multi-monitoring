@@ -560,8 +560,11 @@ def validate_fall_dynamic(
     _MIN_TOTAL_DISPLACEMENT = 0.20
     _MIN_VERTICAL_VELOCITY_FLOOR = 0.01
 
-    # Escala FPS: converte Vy de "por frame" para "por 1/30s"
-    _fps_scale_vd = 30.0 / max(fps, 1.0)
+    # Escala FPS: converte Vy de "por frame" para "por 1/30s".
+    # A 120 fps o delta por frame é 4× menor que a 30 fps; multiplicar
+    # por (fps/30) compensa — 120/30 = 4×. O valor antigo (30/fps) estava
+    # invertido e subestimava Vy em vídeos de alta taxa.
+    _fps_scale_vd = max(fps, 1.0) / 30.0
 
     # Determina se é cena multi-pessoa para thresholds adaptativos (C2)
     effective_n_pessoas = n_pessoas
@@ -908,15 +911,21 @@ def analyze_all_persons(
                 # da bbox mas o Y do quadril nunca varia significativamente.
                 # Usa a amplitude total de Y (max-min) em vez do deslocamento
                 # líquido — uma pessoa que cai e se levanta tem net≈0 mas
-                # amplitude total grande (>0.10).
+                # amplitude total grande (>0.10). Só aplica o filtro quando
+                # há ≥10 pontos de quadril com visibilidade ≥0.4 — com
+                # poucos pontos, o y_range é pequeno por falta de dados,
+                # não por ser um objeto estático.
                 y_vals = [lm[1] for f in person_frames if f is not None
                           for lm in [f.landmarks[23], f.landmarks[24]]
                           if lm[3] >= 0.4]
-                y_range = max(y_vals) - min(y_vals) if len(y_vals) >= 10 else 0.0
-                if y_range < 0.10:
-                    fall_verdict = "adl"  # ghost: Y do quadril não varia
+                if len(y_vals) >= 10:
+                    y_range = max(y_vals) - min(y_vals)
+                    if y_range < 0.10:
+                        fall_verdict = "adl"  # ghost: Y do quadril não varia
+                else:
+                    y_range = 0.0  # dados insuficientes — não filtra
 
-                min_vy = 0.02 if not vy_fallback else 0.04
+                min_vy = 0.02  # mesmo piso para ambos os caminhos
                 verdict, _, vy_score, desc, tid, peak = validate_fall_dynamic(
                     fall_verdict, fall_frame_idx, velocities, min_vy,
                     all_poses_per_frame=all_poses_per_frame,

@@ -234,10 +234,11 @@ def vertical_velocity_robust(
             velocities.append(None)
             continue
 
-        # Tenta quadril primeiro; fallback para upper body
+        # Usa apenas o quadril — sem fallback para upper body.
+        # O upper body (nariz+ombros) tem Y ~0.1-0.2 enquanto o quadril
+        # tem Y ~0.4-0.7; a transição entre eles gera um spike artificial
+        # de Vy que parece uma queda (falso positivo).
         center = hip_center(frame)
-        if center is None:
-            center = _upper_body_center(frame)
 
         if center is None:
             gap_count += 1
