@@ -193,13 +193,26 @@ def _carregar_evidencia(evidencia_id: str) -> Evidence | None:
             source_record_id=raw["source_record_id"],
             artifact_path=sidecar.parent / raw["artifact"],
             sidecar_path=sidecar,
+            modality=raw.get("modality", ""),
+            event_type=raw.get("event_type", ""),
+            severity=raw.get("severity", "MEDIUM"),
+            confidence=float(raw.get("confidence", 0)),
+            timestamp=raw.get("timestamp", ""),
+            patient_id=raw.get("patient_id", ""),
+            status=raw.get("status", "positive"),
         )
     return None
 
 
 def _eventos_do_paciente(paciente: repositorio.Paciente) -> list[FusionEvent]:
     """Converte as análises com achado (pontuação > 0 e evidência) em eventos de
-    fusão. Análises sem anomalia não contribuem para o risco."""
+    fusão. Análises sem anomalia não contribuem para o risco.
+
+    A severidade do FusionEvent é derivada do campo ``severity`` do sidecar de
+    evidência (INFO/LOW/MEDIUM/HIGH/CRITICAL) via ``severity_weight()`` —
+    eventos CRITICAL (ex.: queda) pesam 20× mais que INFO (ex.: sentimento)."""
+    from common.evidence import severity_weight
+
     eventos: list[FusionEvent] = []
     for a in repositorio.listar_analises_do_paciente(paciente.id):
         if not a.pontuacao or a.resultado.get("evidencia_id") is None:
@@ -207,11 +220,13 @@ def _eventos_do_paciente(paciente: repositorio.Paciente) -> list[FusionEvent]:
         evidencia = _carregar_evidencia(a.resultado["evidencia_id"])
         if evidencia is None:
             continue
+        # severidade derivada do nível semântico (não da pontuação bruta)
+        severidade = severity_weight(evidencia.severity)
         eventos.append(
             FusionEvent(
                 modality=_MODALIDADE_FUSAO.get(a.modalidade, a.modalidade),
                 demo_timestamp_s=_instante_s(paciente, a),
-                severity=float(a.pontuacao),
+                severity=severidade,
                 summary=a.resultado.get("resumo", ""),
                 evidence=evidencia,
             )
@@ -275,6 +290,30 @@ def _reavaliar_alertas(paciente_id: str) -> None:
 
 
 def _motivo_clinico(ponto: RiskPoint) -> str:
-    """Motivo do alerta em linguagem clínica, juntando os resumos das modalidades
-    que contribuíram."""
-    return " + ".join(e.summary for e in ponto.contributing_events) or "risco elevado"
+    """Motivo do alerta em linguagem clínica com tempos relativos.
+
+    Exemplo: "Queda detectada (há 12s) + SpO2 baixa (há 20s) + 'falta de ar' (há 8s)"."""
+    partes: list[str] = []
+    for e in ponto.contributing_events:
+        delta_s = round(ponto.t - e.demo_timestamp_s)
+        if delta_s <= 1:
+            quando = "agora"
+        elif delta_s < 60:
+            quando = f"há {delta_s}s"
+        elif delta_s < 3600:
+            quando = f"há {delta_s // 60}min"
+        else:
+            quando = f"há {delta_s // 3600}h"
+        partes.append(f"[{e.modality}] {e.summary} ({quando})")
+
+    if not partes:
+        return "risco elevado"
+
+    # Adiciona contribuição de cada modalidade
+    if len(ponto.contributions) > 1:
+        contrib = " | ".join(
+            f"{mod}: {val:.2f}" for mod, val in sorted(ponto.contributions.items())
+        )
+        partes.append(f"(contribuições: {contrib})")
+
+    return " — ".join(partes)

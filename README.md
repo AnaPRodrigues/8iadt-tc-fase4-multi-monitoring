@@ -15,11 +15,11 @@ equipe automaticamente quando algo preocupante é detectado.
 
 | Modalidade | O que analisa | Técnica / modelo |
 | --- | --- | --- |
-| **Vídeo — movimentação** | Postura, quedas (com filtro dinâmico de velocidade), desvios posturais, ângulos articulares, inclinação de tronco | MediaPipe Pose + detector de pessoas configurável (YOLOv8n / YOLO-NAS via ONNX ou SuperGradients) + rastreamento persistente de identidade (IoU tracker) + filtro temporal $V_y$ anti-falso-positivo |
+| **Vídeo — movimentação** | Postura, quedas (detecção em 2 estágios com validação temporal), desvios posturais, ângulos articulares, inclinação de tronco, agitação, saída do leito, convulsão | MediaPipe Pose + detector de pessoas (YOLOv8n / YOLO-NAS ONNX) + tracking IoU com gate de distância + validação dinâmica $V_y$ normalizada por altura corporal + restrições temporais (descida sustentada, deslocamento líquido) + escalonamento por FPS |
 | **Vídeo — cirurgia** | Estruturas anatômicas críticas em vídeo cirúrgico (keyframes a cada 2s) | YOLOv8 fine-tuned (Endoscapes) com evidência anotada (bboxes) |
 | **Áudio** | Sons respiratórios (com anotação ICBHI) ou consultas (transcrição, termos críticos, fadiga vocal) — dispatch automático | Random Forest + faster-whisper + Parselmouth (jitter/shimmer/HNR) |
 | **Sinais vitais** | Séries temporais: cardiotocografia fetal (CTU-UHB) e internação adulta com HR/SpO2 (BIDMC) | z-score móvel + Isolation Forest sobre janelas |
-| **Prescrições** | Lê receitas em PDF, verifica dose fora da faixa e variação abrupta; geração avulsa de prescrições sintéticas | Extração de texto (pdfplumber/Textract) + regras clínicas + gerador standalone |
+| **Prescrições** | Lê receitas em PDF, verifica dose, classificação ANVISA (A1/A2/B1/C1), princípio ativo e variação abrupta; geração avulsa de prescrições sintéticas | Extração de texto (pdfplumber/Textract) + regras clínicas + catálogo ANVISA (Portaria 344/98) + gerador standalone |
 | **Fusão e alerta** | Combina as análises num indicador de risco (verde/amarelo/vermelho) com alerta explicável local | Late fusion ponderada com decaimento temporal + histerese |
 | **Painel** | Pacientes, envios, linha do tempo de risco, alertas e drill-down de evidência | React + Vite sobre a API |
 
@@ -277,6 +277,30 @@ frames consecutivos:
 - O rastreador é reiniciado automaticamente entre sequências distintas.
 
 Não requer configuração adicional — o tracking está sempre ativo.
+
+### Algoritmo de deteção de quedas
+
+O detector de quedas opera em dois estágios com múltiplas vias de deteção e restrições temporais:
+
+**Estágio 1 — Amplitude do centro de massa**: calcula a amplitude máxima do centro de massa (ponto médio dos quadris) em janelas deslizantes de 30 frames com 50% de overlap. Se alguma janela exceder o limiar (0.25, em coordenadas normalizadas), avança para o Estágio 2.
+
+**Estágio 2 — Validação dinâmica**: confirma a queda verificando três condições simultâneas:
+- **Velocidade vertical ($V_y$)**: pico de $V_y$ sustentado por ≥2 frames consecutivos (filtra glitches de deteção)
+- **Deslocamento total**: soma dos $V_y$ positivos (descida acumulada)
+- **Inclinação do tronco**: ângulo da espinha ≥ 25° (single) / 35° (multi-pessoa)
+
+**Via complementar Vy-primary**: para quedas lentas onde a amplitude não atinge o limiar, uma via alternativa dispara se $V_y$ ≥ 0.04, deslocamento total ≥ 0.30, deslocamento líquido em Y ≥ 0.15, e a pessoa termina recumbent — sempre exigindo ≥2 frames consecutivos de descida.
+
+**Normalização e robustez**:
+- **$V_y$ e deslocamento normalizados pela altura do tronco** (`torso_height`): os limiares são independentes da distância da câmara e do tamanho da pessoa
+- **Escalonamento por FPS**: os limiares são calibrados a 30 fps; vídeos a 120 fps têm $V_y$ compensado automaticamente (multiplicado por 4×)
+- **Resiliência a gaps de deteção**: mantém a última posição conhecida por até 5 frames durante falhas de deteção (comum em vídeos de baixa qualidade)
+- **Cap físico**: $V_y$ limitado a 0.5 alturas-de-tronco por frame — valores acima são glitches de deteção
+- **Gate `was_initially_recumbent`**: pessoas já deitadas no início do vídeo são excluídas (janela inicial de 30 frames, alargada para 90 se necessário)
+
+**Resultados validados**:
+- **URFD** (10 sequências): 80% recall (4/5 quedas detectadas), 100% precisão (5/5 ADL sem falsos positivos). A sequência `fall-05` (queda lenta com amplitude 0.19) está abaixo do limiar de 0.25 — documentado como limitação conhecida.
+- **Vídeos reais** de vigilância (120 fps, 720p): quedas detectadas, paciente acamado sem falsos positivos
 
 Detalhes de cada análise em [`backend/README.md`](backend/README.md).
 

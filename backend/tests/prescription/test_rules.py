@@ -1,5 +1,5 @@
 from pipelines.prescription.models import PrescriptionRecord
-from pipelines.prescription.rules import check_abrupt_change, check_dose_range
+from pipelines.prescription.rules import check_abrupt_change, check_dose_range, regulatory_info
 
 
 def _record(drug="paracetamol", dose=500, unit="mg", patient_id="p1", ts="2026-01-01T00:00:00"):
@@ -52,3 +52,38 @@ def test_variacao_pequena_e_normal():
     current = _record(dose=520)
     result = check_abrupt_change(current, previous)
     assert result.kind == "normal"
+
+
+# --- PRESC-01, PRESC-02: regulatory_info (spec final-fix) ---
+
+def test_regulatory_info_medicamento_controlado():
+    """PRESC-01: morfina devolve A1, controlado, com princípio ativo e fonte."""
+    info = regulatory_info(_record(drug="morfina", dose=10))
+    assert info["control_category"] == "A1"
+    assert info["is_controlled"] is True
+    assert "morfina" in info["active_ingredient"].lower()
+    assert "ANVISA" in info["source"]
+
+
+def test_regulatory_info_medicamento_nao_controlado():
+    """PRESC-01: paracetamol não é controlado, mas tem princípio ativo."""
+    info = regulatory_info(_record(drug="paracetamol", dose=500))
+    assert info["is_controlled"] is False
+    assert info["control_category"] == ""
+    assert len(info["active_ingredient"]) > 0
+
+
+def test_regulatory_info_medicamento_fora_do_catalogo():
+    """PRESC-02: fora do catálogo → source='não verificado'."""
+    info = regulatory_info(_record(drug="medicamento-inexistente-xyz"))
+    assert info["source"] == "não verificado"
+    assert info["is_controlled"] is False
+    assert info["control_category"] == ""
+
+
+def test_regulatory_info_tem_dose_de_referencia():
+    """PRESC-01: reference_dose no formato 'min–max unidade'."""
+    info = regulatory_info(_record(drug="digoxina", dose=0.25))
+    assert "0.125" in info["reference_dose"]
+    assert "0.5" in info["reference_dose"]
+    assert "mg" in info["reference_dose"]

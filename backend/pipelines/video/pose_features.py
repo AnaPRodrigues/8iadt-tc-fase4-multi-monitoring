@@ -206,6 +206,7 @@ def torso_height(frame: PoseFrame) -> float | None:
 
 def vertical_velocity_robust(
     frames: list[PoseFrame | None],
+    max_gap: int = 5,
 ) -> list[float | None]:
     """Velocidade vertical com fallback para oclusão parcial.
 
@@ -213,28 +214,40 @@ def vertical_velocity_robust(
     usa a parte superior do corpo (cabeça + ombros). Devolve ``None`` se
     nenhuma das duas estiver disponível.
 
+    Resiste a gaps de deteção até ``max_gap`` frames: mantém a última
+    posição conhecida durante gaps curtos, permitindo calcular Vy mesmo
+    com deteção intermitente (comum em vídeos de baixa qualidade ou
+    pessoas distantes). Gaps maiores que ``max_gap`` resetam a referência.
+
     Uma transição rápida da cabeça/ombro para a borda inferior da imagem
     é suficiente para disparar a queda (Requisito 2).
     """
     velocities: list[float | None] = []
     prev_y: float | None = None
+    gap_count = 0
 
     for frame in frames:
         if frame is None:
+            gap_count += 1
+            if gap_count > max_gap:
+                prev_y = None
             velocities.append(None)
-            prev_y = None
             continue
 
-        # Tenta quadril primeiro; fallback para upper body
+        # Usa apenas o quadril — sem fallback para upper body.
+        # O upper body (nariz+ombros) tem Y ~0.1-0.2 enquanto o quadril
+        # tem Y ~0.4-0.7; a transição entre eles gera um spike artificial
+        # de Vy que parece uma queda (falso positivo).
         center = hip_center(frame)
-        if center is None:
-            center = _upper_body_center(frame)
 
         if center is None:
+            gap_count += 1
+            if gap_count > max_gap:
+                prev_y = None
             velocities.append(None)
-            prev_y = None
             continue
 
+        gap_count = 0
         current_y = center[1]
         if prev_y is not None:
             vy = current_y - prev_y
@@ -629,6 +642,22 @@ def was_initially_recumbent(
             y_values.append(center[1])
 
     if len(y_values) < min_valid_frames:
+        # Poucos frames no início: tenta janela alargada (90 frames).
+        # Se a pessoa aparece tarde mas está consistentemente deitada,
+        # assume que já estava recumbent desde o início (ex.: paciente
+        # acamado que o detector só encontra após alguns frames).
+        extended = person_frames[:90]
+        y_ext: list[float] = []
+        for f in extended:
+            if f is None:
+                continue
+            center = hip_center(f)
+            if center is None:
+                center = _upper_body_center(f)
+            if center is not None:
+                y_ext.append(center[1])
+        if len(y_ext) >= min_valid_frames:
+            return (sum(y_ext) / len(y_ext)) > y_threshold
         return False
 
     return (sum(y_values) / len(y_values)) > y_threshold

@@ -85,3 +85,5 @@ class PosturalFinding:
     frame_index: int        # frame representativo
     score: float            # 0–1, normalizado
     description: str        # resumo em linguagem clínica
+    track_id: int | None = None  # ID da pessoa que disparou o evento (para evidência)
+    peak_frame: int | None = None  # frame exato do pico de Vy (para evidência)

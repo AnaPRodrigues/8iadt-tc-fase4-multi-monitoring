@@ -286,10 +286,10 @@ _MAX_LOST_FRAMES = 15       # frames antes de descartar um track perdido
 _MAX_CENTER_DIST = 0.25     # distância máxima entre centros (relativa à diagonal)
 
 # Filtros anti-falso-positivo (POSE-22)
-_DETECTION_CONFIDENCE = 0.45  # confiança mínima do detector (0.25 → 0.45)
+_DETECTION_CONFIDENCE = 0.35  # confiança mínima do detector
 _MIN_BOX_WIDTH = 30           # largura mínima da bbox (px) — ignora ruídos
 _MIN_BOX_HEIGHT = 50          # altura mínima da bbox (px) — pessoa real vs. objeto
-_MIN_BOX_AREA_RATIO = 0.015   # área mínima da bbox relativa ao frame (1.5%)
+_MIN_BOX_AREA_RATIO = 0.01    # área mínima da bbox relativa ao frame (1%)
 _MIN_BOX_PIXEL_AREA = 1500    # área mínima absoluta (px²)
 
 

@@ -5,12 +5,27 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class DrugRange:
-    """Faixa terapêutica de referência para um medicamento."""
+    """Faixa terapêutica e classificação regulatória de referência.
+
+    As categorias de controlo especial seguem a Portaria SVS/MS nº 344/98
+    e atualizações da ANVISA:
+
+    - A1/A2/A3: Substâncias entorpecentes (Lista A)
+    - B1/B2: Substâncias psicotrópicas (Lista B)
+    - C1/C5: Substâncias sujeitas a controlo especial (Lista C)
+    - Não controlado: vazio ou "—"
+
+    ``source`` indica a proveniência da informação regulatória.
+    """
 
     name: str
     min_dose: float
     max_dose: float
     unit: str
+    active_ingredient: str = ""       # princípio ativo (DCB)
+    control_category: str = ""        # A1, A2, A3, B1, B2, C1, C5, ou "" (não controlado)
+    is_controlled: bool = False
+    source: str = ""                  # "ANVISA — Bulário Eletrônico" ou "não verificado"
 
 
 @dataclass(frozen=True)

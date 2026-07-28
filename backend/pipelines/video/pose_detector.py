@@ -522,6 +522,7 @@ def validate_fall_dynamic(
     min_vertical_velocity: float = 0.02,
     all_poses_per_frame: list[list[PoseFrame | None]] | None = None,
     n_pessoas: int | None = None,
+    fps: float = 30.0,
 ) -> tuple[str, int | None, float, str, int | None, int | None]:
     """Validação dinâmica de queda multi-pessoa com agrupamento por track_id.
 
@@ -544,6 +545,7 @@ def validate_fall_dynamic(
         group_poses_by_track_id,
         is_recumbent,
         lateral_displacement,
+        max_consecutive_above,
         max_vertical_velocity,
         torso_height,
         total_displacement,
@@ -552,11 +554,17 @@ def validate_fall_dynamic(
         was_initially_recumbent,
     )
 
-    # Thresholds base (single-person, calibrados em torso-heights contra URFD)
-    # Sem normalização (torso_height=None), comportam-se como os absolutos antigos.
+    # Thresholds base (single-person, calibrados a 30fps contra URFD)
+    # Com FPS diferente, os thresholds são escalados automaticamente.
     _MIN_TILT_FOR_FALL = 25.0
     _MIN_TOTAL_DISPLACEMENT = 0.20
     _MIN_VERTICAL_VELOCITY_FLOOR = 0.01
+
+    # Escala FPS: converte Vy de "por frame" para "por 1/30s".
+    # A 120 fps o delta por frame é 4× menor que a 30 fps; multiplicar
+    # por (fps/30) compensa — 120/30 = 4×. O valor antigo (30/fps) estava
+    # invertido e subestimava Vy em vídeos de alta taxa.
+    _fps_scale_vd = max(fps, 1.0) / 30.0
 
     # Determina se é cena multi-pessoa para thresholds adaptativos (C2)
     effective_n_pessoas = n_pessoas
@@ -593,7 +601,8 @@ def validate_fall_dynamic(
                 if was_initially_recumbent(person_frames):
                     continue
 
-                vy_list = vertical_velocity_robust(person_frames)
+                vy_list_raw = vertical_velocity_robust(person_frames)
+                vy_list = [v * _fps_scale_vd if v is not None else None for v in vy_list_raw]
 
                 tilts = [
                     t for f in person_frames if f is not None
@@ -612,9 +621,19 @@ def validate_fall_dynamic(
                 norm_factor = (
                     sum(torso_vals) / len(torso_vals) if torso_vals else 0.14
                 )
+                # Evita inflacionar Vy quando o torso é muito pequeno
+                # (pessoa distante ou resolução alta). Sem esta proteção,
+                # um glitch de Vy=0.06 com torso=0.05 produz Vy=1.2.
+                norm_factor = max(norm_factor, 0.08)
 
                 max_vy = max_vertical_velocity(vy_list) / norm_factor
                 total_dy = total_displacement(vy_list) / norm_factor
+
+                # Cap físico: ninguém move mais de 50% do torso num frame
+                # nem se desloca mais de 10× o torso. Vy acima disto é
+                # glitch de deteção (bbox a saltar entre pessoas/objetos).
+                max_vy = min(max_vy, 0.5)
+                total_dy = min(total_dy, 10.0)
 
                 # Queda = Pico Vy + deslocamento total + tilt
                 if (
@@ -639,7 +658,15 @@ def validate_fall_dynamic(
                         )
                     continue
 
-                # Fallback: rolamento/escorregamento
+                # Fallback: rolamento/escorregamento. Exige os mesmos
+                # constraints temporais que o Vy-primary: descida sustentada
+                # (≥2 frames consecutivos com Vy>0.02) + deslocamento
+                # líquido significativo. Filtra glitches de deteção.
+                consecutive_desc = max_consecutive_above(vy_list, 0.02)
+                y_descent_vd = _compute_net_y_descent(person_frames)
+                if consecutive_desc < 2 or y_descent_vd < 0.15:
+                    continue
+
                 dx_list = lateral_displacement(person_frames)
                 valid_dx = [v for v in dx_list if v is not None]
                 max_dx = max(valid_dx) if len(valid_dx) >= 5 else 0.0
@@ -698,7 +725,8 @@ def validate_fall_dynamic(
                 None, None,
             )
 
-        vy_list = vertical_velocity_robust(person_frames) if person_frames else velocities
+        vy_list_raw = vertical_velocity_robust(person_frames) if person_frames else velocities
+        vy_list = [v * _fps_scale_vd if v is not None else None for v in vy_list_raw]
 
         tilts = [
             t for f in person_frames if f is not None
@@ -810,6 +838,11 @@ def analyze_all_persons(
         windowed_features,
     )
 
+    # Normaliza FPS: thresholds foram calibrados a 30fps. Converte Vy
+    # de "por frame" para "por 1/30s" multiplicando por (30/fps).
+    # Vídeos a 120fps têm Vy 4× menor por frame → compensação 4×.
+    _fps_scale = max(fps, 1.0) / 30.0
+
     all_findings: list[PosturalFinding] = []
     details: dict = {"pessoas_analisadas": 0, "por_papel": {}}
 
@@ -823,6 +856,15 @@ def analyze_all_persons(
     n_pessoas_reais = len(person_timelines)
 
     for track_id, person_frames in person_timelines.items():
+        # Filtro de cobertura temporal: tracks com < 5% de frames
+        # válidos são ruído (frames isolados sem consistência).
+        # O filtro principal contra objetos estáticos é o y_descent
+        # (objetos não se deslocam verticalmente).
+        n_total = len(person_frames)
+        n_valid = sum(1 for f in person_frames if f is not None)
+        if n_total > 0 and n_valid / n_total < 0.05:
+            continue
+
         role = classify_person_role(person_frames)
         details["pessoas_analisadas"] += 1
         details["por_papel"][track_id] = role
@@ -844,12 +886,12 @@ def analyze_all_persons(
             # NÃO detetou e a pessoa está recumbent no final.
             vy_fallback = False
             if fall_verdict != "queda":
-                velocities_fb = vertical_velocity_robust(person_frames)
+                velocities_raw = vertical_velocity_robust(person_frames)
+                # Escala FPS: thresholds calibrados a 30fps. A 120fps o Vy
+                # por frame é 4× menor → compensar multiplicando por _fps_scale.
+                velocities_fb = [v * _fps_scale if v is not None else None for v in velocities_raw]
                 max_vy_fb = max_vertical_velocity(velocities_fb)
                 total_dy_fb = total_displacement(velocities_fb)
-                # Vy-primary: requer descida sustentada (≥2 frames consecutivos
-                # com Vy>0.02) + deslocamento total + deslocamento líquido em Y.
-                # Filtra glitches de detecção (pico isolado) que são comuns em ADL.
                 consecutive_descending = max_consecutive_above(velocities_fb, 0.02)
                 y_descent = _compute_net_y_descent(person_frames)
                 if (consecutive_descending >= 2 and max_vy_fb >= 0.04
@@ -861,12 +903,34 @@ def analyze_all_persons(
                     fall_frame_idx = max(valid_vy, key=lambda x: x[1])[0] if valid_vy else 0
 
             if fall_verdict == "queda":
-                velocities = vertical_velocity_robust(person_frames)
-                min_vy = 0.02 if not vy_fallback else 0.04
+                velocities_raw = vertical_velocity_robust(person_frames)
+                velocities = [v * _fps_scale if v is not None else None for v in velocities_raw]
+
+                # Filtro anti-ghost: objetos estáticos (casacos, cadeiras)
+                # detetados como "person" têm amplitude alta por jitter
+                # da bbox mas o Y do quadril nunca varia significativamente.
+                # Usa a amplitude total de Y (max-min) em vez do deslocamento
+                # líquido — uma pessoa que cai e se levanta tem net≈0 mas
+                # amplitude total grande (>0.10). Só aplica o filtro quando
+                # há ≥10 pontos de quadril com visibilidade ≥0.4 — com
+                # poucos pontos, o y_range é pequeno por falta de dados,
+                # não por ser um objeto estático.
+                y_vals = [lm[1] for f in person_frames if f is not None
+                          for lm in [f.landmarks[23], f.landmarks[24]]
+                          if lm[3] >= 0.4]
+                if len(y_vals) >= 10:
+                    y_range = max(y_vals) - min(y_vals)
+                    if y_range < 0.10:
+                        fall_verdict = "adl"  # ghost: Y do quadril não varia
+                else:
+                    y_range = 0.0  # dados insuficientes — não filtra
+
+                min_vy = 0.02  # mesmo piso para ambos os caminhos
                 verdict, _, vy_score, desc, tid, peak = validate_fall_dynamic(
                     fall_verdict, fall_frame_idx, velocities, min_vy,
                     all_poses_per_frame=all_poses_per_frame,
                     n_pessoas=n_pessoas_reais,
+                    fps=fps,
                 )
                 if verdict == "queda":
                     fall_desc = desc
@@ -881,6 +945,8 @@ def analyze_all_persons(
                         frame_index=peak or 0,
                         score=min(1.0, vy_score),
                         description=fall_desc,
+                        track_id=tid,
+                        peak_frame=peak,
                     ))
 
         # -- Vigilância contínua para pessoa deitada

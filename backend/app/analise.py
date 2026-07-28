@@ -59,6 +59,7 @@ def _analisar_documento(
     caminho: Path, prescricao_anterior: PrescriptionRecord | None
 ) -> ResultadoAnalise:
     from pipelines.prescription.logic import process
+    from pipelines.prescription.rules import regulatory_info
 
     resultado = process(
         Path(caminho).read_bytes(),
@@ -78,6 +79,10 @@ def _analisar_documento(
         "paciente_id_documento": r.patient_id,
         "timestamp_documento": r.timestamp,
     }
+
+    # Enriquece com informação regulatória ANVISA (PRESC-01, PRESC-02)
+    info_reg = regulatory_info(r)
+    detalhes.update(info_reg)
 
     if not resultado.anomalies:
         return ResultadoAnalise(
@@ -150,14 +155,32 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
         return ResultadoAnalise(resumo="Sem queda detectada no período monitorado.", pontuacao=0.0)
 
     principal = fall_findings[0]
-    safe_idx = min(principal.frame_index, len(seq.frame_paths) - 1)
+    # Usa peak_frame (pico Vy) e find_pose_by_track_id para a pessoa certa
+    event_frame = principal.peak_frame or principal.frame_index
+    safe_idx = min(event_frame, len(seq.frame_paths) - 1)
+
+    from pipelines.video.pose_features import find_pose_by_track_id
 
     evidence_pose = None
-    if safe_idx < len(all_poses) and all_poses[safe_idx]:
-        for p in all_poses[safe_idx]:
-            if p is not None:
-                evidence_pose = p
-                break
+    if principal.track_id is not None:
+        # Procura o frame com Y máximo nos 60 frames após o pico
+        best_y = -1.0
+        for offset in range(0, 60):
+            search_idx = min(safe_idx + offset, len(all_poses) - 1)
+            pose = find_pose_by_track_id(all_poses, search_idx, principal.track_id)
+            if pose is not None:
+                y = sum(lm[1] for lm in pose.landmarks) / len(pose.landmarks)
+                if y > best_y:
+                    best_y = y
+                    evidence_pose = pose
+                    safe_idx = search_idx
+
+    if evidence_pose is None:
+        if safe_idx < len(all_poses) and all_poses[safe_idx]:
+            for p in all_poses[safe_idx]:
+                if p is not None:
+                    evidence_pose = p
+                    break
 
     if evidence_pose is None:
         return ResultadoAnalise(resumo="Sem queda detectada no período monitorado.", pontuacao=0.0)
@@ -170,6 +193,7 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
         score=principal.score,
         run_id=run_id,
         persistence_frames=1,
+        track_id=principal.track_id,
     )
     return ResultadoAnalise(
         resumo="Queda detectada.",
@@ -339,16 +363,31 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
         # --- Evidência para o achado mais grave ---
         evidencia_principal: str | None = None
         principal = max(consolidated, key=lambda c: c.score)
-        safe_idx = min(principal.frame_index, len(frame_paths) - 1)
+        event_frame = principal.peak_frame or principal.frame_index
+        safe_idx = min(event_frame, len(frame_paths) - 1)
 
-        # Encontra a pose correta via track_id ou fallback
+        from pipelines.video.pose_features import find_pose_by_track_id
+
+        # Procura o frame com Y máximo nos 60 frames após o pico
         pose_para_evidencia = None
-        if safe_idx < len(all_poses) and all_poses[safe_idx]:
-            # Tenta a primeira pose válida no frame
-            for p in all_poses[safe_idx]:
-                if p is not None:
-                    pose_para_evidencia = p
-                    break
+        if principal.track_id is not None:
+            best_y = -1.0
+            for offset in range(0, 60):
+                search_idx = min(safe_idx + offset, len(all_poses) - 1)
+                pose = find_pose_by_track_id(all_poses, search_idx, principal.track_id)
+                if pose is not None:
+                    y = sum(lm[1] for lm in pose.landmarks) / len(pose.landmarks)
+                    if y > best_y:
+                        best_y = y
+                        pose_para_evidencia = pose
+                        safe_idx = search_idx
+
+        if pose_para_evidencia is None:
+            if safe_idx < len(all_poses) and all_poses[safe_idx]:
+                for p in all_poses[safe_idx]:
+                    if p is not None:
+                        pose_para_evidencia = p
+                        break
 
         if pose_para_evidencia is not None:
             if principal.finding_type == "FALL_DETECTED":
@@ -360,6 +399,7 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
                     score=principal.score,
                     run_id=run_id,
                     persistence_frames=_PERSISTENCE_FRAMES,
+                    track_id=principal.track_id,
                 )
             else:
                 ev = save_postural_evidence(
@@ -702,9 +742,9 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
     """
     import json
 
-    from common.evidence import evidence_dir
+    from common.evidence import evidence_dir, save_evidence
     from pipelines.audio.acoustic_features import extract as extract_acoustic_features
-    from pipelines.audio.critical_terms import find_terms, load_terms, save_term_evidence
+    from pipelines.audio.critical_terms import find_terms, load_terms
     from pipelines.audio.fatigue_score import is_fatigued
     from pipelines.audio.fatigue_score import score as fatigue_score
     from pipelines.audio.sentiment import classify as classify_sentiment
@@ -731,8 +771,6 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
     except Exception as exc:
         raise ErroDeAnalise(f"não foi possível extrair features acústicas: {exc}") from exc
 
-    # Score de fadiga com baseline de 1 áudio (z-score = 0.0 por construção —
-    # desvio-padrão zero). A heurística é documentada como limitada no design de F2.
     fadiga = fatigue_score(features, baseline=[features])
     fatigado = is_fatigued(fadiga, threshold=1.0)
 
@@ -741,41 +779,73 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
     termos = load_terms(None)
     hits = find_terms(transcript, termos)
 
-    # Evidência
+    # -- Evidência consolidada --
     destino = evidence_dir("audio", run_id, "output")
     destino.mkdir(parents=True, exist_ok=True)
     stem = caminho.stem
-    evidencia_id = None
+    evidencia_id = f"{stem}-consulta"
 
-    # Guarda um artefato com o transcript completo
+    # Artefato: transcript completo
     artefato_txt = destino / f"{stem}-transcript.txt"
     artefato_txt.write_text(transcript.text, encoding="utf-8")
 
-    if hits:
-        for hit in hits:
-            ev = save_term_evidence(hit, transcript, run_id, "output")
-            if evidencia_id is None:
-                evidencia_id = ev.evidence_id
+    # Determina severity e evento principal
+    termos_encontrados = sorted({h.term for h in hits})
+    if hits and fatigado:
+        severity = "HIGH"
+        event_type = "critical_terms_and_fatigue"
+    elif hits:
+        severity = "MEDIUM"
+        event_type = "critical_terms"
+    elif fatigado:
+        severity = "LOW"
+        event_type = "vocal_fatigue"
+    elif sentimento.label != "neutro":
+        severity = "INFO"
+        event_type = "sentiment"
+    else:
+        severity = "INFO"
+        event_type = "speech_analysis"
 
-    # Sidecar de metadados da consulta (contrato AD-026)
+    # Sidecar consolidado com todos os achados
     metadados = {
+        "transcription": transcript.text,
+        "transcription_reliable": transcript.reliable,
         "sentimento": sentimento.label,
         "sentimento_score": round(sentimento.score, 3),
         "termos_criticos_encontrados": len(hits),
+        "termos_criticos": [
+            {"termo": h.term, "contexto": h.context} for h in hits
+        ],
         "fadiga_vocal_score": round(fadiga, 3),
         "fadiga_vocal_detectada": fatigado,
-        "transcript_confiavel": transcript.reliable,
+        "jitter": features.jitter_local,
+        "shimmer": features.shimmer_local,
+        "hnr_db": features.hnr_db,
     }
-    (destino / f"{stem}-summary.json").write_text(
-        json.dumps(metadados, indent=2, ensure_ascii=False), encoding="utf-8"
+
+    evidencia = save_evidence(
+        feature="audio",
+        run_id=run_id,
+        evidence_id=evidencia_id,
+        source_record_id=stem,
+        artifact_path=artefato_txt,
+        metadata=metadados,
+        modality="audio",
+        event_type=event_type,
+        severity=severity,
+        confidence=0.85 if (hits or fatigado) else 0.5,
+        status="positive" if (hits or fatigado) else "negative",
     )
 
     # Monta resumo clínico
     partes: list[str] = []
 
     if hits:
-        termos_encontrados = ", ".join(sorted({h.term for h in hits}))
-        partes.append(f"termo(s) crítico(s) encontrado(s): {termos_encontrados}")
+        partes.append(f"termo(s) crítico(s) encontrado(s): {', '.join(termos_encontrados)}")
+
+    if fatigado:
+        partes.append("suspeita de fadiga vocal")
 
     if sentimento.label != "neutro":
         partes.append(f"sentimento {sentimento.label}")
@@ -784,6 +854,7 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
         return ResultadoAnalise(
             resumo="Áudio de consulta sem alterações relevantes detectadas.",
             pontuacao=0.0,
+            evidencia_id=evidencia.evidence_id,
             detalhes=metadados,
         )
 
@@ -799,7 +870,7 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
     return ResultadoAnalise(
         resumo=resumo.capitalize(),
         pontuacao=pontuacao,
-        evidencia_id=evidencia_id,
+        evidencia_id=evidencia.evidence_id,
         detalhes=metadados,
     )
 
