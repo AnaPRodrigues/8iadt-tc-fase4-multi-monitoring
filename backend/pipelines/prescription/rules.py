@@ -50,9 +50,21 @@ def check_abrupt_change(
     previous: PrescriptionRecord | None,
     threshold: float = ABRUPT_CHANGE_THRESHOLD,
 ) -> AnomalyResult:
-    """Compara a dose atual com a do registro anterior do mesmo paciente/medicamento."""
+    """Compara a dose atual com a do registro anterior do mesmo fármaco.
+
+    Só se aplica quando o medicamento é o mesmo — variação entre fármacos
+    diferentes é tratada por ``check_high_risk_substitution``.
+    """
     if previous is None:
         return AnomalyResult(kind="normal", reason="sem histórico anterior")
+
+    # Fármacos diferentes: não faz sentido comparar doses (ex.: 500mg paracetamol
+    # vs 30mg morfina). A substituição é tratada por check_high_risk_substitution.
+    if record.drug.lower() != previous.drug.lower():
+        return AnomalyResult(
+            kind="normal",
+            reason="fármacos diferentes — variação de dose não comparável",
+        )
 
     relative_change = abs(record.dose - previous.dose) / previous.dose
     if relative_change > threshold:

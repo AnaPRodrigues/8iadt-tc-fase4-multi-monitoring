@@ -28,7 +28,7 @@ from pipelines.prescription.models import (
     ProcessResult,
 )
 from pipelines.prescription.parser import parse_prescription
-from pipelines.prescription.rules import check_abrupt_change, check_dose_range
+from pipelines.prescription.rules import evaluate_prescription
 
 log = get_logger("prescription.logic")
 
@@ -110,14 +110,12 @@ def process(
             parse_failure=parsed,
         )
 
-    anomalies = [
-        result
-        for result in (
-            check_dose_range(parsed),
-            check_abrupt_change(parsed, previous_record),
-        )
-        if result.kind != "normal"
-    ]
+    # Orquestra as 3 regras por ordem de gravidade clínica:
+    # 1. dose_fora_de_faixa (superdosagem)
+    # 2. substituicao_critica (troca por fármaco de maior risco)
+    # 3. mudanca_abrupta (variação percentual no mesmo fármaco)
+    all_results = evaluate_prescription(parsed, previous_record)
+    anomalies = [r for r in all_results if r.kind != "normal"]
 
     evidence_id = None
     if anomalies:
