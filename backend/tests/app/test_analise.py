@@ -374,6 +374,16 @@ def test_audio_sem_txt_roteia_para_consulta_nao_para_respiratorio(monkeypatch, t
             },
         )(),
     )
+    # Dubla o detector de padrão respiratório (evita ler o ficheiro fake com soundfile)
+    monkeypatch.setattr(
+        "pipelines.audio.respiratory_pattern.detect_respiratory_pattern",
+        lambda audio_path, sr=22050, frame_ms=30.0: {
+            "detected": False,
+            "breath_rate_bpm": None,
+            "confidence": 0.0,
+            "method": "mock",
+        },
+    )
 
     r = analise._analisar_audio(audio, run_id="teste-consulta", dataset_icbhi=tmp_path, seed=42)
 

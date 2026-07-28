@@ -829,7 +829,7 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
     import json
 
     from common.evidence import evidence_dir, save_evidence
-    from pipelines.audio.acoustic_features import extract as extract_acoustic_features
+    from pipelines.audio.acoustic_features import extract as _extract_acoustic
     from pipelines.audio.critical_terms import find_terms, load_terms
     from pipelines.audio.fatigue_score import fatigue_absolute
     from pipelines.audio.fatigue_score import score as fatigue_score
@@ -846,6 +846,46 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
         raise ErroDeAnalise(f"não foi possível transcrever o áudio: {exc}") from exc
 
     if not transcript.reliable:
+        # Transcrição não confiável — o áudio pode conter sons
+        # respiratórios ou ruído ambiente, não fala. Continua com
+        # análise acústica e respiratória em vez de desistir.
+        atividade.local("audio", "transcrição não confiável — procurando padrão respiratório")
+
+        # Tenta extrair features acústicas mesmo sem transcrição
+        try:
+            features = _extract_acoustic(caminho, transcript)
+        except Exception:
+            features = None
+
+        # Deteta padrão respiratório no envelope de energia
+        resp_pattern = detect_respiratory_pattern(str(caminho))
+
+        if resp_pattern["detected"] and resp_pattern.get("confidence", 0) >= 0.3:
+            metadados = {
+                "transcription_reliable": False,
+                "padrao_respiratorio": resp_pattern,
+            }
+            evidencia = save_evidence(
+                feature="audio", run_id=run_id,
+                evidence_id=f"{caminho.stem}-respiratory",
+                source_record_id=caminho.stem,
+                artifact_path=caminho,
+                metadata=metadados,
+                modality="audio", event_type="respiratory_pattern",
+                severity="LOW",
+                confidence=resp_pattern.get("confidence", 0.5),
+                status="positive",
+            )
+            breath_info = ""
+            if resp_pattern.get("breath_rate_bpm"):
+                breath_info = f" ({resp_pattern['breath_rate_bpm']} ciclos/min)"
+            return ResultadoAnalise(
+                resumo=f"Padrão respiratório detetado{breath_info} — transcrição não disponível.",
+                pontuacao=0.3,
+                evidencia_id=evidencia.evidence_id,
+                detalhes=metadados,
+            )
+
         return ResultadoAnalise(
             resumo="Não foi possível obter uma transcrição confiável do áudio de consulta.",
             pontuacao=None,
@@ -854,7 +894,7 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
 
     atividade.local("audio", "extraindo features acústicas (jitter, shimmer, HNR)")
     try:
-        features = extract_acoustic_features(caminho, transcript)
+        features = _extract_acoustic(caminho, transcript)
     except Exception as exc:
         raise ErroDeAnalise(f"não foi possível extrair features acústicas: {exc}") from exc
 
