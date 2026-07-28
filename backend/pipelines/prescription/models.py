@@ -16,6 +16,8 @@ class DrugRange:
     - Não controlado: vazio ou "—"
 
     ``source`` indica a proveniência da informação regulatória.
+    ``criticality`` classifica o risco do fármaco em 3 níveis:
+    1 = Baixo Risco / Uso Geral, 2 = Médio Risco, 3 = Alto Risco (MAV/ISMP).
     """
 
     name: str
@@ -26,6 +28,7 @@ class DrugRange:
     control_category: str = ""        # A1, A2, A3, B1, B2, C1, C5, ou "" (não controlado)
     is_controlled: bool = False
     source: str = ""                  # "ANVISA — Bulário Eletrônico" ou "não verificado"
+    criticality: int = 1              # 1=baixo, 2=médio, 3=alto (MAV/ISMP)
 
 
 @dataclass(frozen=True)

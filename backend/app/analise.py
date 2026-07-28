@@ -53,6 +53,153 @@ class ErroDeAnalise(Exception):
 
 
 # --------------------------------------------------------------------------- #
+# Contexto de cena via Rekognition (complemento à pipeline de postura)
+# --------------------------------------------------------------------------- #
+
+# Labels do Amazon Rekognition com relevância clínica para o ambiente do paciente.
+# Mapeia nome exato da label (inglês) → descrição em português.
+# A taxonomia completa está em https://docs.aws.amazon.com/rekognition/latest/dg/labels.html
+_OBJETOS_CENA_CLINICA: dict[str, str] = {
+    # Ajudas de mobilidade
+    "Wheelchair": "Cadeira de Rodas",
+    "Cane": "Bengala",
+    "Stretcher": "Maca",
+    # Ambiente clínico
+    "Hospital": "Hospital",
+    "Clinic": "Clínica",
+    "Operating Theatre": "Sala de Cirurgia",
+    "Waiting Room": "Sala de Espera",
+    "Pharmacy": "Farmácia",
+    # Equipamento médico
+    "Stethoscope": "Estetoscópio",
+    "Monitor": "Monitor",
+    "Thermometer": "Termómetro",
+    "X-Ray": "Raio-X",
+    "Ct Scan": "TAC",
+    "Ultrasound": "Ultrassom",
+    "First Aid": "Primeiros Socorros",
+    # Mobiliário
+    "Bed": "Cama",
+    "Infant Bed": "Cama Infantil",
+    "Shower": "Chuveiro",
+    "Toilet": "Sanita",
+    "Handrail": "Corrimão",
+    "Guard Rail": "Grade de Proteção",
+    "Elevator": "Elevador",
+    # Pessoas
+    "Doctor": "Médico",
+    "Nurse": "Enfermeiro",
+    "Patient": "Paciente",
+    "Person": "Pessoa",
+    # Ações / Posturas
+    "Sitting": "Sentado",
+    "Standing": "Em Pé",
+    "Walking": "A Caminhar",
+    # Espaços
+    "Bedroom": "Quarto",
+    "Bathroom": "Casa de Banho",
+    "Corridor": "Corredor",
+    "Hallway": "Hall",
+    "Reception": "Receção",
+    "Waiting Room": "Sala de Espera",
+}
+
+# Confiança mínima para considerar uma label do Rekognition como relevante.
+_CONFIANCA_MINIMA_CENA = 0.70
+
+
+def _analisar_contexto_cena(frame_bytes: bytes) -> dict | None:
+    """Analisa o ambiente ao redor do paciente via Rekognition ``detect_labels``.
+
+    Args:
+        frame_bytes: Um frame representativo do vídeo/sequência, codificado
+            como JPEG em memória.
+
+    Returns:
+        ``None`` se ``ENV != "aws"``, se a chamada ao Rekognition falhar, ou
+        se nenhuma label clinicamente relevante for encontrada. Caso contrário,
+        um dicionário com as chaves ``ambiente`` (str), ``objetos``
+        (list[dict]), ``pessoas`` (list[str]) e ``acao`` (str | None).
+    """
+    from aws.adapters import get_image_analyzer
+    from aws.adapters.cloud import register_cloud_adapters
+    from aws.clients import resolve_env
+
+    env = resolve_env()
+    if env != "aws":
+        return None
+
+    try:
+        register_cloud_adapters()
+        analisador = get_image_analyzer(env)
+        resultado = analisador.analyze(frame_bytes)
+    except Exception:
+        atividade.local(
+            "video", "contexto de cena indisponível (falha na chamada ao Rekognition)"
+        )
+        return None
+
+    # Filtro duplo: (1) nome exato no mapa, ou (2) categoria "Medical" no raw.
+    relevantes: list[dict] = []
+    for label in resultado.labels:
+        if label.confidence < _CONFIANCA_MINIMA_CENA:
+            continue
+        desc = _OBJETOS_CENA_CLINICA.get(label.name)
+        if desc is not None:
+            relevantes.append({"nome": desc, "confianca": label.confidence})
+            continue
+        # Fallback via categorias no raw (Labels[*].Categories[].Name)
+        raw_labels = resultado.raw.get("Labels", [])
+        for raw_lbl in raw_labels:
+            if raw_lbl.get("Name") == label.name:
+                categorias = raw_lbl.get("Categories", [])
+                if any(c.get("Name") == "Medical" for c in categorias):
+                    relevantes.append({"nome": label.name, "confianca": label.confidence})
+                    break
+
+    if not relevantes:
+        return None
+
+    atividade.local(
+        "video",
+        "contexto clínico: "
+        + ", ".join(f"{r['nome']} ({r['confianca']:.0%})" for r in relevantes),
+    )
+
+    # Classifica os objetos por categoria funcional.
+    pessoas = [
+        r["nome"]
+        for r in relevantes
+        if r["nome"]
+        in ("Médico", "Enfermeiro", "Paciente", "Pessoa")
+    ]
+    acoes = [
+        r["nome"]
+        for r in relevantes
+        if r["nome"] in ("Sentado", "Em Pé", "A Caminhar")
+    ]
+    ambientes = [
+        r["nome"]
+        for r in relevantes
+        if r["nome"] in ("Hospital", "Clínica", "Sala de Cirurgia",
+                          "Sala de Espera", "Farmácia", "Quarto",
+                          "Casa de Banho", "Corredor", "Hall", "Receção")
+    ]
+    objetos = [
+        r
+        for r in relevantes
+        if r["nome"] not in pessoas and r["nome"] not in acoes and r["nome"] not in ambientes
+    ]
+
+    return {
+        "ambiente": ambientes[0] if ambientes else "Indeterminado",
+        "objetos": objetos,
+        "pessoas": pessoas,
+        "acao": acoes[0] if acoes else None,
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Documento (prescrição)
 # --------------------------------------------------------------------------- #
 def _analisar_documento(
@@ -103,19 +250,27 @@ def _analisar_documento(
 # --------------------------------------------------------------------------- #
 # Vídeo (postura/queda ou estrutura crítica cirúrgica)
 # --------------------------------------------------------------------------- #
+_EXTENSOES_IMAGEM: frozenset[str] = frozenset({".jpg", ".jpeg", ".png"})
+
+
 def _analisar_video(caminho: Path, run_id: str) -> ResultadoAnalise:
     """Roteia pelo formato do envio:
     - um diretório de quadros → sequência de postura (padrão UR Fall);
     - um ficheiro de vídeo (.mp4, .avi, …) → extração de frames e análise de
       postura/movimentação;
-    - um arquivo de imagem único → quadro cirúrgico (detecção de objetos)."""
+    - um arquivo de imagem (.jpg, .png) → quadro cirúrgico (detecção de objetos)."""
     caminho = Path(caminho)
     if caminho.is_dir():
         return _analisar_postura(caminho, run_id)
     if caminho.is_file():
         if caminho.suffix.lower() in _EXTENSOES_VIDEO:
             return _analisar_video_pose(caminho, run_id)
-        return _analisar_quadro_cirurgico(caminho, run_id)
+        if caminho.suffix.lower() in _EXTENSOES_IMAGEM:
+            return _analisar_quadro_cirurgico(caminho, run_id)
+        raise ErroDeAnalise(
+            f"formato de ficheiro não suportado para vídeo: {caminho.suffix}. "
+            f"Formatos aceites: {', '.join(sorted(_EXTENSOES_VIDEO | _EXTENSOES_IMAGEM))}."
+        )
     raise ErroDeAnalise(f"envio de vídeo não encontrado: {caminho}")
 
 
@@ -137,6 +292,34 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
 
     atividade.local("video", "avaliando postura e movimentação com MediaPipe Pose")
     seq = load_sequence(caminho)
+
+    # --- Contexto de cena via Rekognition (complemento ambiental) ---
+    contexto_cena = None
+    if seq.frame_paths:
+        try:
+            frame_repr = seq.frame_paths[len(seq.frame_paths) // 2]
+            contexto_cena = _analisar_contexto_cena(frame_repr.read_bytes())
+        except Exception:
+            atividade.local(
+                "video", "contexto de cena indisponível (falha ao ler frame)"
+            )
+    # ----------------------------------------------------------------
+
+    def _com_contexto(d: dict) -> dict:
+        """Merge o contexto de cena no dicionário de detalhes, se disponível."""
+        if contexto_cena:
+            return {**d, "contexto_cena": contexto_cena}
+        return d
+
+    def _enriquecer_resumo(base: str) -> str:
+        """Adiciona frase de ambiente ao resumo clínico, se houver contexto."""
+        if not contexto_cena:
+            return base
+        objetos_nomes = [o["nome"] for o in contexto_cena.get("objetos", [])]
+        if objetos_nomes:
+            return f"{base.rstrip('.')}. Ambiente: {', '.join(objetos_nomes)}."
+        return base
+
     model_path = ensure_pose_model(caminho.parent / "_modelo_pose")
     landmarker = create_landmarker(model_path, num_poses=3)
 
@@ -150,9 +333,71 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
         persistence_frames=1,
     )
 
+    # -- Análise de fisioterapia adicional
+    from pipelines.video.pose_detector import detect_physiotherapy_findings
+    from pipelines.video.pose_features import group_poses_by_track_id, hip_center
+
+    person_timelines = group_poses_by_track_id(all_poses)
+    if person_timelines:
+        # Seleciona a pessoa mais baixa no frame (maior Y do quadril)
+        def _avg_hip_y(person_frames):
+            ys = [hip_center(f)[1] for f in person_frames
+                  if f is not None and hip_center(f) is not None]
+            return sum(ys) / len(ys) if ys else 0.0
+
+        main_tid, main_frames = max(
+            person_timelines.items(),
+            key=lambda kv: _avg_hip_y(kv[1]),
+        )
+        physio_findings = detect_physiotherapy_findings(
+            main_frames, fps=30.0, track_id=main_tid,
+        )
+        consolidated.extend(physio_findings)
+
+    # Determina o tipo de achado principal (queda ou fisioterapia)
     fall_findings = [c for c in consolidated if c.finding_type == "FALL_DETECTED"]
-    if not fall_findings:
-        return ResultadoAnalise(resumo="Sem queda detectada no período monitorado.", pontuacao=0.0)
+    physio_findings = [c for c in consolidated if c.finding_type != "FALL_DETECTED"]
+
+    if not fall_findings and not physio_findings:
+        return ResultadoAnalise(
+            resumo=_enriquecer_resumo("Sem alterações detectadas no período monitorado."),
+            pontuacao=0.0,
+            detalhes=_com_contexto({}),
+        )
+
+    # Se há achados de fisioterapia mas não queda, usa o mais relevante
+    if not fall_findings and physio_findings:
+        principal = max(physio_findings, key=lambda c: c.score)
+        safe_idx = min(principal.frame_index, len(seq.frame_paths) - 1)
+        # Obtém a primeira pose válida para desenhar evidência
+        evidence_pose = None
+        if safe_idx < len(all_poses) and all_poses[safe_idx]:
+            for p in all_poses[safe_idx]:
+                if p is not None:
+                    evidence_pose = p
+                    break
+        if evidence_pose is None:
+            return ResultadoAnalise(
+                resumo=" | ".join(pf.description for pf in physio_findings) + ".",
+                pontuacao=float(principal.score),
+                detalhes=_com_contexto(
+                    {"findings": [pf.description for pf in physio_findings]}
+                ),
+            )
+        evidencia = save_postural_evidence(
+            finding=principal,
+            frame_path=seq.frame_paths[safe_idx],
+            pose_frame=evidence_pose,
+            run_id=run_id,
+        )
+        return ResultadoAnalise(
+            resumo=" | ".join(pf.description for pf in physio_findings) + ".",
+            pontuacao=float(principal.score),
+            evidencia_id=evidencia.evidence_id,
+            detalhes=_com_contexto(
+                {"quadro": safe_idx, "findings": [pf.description for pf in physio_findings]}
+            ),
+        )
 
     principal = fall_findings[0]
     # Usa peak_frame (pico Vy) e find_pose_by_track_id para a pessoa certa
@@ -183,7 +428,11 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
                     break
 
     if evidence_pose is None:
-        return ResultadoAnalise(resumo="Sem queda detectada no período monitorado.", pontuacao=0.0)
+        return ResultadoAnalise(
+            resumo=_enriquecer_resumo("Sem queda detectada no período monitorado."),
+            pontuacao=0.0,
+            detalhes=_com_contexto({}),
+        )
 
     evidencia = save_fall_evidence(
         seq_id=seq.seq_id,
@@ -196,10 +445,10 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
         track_id=principal.track_id,
     )
     return ResultadoAnalise(
-        resumo="Queda detectada.",
+        resumo=_enriquecer_resumo("Queda detectada."),
         pontuacao=float(principal.score),
         evidencia_id=evidencia.evidence_id,
-        detalhes={"quadro": safe_idx},
+        detalhes=_com_contexto({"quadro": safe_idx}),
     )
 
 
@@ -317,6 +566,17 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
                 pontuacao=None,
             )
 
+        # --- Contexto de cena via Rekognition (complemento ambiental) ---
+        contexto_cena = None
+        try:
+            frame_repr = frame_paths[len(frame_paths) // 2]
+            contexto_cena = _analisar_contexto_cena(frame_repr.read_bytes())
+        except Exception:
+            atividade.local(
+                "video", "contexto de cena indisponível (falha ao ler frame)"
+            )
+        # ----------------------------------------------------------------
+
         atividade.local(
             "video",
             f"avaliando postura e movimentação com MediaPipe Pose "
@@ -340,6 +600,37 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
             persistence_frames=_PERSISTENCE_FRAMES if n_pessoas <= 1 else 3,
         )
 
+        # -- Análise de fisioterapia: ROM, assimetria, amplitude de movimento.
+        from pipelines.video.pose_detector import detect_physiotherapy_findings
+        from pipelines.video.pose_features import group_poses_by_track_id, hip_center
+
+        person_timelines = group_poses_by_track_id(all_poses)
+        if person_timelines:
+            # Seleciona a pessoa mais baixa no frame (maior Y do quadril).
+            # A paciente está deitada na maca (hip_y ≈ 0.90) enquanto o
+            # fisioterapeuta está de pé (hip_y ≈ 0.64). O is_recumbent()
+            # não distingue porque o threshold é 0.45 — ambos passam.
+            def _avg_hip_y(person_frames):
+                ys = [hip_center(f)[1] for f in person_frames
+                      if f is not None and hip_center(f) is not None]
+                return sum(ys) / len(ys) if ys else 0.0
+
+            main_tid, main_frames = max(
+                person_timelines.items(),
+                key=lambda kv: _avg_hip_y(kv[1]),
+            )
+            physio_findings = detect_physiotherapy_findings(
+                main_frames, fps=video_fps, track_id=main_tid,
+            )
+            consolidated.extend(physio_findings)
+            # Atualiza resumo e pontuação com os achados de fisioterapia
+            if physio_findings:
+                for pf in physio_findings:
+                    pontuacao = max(pontuacao, pf.score)
+                if pontuacao > 0 and resumo == "Sem alterações detectadas.":
+                    nomes = sorted({pf.finding_type for pf in physio_findings})
+                    resumo = " | ".join(pf.description for pf in physio_findings) + "."
+
         todos_detalhes: dict = {
             "quadros_analisados": len(frame_paths),
             "formato": "video",
@@ -347,15 +638,24 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
             "findings": [c.description for c in consolidated],
             "n_consolidated": len(consolidated),
         }
+        if contexto_cena:
+            todos_detalhes["contexto_cena"] = contexto_cena
         todos_detalhes.update(analise_details)
         fall_detected = any(
             c.finding_type == "FALL_DETECTED" for c in consolidated
         )
 
         if not consolidated:
+            resumo_base = (
+                f"Sem alterações detectadas no período monitorado."
+                f"{' Nenhuma pessoa identificada nos quadros analisados.' if n_pessoas == 0 else ''}"
+            )
+            if contexto_cena:
+                objetos_nomes = [o["nome"] for o in contexto_cena.get("objetos", [])]
+                if objetos_nomes:
+                    resumo_base += f" Ambiente: {', '.join(objetos_nomes)}."
             return ResultadoAnalise(
-                resumo=f"Sem alterações detectadas no período monitorado."
-                f"{' Nenhuma pessoa identificada nos quadros analisados.' if n_pessoas == 0 else ''}",
+                resumo=resumo_base,
                 pontuacao=0.0,
                 detalhes=todos_detalhes,
             )
@@ -436,8 +736,6 @@ def _analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
         return _analisar_quadro_cirurgico(caminho, run_id)
 
     from aws.adapters import get_image_analyzer
-    from aws.adapters.cloud import register_cloud_adapters
-    from aws.clients import resolve_env
     from common.evidence import evidence_dir, save_evidence
     from pipelines.video.adapters import register_local_adapters
     from pipelines.video.object_detector import CRITICAL_STRUCTURES
@@ -465,18 +763,15 @@ def _analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
             resumo="Vídeo cirúrgico muito curto para análise.", pontuacao=None
         )
 
-    # Prepara o analisador de imagem (local ou cloud).
-    env = resolve_env()
-    if env == "aws":
-        register_cloud_adapters()
-    else:
-        atividade.local(
-            "video_cirurgico",
-            f"avaliando {len(keyframe_indices)} keyframes do vídeo cirúrgico com YOLOv8",
-        )
-        register_local_adapters(_pesos_yolo())
-
-    analisador = get_image_analyzer(env)
+    # O analisador de imagem é sempre local (YOLOv8 fine-tuned) —
+    # o Rekognition genérico não reconhece estruturas anatómicas
+    # como cystic_artery/duct/plate.
+    atividade.local(
+        "video_cirurgico",
+        f"avaliando {len(keyframe_indices)} keyframes do vídeo cirúrgico com YOLOv8",
+    )
+    register_local_adapters(_pesos_yolo())
+    analisador = get_image_analyzer("local")
 
     # Extrai e analisa cada keyframe.
     cap = cv2.VideoCapture(str(caminho))
@@ -570,6 +865,7 @@ def _analisar_video_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
             "formato": "video",
             "instante_primeiro_s": instante,
         },
+        severity="HIGH",
     )
     return ResultadoAnalise(
         resumo=f"Estrutura(s) crítica(s) identificada(s) no vídeo cirúrgico "
@@ -610,22 +906,16 @@ def _pesos_yolo() -> Path:
 
 def _analisar_quadro_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
     """Raia de estrutura crítica cirúrgica: rótulos de objeto num único quadro,
-    via o adaptador `ImageAnalyzer` (YOLOv8 local ou Rekognition, por `ENV`)."""
+    sempre com YOLOv8 local — o Rekognition genérico não reconhece anatomia."""
     from aws.adapters import get_image_analyzer
-    from aws.adapters.cloud import register_cloud_adapters
-    from aws.clients import resolve_env
     from common.evidence import save_evidence
     from pipelines.video.adapters import register_local_adapters
     from pipelines.video.object_detector import CRITICAL_STRUCTURES
 
-    env = resolve_env()
-    if env == "aws":
-        register_cloud_adapters()
-    else:
-        atividade.local("video", "avaliando estrutura cirúrgica crítica no quadro com YOLOv8")
-        register_local_adapters(_pesos_yolo())
+    atividade.local("video", "avaliando estrutura cirúrgica crítica no quadro com YOLOv8")
+    register_local_adapters(_pesos_yolo())
 
-    analise_imagem = get_image_analyzer(env).analyze(caminho.read_bytes())
+    analise_imagem = get_image_analyzer("local").analyze(caminho.read_bytes())
     criticas = [rotulo for rotulo in analise_imagem.labels if rotulo.name in CRITICAL_STRUCTURES]
 
     if not criticas:
@@ -649,6 +939,7 @@ def _analisar_quadro_cirurgico(caminho: Path, run_id: str) -> ResultadoAnalise:
                 {"nome": rotulo.name, "confianca": rotulo.confidence} for rotulo in criticas
             ]
         },
+        severity="HIGH",
     )
     return ResultadoAnalise(
         resumo=f"Estrutura(s) crítica(s) identificada(s) no quadro cirúrgico: {nomes}.",
@@ -735,18 +1026,20 @@ def _analisar_audio_respiratorio(
 
 def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
     """Áudio de consulta sem anotação: transcrição + features acústicas + fadiga
-    vocal + termos críticos + sentimento.
+    vocal + deteção de padrão respiratório + termos críticos + sentimento.
 
-    Com um único áudio o baseline de fadiga é degenerado (desvio-padrão zero) e
-    o score é sempre ``0.0`` — mesma limitação documentada no design de F2.
+    A fadiga vocal usa thresholds absolutos (jitter > 1.04%, shimmer > 3.81%,
+    HNR < 15 dB) quando o baseline é insuficiente (<2 áudios), resolvendo a
+    limitação anterior de z-score = 0.0 com 1 único áudio.
     """
     import json
 
     from common.evidence import evidence_dir, save_evidence
-    from pipelines.audio.acoustic_features import extract as extract_acoustic_features
+    from pipelines.audio.acoustic_features import extract as _extract_acoustic
     from pipelines.audio.critical_terms import find_terms, load_terms
-    from pipelines.audio.fatigue_score import is_fatigued
+    from pipelines.audio.fatigue_score import fatigue_absolute
     from pipelines.audio.fatigue_score import score as fatigue_score
+    from pipelines.audio.respiratory_pattern import detect_respiratory_pattern
     from pipelines.audio.sentiment import classify as classify_sentiment
     from pipelines.audio.transcribe import transcribe
 
@@ -759,6 +1052,46 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
         raise ErroDeAnalise(f"não foi possível transcrever o áudio: {exc}") from exc
 
     if not transcript.reliable:
+        # Transcrição não confiável — o áudio pode conter sons
+        # respiratórios ou ruído ambiente, não fala. Continua com
+        # análise acústica e respiratória em vez de desistir.
+        atividade.local("audio", "transcrição não confiável — procurando padrão respiratório")
+
+        # Tenta extrair features acústicas mesmo sem transcrição
+        try:
+            features = _extract_acoustic(caminho, transcript)
+        except Exception:
+            features = None
+
+        # Deteta padrão respiratório no envelope de energia
+        resp_pattern = detect_respiratory_pattern(str(caminho))
+
+        if resp_pattern["detected"] and resp_pattern.get("confidence", 0) >= 0.3:
+            metadados = {
+                "transcription_reliable": False,
+                "padrao_respiratorio": resp_pattern,
+            }
+            evidencia = save_evidence(
+                feature="audio", run_id=run_id,
+                evidence_id=f"{caminho.stem}-respiratory",
+                source_record_id=caminho.stem,
+                artifact_path=caminho,
+                metadata=metadados,
+                modality="audio", event_type="respiratory_pattern",
+                severity="LOW",
+                confidence=resp_pattern.get("confidence", 0.5),
+                status="positive",
+            )
+            breath_info = ""
+            if resp_pattern.get("breath_rate_bpm"):
+                breath_info = f" ({resp_pattern['breath_rate_bpm']} ciclos/min)"
+            return ResultadoAnalise(
+                resumo=f"Padrão respiratório detetado{breath_info} — transcrição não disponível.",
+                pontuacao=0.3,
+                evidencia_id=evidencia.evidence_id,
+                detalhes=metadados,
+            )
+
         return ResultadoAnalise(
             resumo="Não foi possível obter uma transcrição confiável do áudio de consulta.",
             pontuacao=None,
@@ -767,12 +1100,20 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
 
     atividade.local("audio", "extraindo features acústicas (jitter, shimmer, HNR)")
     try:
-        features = extract_acoustic_features(caminho, transcript)
+        features = _extract_acoustic(caminho, transcript)
     except Exception as exc:
         raise ErroDeAnalise(f"não foi possível extrair features acústicas: {exc}") from exc
 
-    fadiga = fatigue_score(features, baseline=[features])
-    fatigado = is_fatigued(fadiga, threshold=1.0)
+    # Fadiga vocal: thresholds absolutos como fallback quando baseline é
+    # insuficiente (1 único áudio → z-score = 0.0 por construção).
+    fadiga_z = fatigue_score(features, baseline=[features])
+    fadiga_abs = fatigue_absolute(features)
+    fatigado = fadiga_abs["fatigued"]
+
+    # Padrão respiratório: deteção heurística de periodicidade no envelope
+    # de energia (9-30 ciclos/min). Independente do dataset ICBHI.
+    atividade.local("audio", "procurando padrão respiratório no envelope de energia")
+    resp_pattern = detect_respiratory_pattern(str(caminho))
 
     sentimento = classify_sentiment(transcript.text, threshold=0.2)
 
@@ -798,8 +1139,11 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
         severity = "MEDIUM"
         event_type = "critical_terms"
     elif fatigado:
-        severity = "LOW"
+        severity = "MEDIUM"
         event_type = "vocal_fatigue"
+    elif resp_pattern["detected"] and resp_pattern.get("confidence", 0) >= 0.5:
+        severity = "LOW"
+        event_type = "respiratory_pattern"
     elif sentimento.label != "neutro":
         severity = "INFO"
         event_type = "sentiment"
@@ -817,11 +1161,13 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
         "termos_criticos": [
             {"termo": h.term, "contexto": h.context} for h in hits
         ],
-        "fadiga_vocal_score": round(fadiga, 3),
+        "fadiga_vocal_zscore": round(fadiga_z, 3),
+        "fadiga_vocal_absoluta": fadiga_abs,
         "fadiga_vocal_detectada": fatigado,
         "jitter": features.jitter_local,
         "shimmer": features.shimmer_local,
         "hnr_db": features.hnr_db,
+        "padrao_respiratorio": resp_pattern,
     }
 
     evidencia = save_evidence(
@@ -835,7 +1181,7 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
         event_type=event_type,
         severity=severity,
         confidence=0.85 if (hits or fatigado) else 0.5,
-        status="positive" if (hits or fatigado) else "negative",
+        status="positive" if (hits or fatigado or resp_pattern["detected"]) else "negative",
     )
 
     # Monta resumo clínico
@@ -845,7 +1191,17 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
         partes.append(f"termo(s) crítico(s) encontrado(s): {', '.join(termos_encontrados)}")
 
     if fatigado:
-        partes.append("suspeita de fadiga vocal")
+        indicadores = ", ".join(fadiga_abs.get("indicators", []))
+        partes.append(f"suspeita de fadiga vocal ({indicadores})")
+
+    if resp_pattern["detected"] and resp_pattern.get("confidence", 0) >= 0.5:
+        if resp_pattern.get("breath_rate_bpm"):
+            partes.append(
+                f"padrão respiratório detetado "
+                f"({resp_pattern['breath_rate_bpm']} ciclos/min)"
+            )
+        else:
+            partes.append("padrão respiratório detetado (banda baixa)")
 
     if sentimento.label != "neutro":
         partes.append(f"sentimento {sentimento.label}")
@@ -858,12 +1214,14 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
             detalhes=metadados,
         )
 
-    # Pontuação heurística: termos críticos + fadiga
+    # Pontuação heurística: termos críticos + fadiga + respiração
     pontuacao = 0.0
     if hits:
         pontuacao = max(pontuacao, 0.5 + min(len(hits) * 0.1, 0.5))
     if fatigado:
         pontuacao = max(pontuacao, 0.7)
+    if resp_pattern["detected"] and resp_pattern.get("confidence", 0) >= 0.5:
+        pontuacao = max(pontuacao, 0.3)
 
     resumo = " | ".join(partes) + "."
 
@@ -908,6 +1266,8 @@ def _analisar_sinais_vitais(caminho: Path, run_id: str) -> ResultadoAnalise:
 
 def _analisar_internacao(base: Path, run_id: str) -> ResultadoAnalise:
     """Caso de internação adulta (BIDMC): HR e SpO2."""
+    import numpy as np
+
     from pipelines.vitals import bidmc
     from pipelines.vitals.loader import InvalidRecordError
 
@@ -918,17 +1278,39 @@ def _analisar_internacao(base: Path, run_id: str) -> ResultadoAnalise:
 
     atividade.local("sinais_vitais", "avaliando HR e SpO2 contra critérios clínicos (BIDMC)")
     achado = bidmc.analisar(record, run_id)
+
+    # Inclui sempre as estatísticas dos sinais vitais, mesmo sem anomalia.
+    duracao_s = len(record.hr) / record.fs if record.fs > 0 else 0
+    detalhes = {
+        "caso": "internacao",
+        "registro": record.record_id,
+        "duracao_s": round(duracao_s, 1),
+        "freq_cardiaca": {
+            "min": round(float(np.min(record.hr)), 1),
+            "max": round(float(np.max(record.hr)), 1),
+            "media": round(float(np.mean(record.hr)), 1),
+            "unidade": "bpm",
+        },
+        "saturacao_oxigenio": {
+            "min": round(float(np.min(record.spo2)), 1),
+            "max": round(float(np.max(record.spo2)), 1),
+            "media": round(float(np.mean(record.spo2)), 1),
+            "unidade": "%",
+        },
+    }
     return ResultadoAnalise(
         resumo=achado.resumo,
         pontuacao=achado.pontuacao,
         evidencia_id=achado.evidencia_id,
-        detalhes={"caso": "internacao"},
+        detalhes=detalhes,
     )
 
 
 def _analisar_cardiotocografia(base: Path, run_id: str) -> ResultadoAnalise:
     """Caso de cardiotocografia (CTU-UHB): frequência cardíaca fetal."""
     import dataclasses
+
+    import numpy as np
 
     from common.evidence import evidence_dir, save_evidence
     from pipelines.vitals.cli import build_event, evidence_id_de
@@ -958,9 +1340,31 @@ def _analisar_cardiotocografia(base: Path, run_id: str) -> ResultadoAnalise:
     scores = detector.score(features)
     flags = detector.flag(features)
 
+    # Métricas descritivas da FHR sempre presentes (mesmo sem anomalia).
+    fhr_vals = limpo.fhr[~mask] if mask is not None and mask.any() else limpo.fhr
+    duracao_s = len(limpo.fhr) / limpo.fs
+    detalhes_ctg = {
+        "caso": "cardiotocografia",
+        "registro": limpo.record_id,
+        "duracao_s": round(duracao_s, 1),
+        "frequencia_cardiaca_fetal": {
+            "min": round(float(np.min(fhr_vals)), 1),
+            "max": round(float(np.max(fhr_vals)), 1),
+            "media": round(float(np.mean(fhr_vals)), 1),
+            "unidade": "bpm",
+        },
+        "janelas_analisadas": len(janelas),
+        "janelas_com_perda_de_sinal": int(mask.sum()) if mask is not None else 0,
+        "ph_referencia": getattr(limpo, "ph", None),
+    }
+
     anomalas = [(j, s) for j, f, s in zip(janelas, flags, scores, strict=True) if f]
     if not anomalas:
-        return ResultadoAnalise(resumo="Sinais vitais sem anomalias no período.", pontuacao=0.0)
+        return ResultadoAnalise(
+            resumo="Sinais vitais sem anomalias no período.",
+            pontuacao=0.0,
+            detalhes=detalhes_ctg,
+        )
 
     janela, score = max(anomalas, key=lambda t: t[1])
     evento = build_event(limpo, detector.name, janela, score)
@@ -983,5 +1387,5 @@ def _analisar_cardiotocografia(base: Path, run_id: str) -> ResultadoAnalise:
         resumo=f"Anomalia na frequência cardíaca fetal entre {ini} e {fim} minutos.",
         pontuacao=1.0,
         evidencia_id=evidencia_id,
-        detalhes={"inicio_min": ini, "fim_min": fim},
+        detalhes=detalhes_ctg | {"inicio_min": ini, "fim_min": fim},
     )

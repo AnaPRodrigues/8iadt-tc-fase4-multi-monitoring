@@ -12,13 +12,13 @@ export function AreaEnvio({ pacienteId, aoConcluir }) {
   const [erro, setErro] = useState(null);
 
   async function enviar(evento) {
-    const arquivo = evento.target.files[0];
-    evento.target.value = ""; // permite reenviar o mesmo arquivo
-    if (!arquivo) return;
+    const arquivos = [...evento.target.files];
+    evento.target.value = ""; // permite reenviar os mesmos ficheiros
+    if (arquivos.length === 0) return;
     setErro(null);
     try {
-      setSituacao(`Enviando "${arquivo.name}"…`);
-      const envio = await api.enviarArquivo(pacienteId, modalidade, arquivo);
+      setSituacao(`Enviando ${arquivos.map((a) => `"${a.name}"`).join(", ")}…`);
+      const envio = await api.enviarArquivo(pacienteId, modalidade, arquivos);
       setSituacao("Analisando…");
       await api.analisarEnvio(envio.id);
       setSituacao(null);
@@ -45,7 +45,7 @@ export function AreaEnvio({ pacienteId, aoConcluir }) {
         </label>
         <label className="botao-arquivo">
           Escolher arquivo…
-          <input type="file" onChange={enviar} disabled={Boolean(situacao)} />
+          <input type="file" multiple onChange={enviar} disabled={Boolean(situacao)} />
         </label>
       </div>
       {situacao && <p className="aviso-processando">{situacao}</p>}

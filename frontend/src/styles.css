@@ -261,6 +261,30 @@ button:disabled {
   color: var(--texto-suave);
   font-style: italic;
 }
+
+/* --- Sinais vitais no painel de modalidade --- */
+.painel-vitals {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: #f0f4f8;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+.painel-vitals .vitals-titulo {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  color: var(--texto-principal);
+}
+.painel-vitals .vitals-valores {
+  margin: 0.1rem 0;
+  color: var(--texto-principal);
+}
+.painel-vitals .vitals-info {
+  margin-top: 0.25rem;
+  color: var(--texto-suave);
+  font-size: 0.8rem;
+}
+
 .link-evidencia {
   background: transparent;
   color: var(--azul);

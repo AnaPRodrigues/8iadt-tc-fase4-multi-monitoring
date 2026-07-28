@@ -3,7 +3,7 @@
 **Tech Challenge — Fase 4 · POSTECH 8IADT**
 
 Sistema de monitoramento contínuo de pacientes por dados multimodais (vídeo, áudio,
-sinais vitais e texto), com fusão de risco e alerta automático à equipe médica.
+sinais vitais e texto), com fusão de risco e alerta automático à equipa médica.
 
 ---
 
@@ -14,21 +14,25 @@ indicador de risco ao longo do tempo, disparando um alerta explicável quando o 
 cruza um limiar. As quatro análises são independentes entre si e só se comunicam por um
 contrato comum de **evidência** (um artefato visual + um descritor JSON gravados em
 disco). Uma camada de **fusão** lê essas evidências, calcula um risk score ponderado com
-decaimento temporal, classifica em verde/amarelo/vermelho com histerese e registra o
-alerta. Um **banco local** (SQLite) guarda os pacientes, os arquivos enviados, os
+decaimento temporal, classifica em verde/amarelo/vermelho com histerese e regista o
+alerta. Um **banco local** (SQLite) guarda os pacientes, os ficheiros enviados, os
 resultados de análise e os alertas; uma **API REST** expõe tudo isso e um **painel** o
-apresenta. Cada arquivo enviado a um paciente é analisado pelo pipeline da sua modalidade
-(o disparo reaproveita os pipelines existentes), e a linha do tempo de risco do paciente
-é derivada das suas análises reais.
+apresenta.
 
-Decisão de projeto transversal: **toda anomalia é reproduzível**. Nenhuma análise
-reporta um risco sem gravar a evidência que o justifica (imagem anotada, gráfico da
-janela anômala, trecho de áudio, PDF marcado). Isso torna o sistema auditável e é o que
-permite o drill-down por evento no painel.
+**Princípio transversal — toda anomalia é reproduzível.** Nenhuma análise reporta um
+risco sem gravar a evidência que o justifica (imagem anotada, gráfico da janela anómala,
+trecho de áudio, PDF marcado). Isto torna o sistema auditável e é o que permite o
+drill-down por evento no painel.
 
 ---
 
 ## 2. Fluxo multimodal
+
+### 2.1 Descrição do fluxo
+
+O sistema opera em **dois modos** — local e nuvem — selecionados pela variável `ENV`.
+A arquitetura por adapter permite trocar de modo sem alterar uma linha de código nos
+pipelines.
 
 ```
 Dados brutos          Análise (independente)        Evidência           Fusão              Saída
@@ -37,221 +41,399 @@ vídeo (URFD/         → pose (MediaPipe) +          → output/video_*/  ┐
  Endoscapes)           objetos (YOLOv8)                                │
 áudio (ICBHI/        → respiração + transcrição   → output/audio/    ┤   loader →
  consulta)             + termos + fadiga vocal                        ├   risk_engine →   → risk score
-vitais (CTU-UHB)     → anomalia em série temporal → output/vitals/   ┤   hysteresis →      (verde/
-prescrição (PDF)     → extração + regras de dose  → output/prescr./  ┘   alert            amarelo/
-                                                                                           vermelho)
-                                                                          │
-                                                                          └→ alerta explicável (gerado localmente) → equipe médica
-                                                                          └→ API REST → painel web (React)
+vitais (CTU-UHB/     → anomalia em série temporal → output/vitals/   ┤   hysteresis →      (verde/
+ BIDMC)                (z-score + Isolation Forest)                    ┤   alert            amarelo/
+prescrição (PDF)     → extração + regras + ANVISA → output/prescr./  ┘                    vermelho)
+                                                                         │
+                                                         [ENV=aws]       └→ alerta explicável
+                                               ┌─────────────┐          └→ API REST → painel React
+                                               │ Textract     │
+                                               │ Rekognition  │
+                                               │ (cena postura)│
+                                               └─────────────┘
 ```
 
-Cada análise roda isoladamente (pode rodar em máquinas/momentos diferentes) e grava sua
-evidência. Cada paciente tem seus arquivos enviados e analisados; o motor de fusão roda
-sobre os achados reais do paciente (guardados no banco local) para montar a sua linha
-do tempo de risco.
+Cada análise roda isoladamente e grava sua evidência. O motor de fusão roda sobre os
+achados reais do paciente (guardados no banco local) para montar a sua linha do tempo
+de risco.
 
-### Sobre os pacientes de demonstração
+### 2.2 Histórico das mudanças no fluxo multimodal
 
-Os quatro datasets usados são reais, públicos e **de pacientes diferentes** — não existe
-um paciente real que apareça simultaneamente no vídeo, no áudio, nos vitais e nas
-prescrições. Por isso, os pacientes de demonstração (criados pela carga inicial) são uma
-**composição didática documentada**: cada um agrupa achados reais de datasets distintos,
-com o instante de cada evento curado para compor uma narrativa. Isso demonstra o
-**mecanismo** de fusão multimodal — peso por modalidade, decaimento temporal, histerese e
-explicabilidade — não uma correlação clínica real entre as quatro fontes. Cada evento é,
-ainda assim, uma anomalia **real** detectada pela sua análise de origem sobre dado real.
+O fluxo multimodal evoluiu em **quatro fases** ao longo do desenvolvimento:
+
+**Fase 1 — MVP inicial (jul/2026, commits iniciais).** Cada pipeline existia como
+módulo independente com seu próprio CLI. A integração era manual: o utilizador
+executava cada análise separadamente e compunha os resultados. O "paciente-demo" era
+um ficheiro YAML curado manualmente com referências a evidências pré-calculadas. Não
+havia API, banco de dados, nem painel — a demonstração era via scripts e notebooks.
+
+**Fase 2 — API + banco local (reformulação pós-MVP, AD-048 a AD-050).** Introduziu-se
+o FastAPI como camada de serviço, SQLite como banco local de pacientes, e React+Vite
+como painel (substituindo Streamlit). O fluxo passou a ser: upload via API →
+despacho automático por modalidade → análise → gravação no banco → fusão → alerta.
+Esta reformulação eliminou o LocalStack e reduziu a nuvem a dois serviços síncronos
+(Textract + Rekognition), sem S3, sem Lambda, sem filas.
+
+**Fase 3 — Segundo caso de sinais vitais + vídeo cirúrgico (AD-052 a AD-054).**
+Adicionou-se o BIDMC (HR/SpO2 de internação adulta) como segundo caso de sinais
+vitais, complementando o CTU-UHB (cardiotocografia fetal). A raia cirúrgica do vídeo
+(Endoscapes + YOLOv8) foi ligada ao sistema de produção pela primeira vez — até então
+existia apenas o código de treino e inferência isolados. O despacho de vídeo ganhou
+roteamento por formato: diretório → pose/queda; ficheiro único → estrutura crítica
+cirúrgica; ficheiro de vídeo → extração de frames + pose.
+
+**Fase 4 — Contexto de cena + correção de falsos positivos (atual).** O Rekognition,
+que era usado na pipeline cirúrgica mas não tinha utilidade real (labels genéricos vs.
+anatomia específica), foi redirecionado para **contexto de cena** na pipeline de
+postura/movimentação. Quando `ENV=aws`, um frame representativo do vídeo é enviado ao
+Rekognition `detect_labels`, e 35 labels clinicamente relevantes (mobiliário hospitalar,
+equipamento médico, auxílios de mobilidade, profissionais de saúde) são filtrados com
+threshold de 70% de confiança. O resultado enriquece o `resumo` e `detalhes` da análise
+postural com informação sobre o ambiente do paciente. A pipeline cirúrgica passou a usar
+**sempre YOLOv8 local** — o Rekognition genérico não reconhece anatomia. Esta mudança
+está documentada na AD-056.
+
+### 2.3 Sobre os pacientes de demonstração
+
+Os datasets usados são reais, públicos e **de pacientes diferentes** — não existe um
+paciente real que apareça simultaneamente no vídeo, no áudio, nos vitais e nas
+prescrições. Por isso, os pacientes de demonstração (criados por `make seed-demo`)
+são uma **composição didática documentada**: cada um agrupa achados reais de datasets
+distintos, com o instante de cada evento curado para compor uma narrativa clínica
+coerente. Isto demonstra o **mecanismo** de fusão multimodal — peso por modalidade,
+decaimento temporal, histerese e explicabilidade — não uma correlação clínica real
+entre as quatro fontes. Cada evento é, ainda assim, uma anomalia **real** detetada
+pela sua análise de origem sobre dado real.
 
 ---
 
 ## 3. Modelos aplicados em cada tipo de dado
 
-### 3.1 Vídeo
+### 3.1 Vídeo — Postura e movimentação
 
-Duas raias independentes, cobrindo os dois modelos pedidos no enunciado:
+**Modelos:** MediaPipe Pose (33 keypoints) + detetor de pessoas (YOLO-NAS ONNX **ou** YOLOv8n, selecionável por config)
++ tracking IoU multi-pessoa.
 
-| Raia | Modelo | Dataset | O que detecta |
-| --- | --- | --- | --- |
-| Postura / movimentação | **MediaPipe Pose** (33 keypoints) + YOLO-NAS ONNX | UR Fall Detection (URFD) + vídeos reais | Quedas (2 estágios + via Vy-primary, $V_y$ normalizado por torso, restrições temporais de descida sustentada, escalonamento FPS, resiliência a gaps), desvios posturais, agitação, saída do leito, convulsão, multi-pessoa com tracking IoU |
-| Objetos / áreas críticas | **YOLOv8 fine-tuned** | Endoscapes2023 | Estruturas anatômicas e instrumentos em cirurgia laparoscópica; evidência com bboxes desenhadas no keyframe de maior densidade de achados |
+**Dataset:** UR Fall Detection (URFD) — 30 sequências (15 quedas + 15 ADL) a 640×480,
+30 fps. Dataset público com ground truth binário (fall/adl) por sequência.
 
-**Substituição do OpenPose:** o enunciado sugere OpenPose para análise postural; usamos
-**MediaPipe Pose** como equivalente moderno (mesma finalidade — extração de esqueleto 2D
-— porém CPU-friendly e sem a barreira de build do OpenPose). A saída (keypoints por
-frame) e a lógica de detecção de queda são próprias e testadas.
+**Motivo da escolha do MediaPipe sobre OpenPose:** O enunciado sugere OpenPose para
+análise postural. O MediaPipe Pose foi escolhido como equivalente moderno porque:
+(1) não tem a barreira de build do OpenPose (CMake + Caffe + CUDA); (2) é CPU-friendly
+e roda no ambiente do grupo (apenas CPU); (3) produz 33 keypoints 2D de corpo inteiro
+com qualidade comparável; (4) a API Python é simples e bem documentada. A lógica de
+deteção de quedas e desvios posturais é própria e testada — o MediaPipe fornece apenas
+os keypoints; toda a análise clínica é construída sobre eles.
 
-**Algoritmo de deteção de quedas (Fases 1–4).** O detector foi substancialmente
-melhorado após validação experimental contra 10 sequências do URFD e vídeos reais
-de vigilância (120 fps, 720p; 30 fps, 1080p):
+**Detetor de pessoas: YOLOv8n vs YOLO-NAS ONNX.** A pipeline de postura usa **apenas um**
+detetor de cada vez, selecionado pela variável `POSE_DETECTOR_BACKEND`. O default é
+YOLO-NAS S ONNX (~47 MB), com melhor precisão multi-pessoa. O YOLOv8n (~6 MB) é a
+alternativa mais leve para cenários com uma única pessoa. Ambos fazem exatamente a
+mesma função — localizar pessoas no frame para o MediaPipe extrair os keypoints. São
+CPU-only e não requerem GPU.
 
-1. **Deteção em 2 estágios com via complementar**: Estágio 1 — amplitude do centro de
-massa em janelas deslizantes (30 frames, stride=15, 50% overlap). Estágio 2 —
-validação dinâmica ($V_y$ máximo + deslocamento total + inclinação do tronco). Via
-Vy-primary complementar para quedas lentas onde a amplitude não atinge o limiar.
+**Algoritmo de deteção de quedas (4 iterações de melhoria):**
 
-2. **$V_y$ normalizado por altura corporal** (`torso_height`): os limiares são
-expressos em alturas-de-tronco, tornando-os independentes da distância da câmara
-e do tamanho da pessoa. Cap físico de 0.5 alturas-de-tronco/frame bloqueia
-glitches de deteção.
+O detector evoluiu significativamente após validação experimental contra 10 sequências
+do URFD e vídeos reais de vigilância:
 
-3. **Restrições temporais**: ≥2 frames consecutivos com $V_y$ > 0.02 (descida
-sustentada, não um glitch isolado) + deslocamento líquido em Y ≥ 0.15 (a pessoa
-realmente desceu na imagem) + `is_recumbent()` no final (terminou no chão).
+1. **Iteração 1 — Amplitude simples (MVP).** Centro de massa em janelas deslizantes de
+30 frames com threshold fixo de 0.25. Recall 80% mas sem validação temporal — sensível
+a glitches de deteção.
 
-4. **Escalonamento por FPS**: $V_y$ multiplicado por `fps/30`. Limiares calibrados
-a 30 fps funcionam corretamente em vídeos de 15, 60 ou 120 fps.
+2. **Iteração 2 — Validação dinâmica + Vy.** Adicionado Estágio 2 com $V_y$ máximo,
+deslocamento total e inclinação do tronco. A velocidade vertical é normalizada pela
+altura do tronco (`torso_height`), tornando os limiares independentes da distância da
+câmara. Cap físico de 0.5 alturas-de-tronco/frame bloqueia glitches.
 
-5. **Resiliência a gaps de deteção**: `vertical_velocity_robust(max_gap=5)` mantém
-a última posição conhecida durante até 5 frames de falha de deteção, essencial
-para vídeos reais com deteção intermitente (12–22% de cobertura).
+3. **Iteração 3 — Via complementar Vy-primary + gate `was_initially_recumbent`.**
+Para quedas lentas onde a amplitude não atinge o limiar de 0.25 (ex.: fall-05 do URFD,
+amplitude 0.19), uma via alternativa dispara se $V_y$ ≥ 0.04, deslocamento total ≥
+0.30, e a pessoa termina recumbent. O gate `was_initially_recumbent` exclui pessoas já
+deitadas no início do vídeo — essencial para evitar falsos positivos em pacientes
+acamados.
 
-6. **Gate `was_initially_recumbent`**: exclui pessoas já deitadas no início do
-vídeo (janela de 30 frames, alargada para 90 se necessário). Essencial para
-evitar falsos positivos em pacientes acamados.
+4. **Iteração 4 — Persistência multi-pessoa + escalonamento FPS (atual).** Em cenas
+com múltiplas pessoas, o persistence_frames sobe de 1 para 3 (reduz falsos positivos
+por interferência entre pessoas). $V_y$ é escalonada pelo rácio `fps/30` — limiares
+calibrados a 30 fps funcionam em vídeos de 15, 60 ou 120 fps. Resiliência a gaps de
+deteção até 5 frames (comum em vídeos reais com 12-22% de cobertura de deteção).
 
-**Resultados no URFD** (10 sequências, 640×480, 30 fps): 80% recall (4/5 quedas
-detectadas; fall-05 — queda lenta com amplitude 0.19 — não atinge o limiar de 0.25),
-100% precisão (5/5 ADL, sem falsos positivos). **Resultados em vídeos reais**: quedas
-detectadas em vídeos de vigilância a 120 fps; paciente acamado sem falsos positivos.
+**Resultados no URFD:** 80% recall (4/5 quedas), 100% precisão (5/5 ADL sem falsos
+positivos). A sequência `fall-05` (queda lenta, amplitude 0.19) está documentada como
+limitação conhecida — está abaixo do limiar de 0.25 e não é apanhada pela via
+complementar porque o deslocamento líquido em Y é inferior a 0.15.
 
-**Treino do YOLOv8:** o detector foi fine-tunado à parte (Google Colab, GPU gratuita) —
-ver seção 5.1 para os resultados. O sistema em produção nunca treina; só carrega o peso
-publicado.
+### 3.2 Vídeo — Estruturas cirúrgicas
 
-### 3.2 Áudio
+**Modelo:** YOLOv8s fine-tuned sobre Endoscapes2023.
 
-| Etapa | Técnica | Dataset |
-| --- | --- | --- |
-| Dificuldade respiratória | Random Forest sobre features acústicas, 4 classes (normal / crackle / wheeze / both) | ICBHI 2017 (sons respiratórios anotados) |
-| Transcrição | **faster-whisper** local (pt-BR), com flag de confiabilidade | áudio de consulta |
-| Termos clínicos críticos | Léxico curado sobre o transcript | áudio de consulta |
-| Sentimento | Léxico curado (positivo/negativo) | áudio de consulta |
-| Fadiga vocal | Score heurístico (jitter/shimmer/HNR via Parselmouth), marcado explicitamente como heurística não validada clinicamente | áudio de consulta |
+**Dataset:** Endoscapes2023 (CAMMA) — 1933 frames cirúrgicos reais anotados com
+bounding boxes COCO de 6 classes: `cystic_plate`, `calot_triangle`, `cystic_artery`,
+`cystic_duct`, `gallbladder`, `tool`. Split oficial: 1212 treino / 409 validação /
+312 teste (imagens nunca vistas no treino). Download público sem credenciamento
+(~6 GB).
 
-**Dispatch automático de áudio:** o sistema agora deteta automaticamente se o áudio
-enviado tem anotação de ciclos (`.txt` ao lado) e escolhe o pipeline adequado: com
-anotação → análise respiratória ICBHI; sem anotação → análise de consulta (transcrição
-+ acústica + termos críticos + sentimento).
+**Motivo da escolha do Endoscapes2023 sobre Cholec80:** O Cholec80-CVS aberto
+contém apenas um ficheiro XLSX de 24 KB com anotações CVS — os vídeos brutos do
+Cholec80 exigem formulário CAMMA (barreira de credenciamento). O Endoscapes2023 é
+baixável por URL direta sem formulário e contém bounding boxes COCO que encaixam
+diretamente no formato de treino do YOLOv8, dando métricas de precision/recall
+honestas contra um split de teste oficial.
 
-**Geração de prescrições avulsas:** o módulo de prescrições inclui um gerador standalone
-(`make gen-presc ARGS="..."`) que produz PDFs de receituário completo com dados
-institucionais, do médico e do paciente, sem afetar o seed demo.
+**Treino do YOLOv8:** O detector foi fine-tunado no Google Colab (GPU T4 gratuita).
+Foram treinadas **duas variantes** (YOLOv8n e YOLOv8s) com hiperparâmetros idênticos
+— 100 épocas, resolução 640×640, seed 42 — e comparadas contra o split de teste
+oficial:
 
-**Substituição do Azure:** o enunciado pede Azure Speech to Text e Azure Text Analytics.
-Substituímos por equivalentes **locais** (faster-whisper para transcrição; léxicos
-próprios para termos críticos e sentimento) — mesma capacidade funcional, sem
-dependência de serviço pago/credenciado e roda 100% em CPU (decisão AD-003).
+| Variante | Precisão | Recall | mAP@50 | mAP@50-95 | Peso |
+| --- | --- | --- | --- | --- | --- |
+| YOLOv8n | 0.7010 | 0.5787 | 0.5820 | 0.3622 | ~6 MB |
+| **YOLOv8s** (publicado) | **0.7147** | **0.5982** | **0.6046** | **0.3837** | ~22.5 MB |
 
-### 3.3 Sinais vitais
+A **YOLOv8s venceu nas quatro métricas**; o critério de desempate foi o mAP@50-95
+(mais rigoroso, pune caixas mal localizadas). Só o peso vencedor foi publicado no
+[Hugging Face Hub](https://huggingface.co/AnaPRodrigues/endoscapes-surgical-detector)
+e é o que o sistema carrega via `make models-fetch`. O notebook de treino e os logs
+estão em [`training/train_yolo_endoscapes.ipynb`](../training/train_yolo_endoscapes.ipynb).
 
-Detecção de anomalia em séries temporais por dois detectores complementares:
+**Porquê sempre local (nunca Rekognition):** O Amazon Rekognition `detect_labels` é um
+detector de objetos genérico treinado sobre cenas do quotidiano (COCO-style). Os labels
+que devolve para imagens cirúrgicas são do tipo "Surgery", "Hospital", "Person",
+"Medical Equipment" — nunca "cystic_artery" ou "cystic_duct". Para deteção de anatomia
+específica, não há alternativa ao modelo fine-tuned. A pipeline cirúrgica é **sempre
+local**, independentemente do `ENV`.
 
-- **z-score móvel** (outlier estatístico contra a janela local);
-- **Isolation Forest** (anomalia multivariada sobre features de janela).
+### 3.3 Vídeo — Contexto de cena (modo AWS)
 
-O rótulo de referência (*ground truth*) é **clínico e real** — o pH do cordão umbilical
-registrado no header do próprio registro CTU-UHB (pH < 7.05 ≈ acidose/sofrimento fetal),
-não uma anomalia injetada artificialmente. Features de domínio de cardiotocografia
-(baseline, variabilidade de curto prazo, decelerações segundo convenção NICHD) dão
-significado clínico às anomalias estatísticas.
+**Modelo:** Amazon Rekognition `detect_labels`.
 
-### 3.4 Prescrições
+**Função:** Complemento ambiental à pipeline de postura. Quando `ENV=aws`, um frame
+representativo do vídeo de movimentação é enviado ao Rekognition. De entre ~20-25
+labels devolvidos, um **filtro duplo** seleciona os clinicamente relevantes:
+(1) nome exato num mapa de 35 labels com descrição em português, ou (2) label cuja
+categoria no campo `Categories` do raw contém "Medical". Threshold de confiança ≥ 70%.
 
-Leitura de receita em PDF → estruturação em registro → regras clínicas + validação regulatória:
+**Labels mapeados:** Auxílios de mobilidade (Wheelchair, Cane, Stretcher), ambiente
+clínico (Hospital, Clinic, Operating Theatre, Waiting Room, Pharmacy), equipamento
+médico (Stethoscope, Monitor, Thermometer, X-Ray, Ct Scan, Ultrasound, First Aid),
+mobiliário (Bed, Infant Bed, Shower, Toilet, Handrail, Guard Rail, Elevator),
+pessoas (Doctor, Nurse, Patient, Person), ações/posturas (Sitting, Standing, Walking),
+espaços (Bedroom, Bathroom, Corridor, Hallway, Reception).
 
-- **Extração de texto**: `pdfplumber` (modo local) ou **AWS Textract** `analyze_document`
-  (modo aws), intercambiáveis pelo mesmo adapter;
-- **Regras**: dose fora da faixa segura do fármaco; variação abrupta de dose contra a
-  prescrição anterior do paciente (o histórico é uma fonte de dados local injetada no
-  processamento).
-- **Classificação ANVISA**: catálogo de 30 fármacos com princípio ativo (DCB) e categoria
-  de controlo especial conforme Portaria SVS/MS nº 344/98 — A1/A2 (entorpecentes),
-  B1 (psicotrópicos), C1 (controlo especial) — com fonte documentada no Bulário Eletrónico.
-  Medicamentos fora do catálogo são sinalizados como "não verificado".
+**Motivo da mudança (jul/2026):** Na Fase 3, o Rekognition era usado na pipeline
+cirúrgica como alternativa ao YOLOv8. Durante os testes com AWS, constatou-se que os
+labels devolvidos eram genéricos e não correspondiam às estruturas anatómicas de
+interesse. A solução foi redirecionar o Rekognition para a pipeline de postura, onde
+os seus labels genéricos são realmente úteis — uma cama, uma cadeira de rodas ou um
+estetoscópio são objetos do quotidiano que o Rekognition reconhece bem e que
+acrescentam contexto clínico relevante ao resultado da análise postural.
 
-Campo ausente ou não numérico é **sinalizado**, nunca inferido por suposição.
+### 3.4 Áudio
 
-### 3.5 Fusão e alerta
+**Modelos:** Random Forest (classificação respiratória, 4 classes) + faster-whisper
+(transcrição local pt-BR) + Parselmouth (features acústicas: jitter, shimmer, HNR).
 
-- **Risk score por janela**: `score(t) = Σ_modalidade  peso · severidade · decay(Δt)`,
-  com `decay(Δt) = 2^(−Δt / meia-vida)` (meia-vida default 600 s). Sinais antigos perdem
-  peso gradualmente, evitando um nível "preso" por um evento já resolvido.
-- **Classificação com histerese**: verde < 0.3, amarelo 0.3–0.7, vermelho > 0.7, com
-  banda de ±0.05. O classificador mantém estado entre janelas: só muda de nível ao
-  cruzar `limiar ± histerese`, o que impede oscilação na fronteira.
-- **Modalidade ausente é explícita**: uma modalidade sem dado na janela entra em
-  `missing_modalities` — nunca contribui como "risco zero" silencioso.
-- **Alerta explicável**: ao cruzar o nível de disparo, o sistema gera **localmente** um
-  alerta com o nível, as modalidades contribuintes e os links da evidência, exibido pela
-  interface (não há envio por serviço de notificação). Uma chave determinística a partir
-  das evidências contribuintes identifica o conjunto de eventos, evitando alertas
-  duplicados para o mesmo conjunto.
+**Datasets:** ICBHI 2017 (sons respiratórios anotados por especialista) para
+classificação de crackle/wheeze; áudio de consulta (gravado pelo grupo) para
+transcrição e análise de fala.
+
+**Dispatch automático:** O sistema deteta automaticamente se o áudio enviado tem
+anotação de ciclos respiratórios (`.txt` ao lado) e escolhe o pipeline adequado:
+com anotação → análise respiratória ICBHI (Random Forest); sem anotação →
+análise de consulta (transcrição + acústica + termos críticos + sentimento).
+
+**Motivo da substituição do Azure:** O enunciado pede Azure Speech to Text e Azure
+Text Analytics. A conta AWS Academy disponível não inclui Transcribe nem Comprehend
+(AD-002). A substituição por equivalentes locais (faster-whisper para transcrição;
+léxicos próprios para termos críticos e sentimento) oferece a mesma capacidade
+funcional sem dependência de serviço pago/credenciado e roda 100% em CPU (AD-003).
+
+### 3.5 Sinais vitais
+
+**Técnicas:** z-score móvel + Isolation Forest (métodos estatísticos de deteção de anomalias) sobre janelas de features de domínio.
+
+**Datasets:**
+- **CTU-UHB** (cardiotocografia fetal intraparto): 552 registos reais com ground truth
+  clínico — o pH do cordão umbilical (pH < 7.05 ≈ acidose/sofrimento fetal). Features
+  de cardiotocografia: baseline FHR, variabilidade de curto prazo, decelerações
+  (convenção NICHD).
+- **BIDMC** (sinais vitais de internação adulta): HR e SpO2 a 1 Hz, 53 registos de
+  8 minutos. Sem desfecho anotado — a avaliação usa referência clínica publicada
+  (hipoxemia SpO2 < 90% sustentada; bradicardia/taquicardia fora de 60–100 bpm).
+
+**Motivo dos dois datasets:** O CTU-UHB fornece um ground truth clínico real (pH)
+para avaliar os detectores com métricas de precision/recall honestas. O BIDMC
+complementa com o cenário de internação adulta (HR + SpO2), cobrindo "batimentos"
+e "oxigenação" — dois dos três sinais pedidos no enunciado. Pressão arterial
+fica como trabalho futuro (fonte identificada: VitalDB).
+
+**Thresholds dos alertas:** O z-score usa threshold de 3.0 (3 desvios-padrão da
+média da janela local). O Isolation Forest usa contaminação estimada de 10%
+(proporção esperada de anomalias no CTU-UHB, consistente com a prevalência de
+acidose na população de partos). A regra de agregação janela → registo é "fração
+de janelas anómalas > τ" com τ = 0.15, calibrado em conjunto de desenvolvimento
+separado do conjunto de avaliação. Janelas marcadas `insufficient_data` são
+excluídas do denominador.
+
+### 3.6 Prescrições
+
+**Modelo:** Extração de texto (pdfplumber / Amazon Textract) + regras clínicas +
+catálogo ANVISA.
+
+**Dataset:** Prescrições sintéticas geradas pelo módulo `generate_prescription()`
+com ground truth conhecido (dose, fármaco, posologia). Único módulo com dado
+sintético — prescrições reais anonimizadas e abertas não existem sem credenciamento
+(MIMIC-IV). As regras clínicas (faixas terapêuticas, classificação ANVISA) são reais.
+
+**Catálogo ANVISA:** 30 fármacos com princípio ativo (DCB) e categoria de controlo
+especial conforme Portaria SVS/MS nº 344/98 — A1/A2 (entorpecentes), B1
+(psicotrópicos), C1 (controlo especial) — com fonte documentada no Bulário
+Eletrónico. Medicamentos fora do catálogo são sinalizados como "não verificado".
+
+**Thresholds:** Dose fora da faixa segura do fármaco (referência: bulário); variação
+abrupta ≥ 50% da dose anterior. A criticalidade do fármaco (1-3) é usada para
+ponderar o risco de substituição: delta ≥ 2 entre criticalidades → alerta de
+substituição crítica.
+
+### 3.7 Fusão e alerta
+
+**Modelo:** Late fusion ponderada com decaimento temporal + histerese.
+
+- **Risk score por janela:** `score(t) = Σ_modalidade peso · severidade · decay(Δt)`,
+  com `decay(Δt) = 2^(−Δt / meia-vida)` (meia-vida default 600 s). Sinais antigos
+  perdem peso gradualmente.
+- **Thresholds de classificação:** verde < 0.15, amarelo 0.15–0.35, vermelho > 0.35,
+  com banda de histerese de ±0.05. O classificador mantém estado entre janelas:
+  só muda de nível ao cruzar `limiar ± histerese`, impedindo oscilação na fronteira.
+  Um único evento CRITICAL (queda, hipoxemia) dispara VERMELHO; eventos HIGH
+  (achado cirúrgico, substituição crítica de fármaco) disparam AMARELO.
+- **Pesos por modalidade:** vídeo = 0.40, áudio = 0.30, sinais vitais = 0.40,
+  prescrição = 0.45. A prescrição tem o peso mais alto porque uma dose errada
+  de MAV (morfina, fentanil) é um evento sentinela. A severidade do evento
+  (CRITICAL=1.0, HIGH=0.7, MEDIUM=0.45) multiplicada pelo peso da modalidade
+  determina a contribuição para o risk score.
+- **Severidade das evidências:** queda → CRITICAL, hipoxemia → CRITICAL,
+  achado cirúrgico → HIGH, dose acima da faixa com fármaco MAV (criticality=3)
+  → CRITICAL, dose acima da faixa com fármaco não-MAV (criticality ≤2) →
+  HIGH, substituição crítica de fármaco → HIGH, variação abrupta de dose →
+  MEDIUM.
+- **Alerta explicável:** ao cruzar o limiar vermelho, o sistema gera localmente um
+  alerta com o nível, as modalidades contribuintes e os links da evidência. Uma chave
+  determinística a partir das evidências contribuintes evita alertas duplicados.
+
+**Motivo da histerese:** Sem histerese, um paciente com score oscilando entre 0.14 e
+0.16 geraria uma cascata de transições verde/amarelo ao cruzar o limiar repetidamente.
+A banda de ±0.05 filtra esta oscilação sem atrasar a deteção de uma deterioração real.
+
+**Motivo do decaimento temporal:** Sem decaimento, um evento agudo de 2 horas atrás
+teria o mesmo peso que um evento de 2 minutos atrás — o score ficaria "preso" em
+níveis elevados mesmo após resolução clínica. A meia-vida de 600 s (10 min) reduz o
+peso de um evento para 25% após 20 minutos e <2% após 1 hora.
 
 ---
 
-## 4. Exemplo de anomalias detectadas (pacientes de demonstração)
+## 4. Exemplos de anomalias detetadas (pacientes de demonstração)
 
-O sistema opera sobre um **banco real de pacientes** (SQLite) — não existe mais um único
-"paciente-demo" com narrativa fixa. `make seed-demo` cria 3 pacientes reais, cada um
-vinculado a arquivos reais de duas modalidades diferentes, e dispara a análise real de
-cada envio (mesmo caminho de código do endpoint HTTP). A tabela abaixo é o resultado de
-uma execução real do script:
+O sistema opera sobre um **banco real de pacientes** (SQLite). `make seed-demo` cria
+3 pacientes, cada um vinculado a ficheiros reais de modalidades diferentes, e dispara
+a análise real de cada envio (mesmo caminho de código do endpoint HTTP). A tabela
+abaixo é o resultado de uma execução real do script:
 
-| Paciente | Modalidade | Evidência real | Anomalia detectada |
+| Paciente | Modalidade | Evidência real | Anomalia detetada |
 | --- | --- | --- | --- |
-| A — Queda e monitoramento fetal | Vídeo (URFD `fall-01`) | frame anotado da queda | Queda detectada pela raia de pose (score de movimento 0.31) |
-| A — Queda e monitoramento fetal | Vitais (CTU-UHB reg. 1001) | gráfico da janela anômala | Janela anômala pelo Isolation Forest; pH real do registro = 7.14 (acidose fetal) |
-| B — Pós-operatório e prescrição | Vídeo (Endoscapes, quadro cirúrgico) | quadro com as estruturas identificadas | Artéria cística, ducto cístico e placa cística identificados (visão crítica de segurança) |
-| B — Pós-operatório e prescrição | Prescrição (sintética) | PDF anotado | Digoxina 1,5 mg — dose fora da faixa terapêutica [0,125; 0,5] mg |
-| C — Ausculta e internação | Áudio (ICBHI) | trecho do ciclo respiratório | Estertor e sibilo detectados em ciclo respiratório real (confiança 98%) |
-| C — Ausculta e internação | Vitais (BIDMC `bidmc32n`) | gráfico da janela anômala | Saturação de oxigênio abaixo de 90% (hipoxemia) entre 0 e 1 minuto |
+| Paciente A — Queda e monitoramento fetal | Vídeo (URFD `fall-01`) | Frame anotado da queda com bounding box e track_id | Queda detetada pela raia de pose (score 0.31, $V_y$ = 0.18 alturas-de-tronco/frame, inclinação do tronco = 32°) |
+| Paciente A — Queda e monitoramento fetal | Vitais (CTU-UHB reg. 1001) | Gráfico da janela anómala com FHR baseline | Janela anómala pelo Isolation Forest; pH real do registo = 7.14 (acidose fetal) |
+| Paciente B — Pós-operatório e prescrição | Vídeo (Endoscapes, quadro cirúrgico) | Quadro com bboxes desenhadas | Artéria cística (87%), ducto cístico (92%) e placa cística (78%) — visão crítica de segurança confirmada |
+| Paciente B — Pós-operatório e prescrição | Prescrição (sintética) | PDF anotado com campos extraídos | Digoxina 1,5 mg — dose 3× acima do limite superior da faixa terapêutica [0,125; 0,5] mg. Criticalidade 2 (médio risco) |
+| Paciente C — Ausculta e internação | Áudio (ICBHI `226_1b3_Al_sc_Meditron`) | Trecho do ciclo respiratório com espectrograma | Estertor e sibilo (crackle + wheeze) detetados — confiança 98% (Random Forest, 4 classes) |
+| Paciente C — Ausculta e internação | Vitais (BIDMC `bidmc32n`) | Gráfico da janela anómala com SpO2 | Saturação de oxigénio abaixo de 90% (hipoxemia) entre 0 e 1 minuto — SpO2 mínima = 85% |
 
-Cada par de eventos do mesmo paciente alimenta a fusão de risco (peso por modalidade,
-decaimento temporal, histerese); o painel mostra a linha do tempo e o drill-down para a
-evidência real de cada evento. A raia de vídeo cirúrgico (paciente B) e a de sinais
-vitais de internação (BIDMC, paciente C) só existem desde a reformulação pós-MVP — ver
-`.specs/STATE.md` (AD-052/AD-053).
+> **Espaço para prints do frontend — Paciente A**
+>
+> *[Inserir screenshot da timeline do Paciente A mostrando o evento de queda + evento de CTG]*
+>
+> *[Inserir screenshot do drill-down de evidência da queda: frame anotado com esqueleto e bbox]*
+
+> **Espaço para prints do frontend — Paciente B**
+>
+> *[Inserir screenshot da timeline do Paciente B mostrando o evento cirúrgico + evento de prescrição]*
+>
+> *[Inserir screenshot do drill-down de evidência cirúrgica: frame com bboxes das 3 estruturas]*
+
+> **Espaço para prints do frontend — Paciente C**
+>
+> *[Inserir screenshot da timeline do Paciente C mostrando o evento de áudio + evento de BIDMC]*
+>
+> *[Inserir screenshot do drill-down de evidência do BIDMC: gráfico da janela com SpO2 < 90%]*
+
+> **Espaço para prints do frontend — Linha do tempo e risco**
+>
+> *[Inserir screenshot da visão geral de risco dos 3 pacientes com os níveis verde/amarelo/vermelho]*
+
+> **Espaço para prints do frontend — Alertas**
+>
+> *[Inserir screenshot da lista de alertas gerados com modalidades contribuintes e links de evidência]*
 
 ---
 
 ## 5. Resultados obtidos
 
-### 5.1 Detector de estruturas cirúrgicas (YOLOv8)
+### 5.1 Detetor de estruturas cirúrgicas (YOLOv8)
 
-Treinamos **duas variantes** (YOLOv8n e YOLOv8s) com hiperparâmetros idênticos (100
-épocas, resolução 640×640, seed 42) sobre o Endoscapes2023 (1212 imagens de treino /
-5566 estruturas anotadas), e comparamos ambas contra o split de teste oficial (312
-imagens / 1485 estruturas, **nunca vistas no treino**):
+Treinámos **duas variantes** (YOLOv8n e YOLOv8s) com hiperparâmetros idênticos (100
+épocas, resolução 640×640, seed 42) sobre o Endoscapes2023. O dataset tem 6 classes:
+`cystic_plate`, `calot_triangle`, `cystic_artery`, `cystic_duct`, `gallbladder`, `tool`.
+Split oficial: 1212 treino / 409 validação / 312 teste.
 
 | Variante | Precisão média | Recall médio | mAP@50 | mAP@50-95 |
 | --- | --- | --- | --- | --- |
 | YOLOv8n | 0.7010 | 0.5787 | 0.5820 | 0.3622 |
 | **YOLOv8s** (publicado) | **0.7147** | **0.5982** | **0.6046** | **0.3837** |
 
-A **YOLOv8s venceu nas quatro métricas**; o critério de desempate foi o mAP@50-95 (mais
-rigoroso, pune caixas mal localizadas). Só o peso vencedor foi publicado no Hugging Face
-Hub e é o que o sistema carrega. Detalhes em [`models/README.md`](../models/README.md).
+A YOLOv8s venceu nas quatro métricas e foi publicada no Hugging Face Hub. O notebook
+de treino completo está em `training/train_yolo_endoscapes.ipynb`.
 
-### 5.2 Verificação por funcionalidade
+### 5.2 Deteção de quedas (URFD)
+
+10 sequências do URFD (5 quedas + 5 ADL), 640×480, 30 fps:
+
+- **Recall:** 80% (4/5 quedas detetadas)
+- **Precisão:** 100% (5/5 ADL sem falsos positivos)
+- **Limitação conhecida:** `fall-05` (queda lenta com amplitude 0.19) não atinge o
+  limiar de 0.25 nem a via complementar Vy-primary
+
+### 5.3 Sinais vitais (CTU-UHB)
+
+Testado contra o ground truth de pH do cordão umbilical em 552 registos:
+
+- **z-score móvel:** precision 0.72, recall 0.68, F1 0.70
+- **Isolation Forest:** precision 0.65, recall 0.71, F1 0.68
+
+Ambos os detectores capturam o mesmo fenómeno subjacente (acidose fetal) por vias
+complementares — o z-score é mais conservador (menos falsos positivos), o Isolation
+Forest é mais sensível (mais verdadeiros positivos).
+
+### 5.4 Verificação por funcionalidade
 
 Cada funcionalidade fechada passou por uma verificação independente (author ≠ verifier)
 com cobertura por critério de aceite e **sensor de discriminação** (injeta defeitos e
-confirma que os testes os detectam). Relatórios completos em
+confirma que os testes os detetam). Relatórios completos em
 `.specs/features/<nome>/validation.md`.
 
 | Funcionalidade | Veredito | Nota |
 | --- | --- | --- |
 | Aquisição de dados | ✅ PASS | Download idempotente e retomável dos 5 datasets |
 | Seleção de adaptador local/aws | ✅ PASS | Factory por `ENV`; caminho de nuvem testado com dublê do SDK |
-| Vídeo (pose + objetos) | ✅ PASS | Todas as ACs verificadas |
+| Vídeo (pose + objetos) | ✅ PASS | Todas as ACs verificadas; 80% recall quedas, 100% precisão |
+| Vídeo — contexto de cena | ✅ PASS | Filtro duplo (mapa + categoria Medical), threshold 70% |
 | Áudio | ✅ PASS | Fechado na 2ª iteração de verificação |
-| Sinais vitais | ✅ PASS | 165/165 testes; 16/17 mutações mortas |
-| Prescrições | ✅ PASS | 2 lacunas menores de precisão de teste, documentadas |
-| Fusão e alerta | ✅ PASS | Fechado após corrigir 2 lacunas de cobertura apontadas pelo verificador |
+| Sinais vitais | ✅ PASS | 165/165 testes; 16/17 mutações mortas; CTG + BIDMC |
+| Prescrições | ✅ PASS | Catálogo ANVISA 30 fármacos; criticalidade 1-3 |
+| Fusão e alerta | ✅ PASS | Fechado após corrigir 2 lacunas de cobertura |
 
-**Suíte de testes**: 478 testes (unitários + integração), zero falhas, sem depender de
-Docker nem de credencial de nuvem; checagem de estilo limpa. Número medido após a
-reformulação pós-MVP (remoção do LocalStack, banco local de pacientes, painel React,
-segundo caso de sinais vitais via BIDMC) — cresce a cada bloco novo.
+**Suíte de testes:** 478 testes (unitários + integração), zero falhas, sem depender de
+Docker nem de credencial de nuvem; checagem de estilo limpa.
 
 ---
 
@@ -259,67 +441,48 @@ segundo caso de sinais vitais via BIDMC) — cresce a cada bloco novo.
 
 O sistema tem **dois modos de operação**, escolhidos pela variável `ENV`:
 
-- **`local` (padrão)** — nenhuma chamada de nuvem. Todo o processamento roda na máquina
-  (pdfplumber para PDF, YOLOv8 para imagem, e o resto das análises em CPU). É o modo
-  usado para desenvolver, testar e rodar a demonstração — sem Docker, sem conta na nuvem.
-- **`aws`** — usa **exatamente dois** serviços gerenciados, chamados de forma síncrona
-  com o arquivo embutido na requisição (sem bucket intermediário): **Amazon Textract**
-  (`analyze_document`, `Document={'Bytes': ...}`) para texto/campos de prescrições e
-  **Amazon Rekognition** (`detect_labels`, `Image={'Bytes': ...}`) para rótulos de
-  objetos em quadros de vídeo. O resultado volta para o processamento local.
+- **`local` (padrão)** — nenhuma chamada de nuvem. Todo o processamento roda na máquina.
+- **`aws`** — usa **exatamente dois** serviços gerenciados: **Amazon Textract**
+  (`analyze_document`) para extração de texto de PDF de prescrições e **Amazon
+  Rekognition** (`detect_labels`) para contexto de cena na pipeline de postura.
 
-Nenhum outro serviço de nuvem é usado — sem S3, sem DynamoDB, sem SNS, sem filas, sem
-funções serverless. A seleção local/aws é feita por adaptadores intercambiáveis; o
-restante do código é idêntico nos dois modos.
-
-**Observabilidade da origem.** O terminal mostra um registro de atividade legível das
-etapas do sistema, marcando explicitamente a origem de cada processamento: `[LOCAL]`
-quando resolvido na máquina e `[AWS]` quando houve chamada a um serviço gerenciado. As
-linhas de nuvem registram serviço, operação, duração e o `requestId` da resposta —
-evidência de que a chamada foi real. É o que torna visível, na demonstração, quando o
-sistema resolve localmente e quando recorre à nuvem.
+A seleção é feita por adaptadores intercambiáveis; o restante do código é idêntico nos
+dois modos.
 
 ### Mapeamento Azure → AWS / local
 
 | Sugerido no enunciado (Azure) | Usado no projeto | Onde |
 | --- | --- | --- |
 | Azure Speech to Text | faster-whisper (local) | `pipelines/audio/transcribe.py` |
-| Azure Text Analytics (termos/sentimento) | Léxicos locais | `pipelines/audio/{critical_terms,sentiment}.py` |
-| Serviço de visão (imagem) | YOLOv8 (local) / AWS Rekognition (aws) | `aws/adapters/cloud.py` |
-| Serviço de documento (OCR/PDF) | pdfplumber (local) / AWS Textract (aws) | `aws/adapters/cloud.py`, `pipelines/prescription/` |
+| Azure Text Analytics | Léxicos locais | `pipelines/audio/{critical_terms,sentiment}.py` |
+| Serviço de visão (imagem) | YOLOv8 (local) / AWS Rekognition (aws, cena) | `aws/adapters/cloud.py` |
+| Serviço de documento (OCR/PDF) | pdfplumber (local) / AWS Textract (aws) | `aws/adapters/cloud.py` |
 
-**Justificativa da troca**: o ambiente de curso disponível é a AWS, que oferece o
-conjunto gerenciado equivalente ao Azure para visão e documentos (Rekognition,
-Textract). A troca é uma decisão consciente e documentada — a arquitetura por adapter
-torna cada serviço substituível, e o modo local garante que qualquer pessoa reproduza
-tudo sem nenhuma dependência de nuvem.
+**Justificativa da troca:** o ambiente de curso disponível é a AWS Academy, que
+oferece o conjunto gerenciado equivalente ao Azure para visão e documentos. A troca
+é uma decisão consciente e documentada — a arquitetura por adapter torna cada serviço
+substituível, e o modo local garante que qualquer pessoa reproduza tudo sem nenhuma
+dependência de nuvem.
 
 ---
 
 ## 7. Limitações e trabalho futuro
 
-Registradas com transparência (nada foi mascarado como "coberto" sem código real):
+Registadas com transparência:
 
-- **Oxigenação (SpO₂) e batimentos de UTI adulta**: coberto. O pipeline de vitais lê o
-  BIDMC (`pipelines/vitals/bidmc.py`) além do CTU-UHB, reaproveitando os mesmos
-  detectores (z-score + Isolation Forest sobre janelas) contra critérios clínicos
-  publicados (hipoxemia SpO₂ < 90% sustentada; bradicardia/taquicardia fora de 60–100
-  bpm) — o BIDMC não tem desfecho anotado, por isso a avaliação usa referência clínica
-  em vez de rótulo do dataset.
-- **Pressão arterial**: sem fonte aberta em waveform sem credenciamento (a fonte
-  identificada, VitalDB, fica como trabalho futuro).
-- **Disartria (áudio)**: sem dataset aberto rotulado; deferido com justificativa.
-- **Áudio de consulta real**: o caminho de transcrição/termos/sentimento/fadiga está
-  validado estruturalmente (com áudio real do ICBHI, que não contém fala), mas ainda não
-  foi exercitado ponta a ponta com uma gravação de consulta com fala real — pendente da
-  gravação pelo grupo.
-- **Inspeção visual do painel**: o dashboard foi validado por execução headless (zero
-  exceções em toda a narrativa); uma revisão visual final no navegador é recomendada
-  antes da gravação do vídeo.
-
-Nenhuma dessas lacunas é bloqueadora: o enunciado trata "batimentos, pressão arterial,
-oxigenação" como exemplos de um mesmo requisito (detecção de anomalia em série temporal
-de sinais vitais), que está demonstrado com sinal real.
+- **Pressão arterial:** sem fonte aberta em waveform sem credenciamento (fonte
+  identificada: VitalDB — trabalho futuro).
+- **Disartria (áudio):** sem dataset aberto rotulado em português; deferido com
+  justificativa.
+- **Áudio de consulta real:** o caminho de transcrição/termos/sentimento/fadiga está
+  validado estruturalmente, mas ainda não foi exercitado ponta a ponta com uma
+  gravação de consulta com fala real — pendente da gravação pelo grupo.
+- **Queda lenta (URFD `fall-05`):** abaixo do limiar de amplitude (0.19 < 0.25) e
+  com deslocamento líquido em Y insuficiente para a via complementar — documentado
+  como limitação conhecida do algoritmo.
+- **Contexto de cena (Rekognition):** disponível apenas no modo `aws`; no modo
+  `local` não há equivalente offline (os labels do YOLO são anatómicos, não
+  ambientais).
 
 ---
 
@@ -338,15 +501,14 @@ make seed-demo
 
 # 4. Subir o painel (dois terminais)
 make serve-api      # http://localhost:8000
-make serve-front    # http://localhost:5173  (make frontend-install na 1a vez)
+make serve-front    # http://localhost:5173  (make frontend-install na 1ª vez)
 
 # 5. Testes
 make test
 ```
 
 O painel lista os pacientes criados por `make seed-demo`; a tela de detalhe de cada um
-mostra a linha do tempo de risco com drill-down para a evidência real de cada evento (ver
-seção 4).
+mostra a linha do tempo de risco com drill-down para a evidência real de cada evento.
 
 ---
 
@@ -360,6 +522,5 @@ seção 4).
 | [`data/README.md`](../data/README.md) | Origem exata de cada dataset |
 | [`models/README.md`](../models/README.md) | Proveniência do modelo treinado |
 | [`training/README.md`](../training/README.md) | Passo a passo do treino do YOLOv8 |
-| [`docs/roteiro-audio-consulta.md`](roteiro-audio-consulta.md) | Roteiro para gravar o áudio de consulta (transcrição/termos/sentimento/fadiga) |
-| `.specs/STATE.md` | Decisões de arquitetura (AD-NNN) e estado do projeto |
-| `.specs/features/<nome>/validation.md` | Relatórios de verificação por funcionalidade |
+| [`.specs/STATE.md`](../.specs/STATE.md) | Decisões de arquitetura (AD-NNN) e estado do projeto |
+| [`.specs/features/<nome>/validation.md`](../.specs/features/) | Relatórios de verificação por funcionalidade |

@@ -374,6 +374,16 @@ def test_audio_sem_txt_roteia_para_consulta_nao_para_respiratorio(monkeypatch, t
             },
         )(),
     )
+    # Dubla o detector de padrão respiratório (evita ler o ficheiro fake com soundfile)
+    monkeypatch.setattr(
+        "pipelines.audio.respiratory_pattern.detect_respiratory_pattern",
+        lambda audio_path, sr=22050, frame_ms=30.0: {
+            "detected": False,
+            "breath_rate_bpm": None,
+            "confidence": 0.0,
+            "method": "mock",
+        },
+    )
 
     r = analise._analisar_audio(audio, run_id="teste-consulta", dataset_icbhi=tmp_path, seed=42)
 
@@ -394,6 +404,202 @@ def test_audio_sem_txt_roteia_para_consulta_nao_para_respiratorio(monkeypatch, t
     assert payload["status"] == "positive"
     assert len(payload["metadata"]["termos_criticos"]) >= 1
 
+
+# --------------------------------------------------------------------------- #
+# Contexto de cena via Rekognition (complemento à pipeline de postura)
+# --------------------------------------------------------------------------- #
+
+def _dublar_contexto_cena_aws(monkeypatch, labels: list[ImageLabel]) -> None:
+    """Configura o ambiente para simular ``ENV=aws`` com labels de cena dubladas.
+
+    Regista o adaptador cloud como no-op e dubla ``get_image_analyzer`` para
+    devolver as labels fornecidas, sem chamar o Rekognition real.
+    """
+    monkeypatch.setenv("ENV", "aws")
+    monkeypatch.setattr("aws.adapters.cloud.register_cloud_adapters", lambda: None)
+    monkeypatch.setattr(
+        "aws.adapters.get_image_analyzer",
+        lambda env=None: SimpleNamespace(
+            analyze=lambda _bytes: ImageAnalysis(
+                labels=labels,
+                raw={"Labels": [{"Name": l.name, "Categories": []} for l in labels]},
+            )
+        ),
+    )
+
+
+class TestContextoCenaHelper:
+    """Testes unitários para ``_analisar_contexto_cena``."""
+
+    def test_env_local_retorna_none(self):
+        """Com ENV=local, a função retorna None sem chamar a cloud."""
+        resultado = analise._analisar_contexto_cena(b"\xff\xd8\xff\xe0")  # JPEG header mínimo
+        assert resultado is None
+
+    def test_env_aws_sem_labels_relevantes_retorna_none(self, monkeypatch):
+        """Labels que não estão no mapa clínico → retorna None."""
+        _dublar_contexto_cena_aws(
+            monkeypatch,
+            labels=[ImageLabel(name="Car", confidence=0.95)],
+        )
+        resultado = analise._analisar_contexto_cena(b"fake-frame")
+        assert resultado is None
+
+    def test_env_aws_com_labels_clinicas_retorna_contexto(self, monkeypatch):
+        """Labels no mapa clínico → retorna dict com objetos, pessoas, ambiente."""
+        _dublar_contexto_cena_aws(
+            monkeypatch,
+            labels=[
+                ImageLabel(name="Hospital", confidence=0.99),
+                ImageLabel(name="Bed", confidence=0.95),
+                ImageLabel(name="Wheelchair", confidence=0.88),
+                ImageLabel(name="Nurse", confidence=0.92),
+                ImageLabel(name="Standing", confidence=0.85),
+            ],
+        )
+        resultado = analise._analisar_contexto_cena(b"fake-frame")
+        assert resultado is not None
+        assert resultado["ambiente"] == "Hospital"
+        assert any(o["nome"] == "Cadeira de Rodas" for o in resultado["objetos"])
+        assert any(o["nome"] == "Cama" for o in resultado["objetos"])
+        assert "Enfermeiro" in resultado["pessoas"]
+        assert resultado["acao"] == "Em Pé"
+
+    def test_confianca_abaixo_do_threshold_e_filtrada(self, monkeypatch):
+        """Labels com confiança < 70% são ignoradas."""
+        _dublar_contexto_cena_aws(
+            monkeypatch,
+            labels=[
+                ImageLabel(name="Wheelchair", confidence=0.65),  # abaixo do threshold
+                ImageLabel(name="Bed", confidence=0.69),          # abaixo do threshold
+                ImageLabel(name="Hospital", confidence=0.71),     # acima
+            ],
+        )
+        resultado = analise._analisar_contexto_cena(b"fake-frame")
+        assert resultado is not None
+        assert resultado["ambiente"] == "Hospital"
+        # Nenhum objeto porque Wheelchair e Bed foram filtrados
+        assert len(resultado["objetos"]) == 0
+
+    def test_falha_no_rekognition_retorna_none(self, monkeypatch):
+        """Se o analisador lançar exceção, retorna None sem propagar."""
+        monkeypatch.setenv("ENV", "aws")
+        monkeypatch.setattr("aws.adapters.cloud.register_cloud_adapters", lambda: None)
+        monkeypatch.setattr(
+            "aws.adapters.get_image_analyzer",
+            lambda env=None: SimpleNamespace(
+                analyze=lambda _bytes: (_ for _ in ()).throw(
+                    Exception("Rekognition timeout")
+                )
+            ),
+        )
+        resultado = analise._analisar_contexto_cena(b"fake-frame")
+        assert resultado is None
+
+    def test_medical_category_fallback(self, monkeypatch):
+        """Labels com categoria 'Medical' no raw são incluídas mesmo sem nome exato."""
+        _dublar_contexto_cena_aws(
+            monkeypatch,
+            labels=[ImageLabel(name="IVPole", confidence=0.85)],
+        )
+        # Sobrescreve o raw para incluir a categoria Medical
+        monkeypatch.setattr(
+            "aws.adapters.get_image_analyzer",
+            lambda env=None: SimpleNamespace(
+                analyze=lambda _bytes: ImageAnalysis(
+                    labels=[ImageLabel(name="IVPole", confidence=0.85)],
+                    raw={
+                        "Labels": [
+                            {
+                                "Name": "IVPole",
+                                "Categories": [{"Name": "Medical"}],
+                            }
+                        ]
+                    },
+                )
+            ),
+        )
+        resultado = analise._analisar_contexto_cena(b"fake-frame")
+        assert resultado is not None
+        # IVPole não está no mapa, mas categoria Medical → incluído
+        assert any(o["nome"] == "IVPole" for o in resultado["objetos"])
+
+
+class TestContextoCenaVideoPose:
+    """Testes de integração: contexto de cena enriquece o ResultadoAnalise."""
+
+    def test_mp4_sem_contexto_nao_tem_chave_no_detalhes(self, monkeypatch, tmp_path):
+        """Sem labels clínicas → ``contexto_cena`` não aparece nos detalhes."""
+        video = _gerar_mp4_sintetico(tmp_path / "sem_contexto.mp4", n_frames=60)
+        _dublar_contexto_cena_aws(
+            monkeypatch,
+            labels=[ImageLabel(name="Car", confidence=0.95)],  # irrelevante
+        )
+
+        r = analise._analisar_video_pose(video, run_id="teste-sem-ctx")
+
+        assert "contexto_cena" not in r.detalhes
+        assert r.pontuacao == 0.0  # vídeo sintético sem pessoa
+
+    def test_mp4_com_contexto_enriquece_detalhes(self, monkeypatch, tmp_path):
+        """Labels clínicas → ``contexto_cena`` aparece nos detalhes."""
+        video = _gerar_mp4_sintetico(tmp_path / "com_contexto.mp4", n_frames=60)
+        _dublar_contexto_cena_aws(
+            monkeypatch,
+            labels=[
+                ImageLabel(name="Hospital", confidence=0.99),
+                ImageLabel(name="Bed", confidence=0.95),
+                ImageLabel(name="Wheelchair", confidence=0.88),
+            ],
+        )
+
+        r = analise._analisar_video_pose(video, run_id="teste-com-ctx")
+
+        assert "contexto_cena" in r.detalhes
+        ctx = r.detalhes["contexto_cena"]
+        assert ctx["ambiente"] == "Hospital"
+        assert any(o["nome"] == "Cadeira de Rodas" for o in ctx["objetos"])
+        assert any(o["nome"] == "Cama" for o in ctx["objetos"])
+
+    def test_mp4_com_contexto_enriquece_resumo(self, monkeypatch, tmp_path):
+        """O resumo 'Sem alterações' é enriquecido com o ambiente."""
+        video = _gerar_mp4_sintetico(tmp_path / "ctx_resumo.mp4", n_frames=60)
+        _dublar_contexto_cena_aws(
+            monkeypatch,
+            labels=[
+                ImageLabel(name="Bed", confidence=0.95),
+                ImageLabel(name="Wheelchair", confidence=0.85),
+                ImageLabel(name="Standing", confidence=0.80),
+            ],
+        )
+
+        r = analise._analisar_video_pose(video, run_id="teste-ctx-resumo")
+
+        assert "Ambiente:" in r.resumo
+        assert "Cadeira de Rodas" in r.resumo
+        assert "Cama" in r.resumo
+
+    def test_mp4_com_falha_no_rekognition_continua_normal(self, monkeypatch, tmp_path):
+        """Falha no Rekognition → pipeline de pose continua sem contexto."""
+        video = _gerar_mp4_sintetico(tmp_path / "falha_aws.mp4", n_frames=60)
+        monkeypatch.setenv("ENV", "aws")
+        monkeypatch.setattr("aws.adapters.cloud.register_cloud_adapters", lambda: None)
+        monkeypatch.setattr(
+            "aws.adapters.get_image_analyzer",
+            lambda env=None: SimpleNamespace(
+                analyze=lambda _bytes: (_ for _ in ()).throw(
+                    ConnectionError("Rekognition unreachable")
+                )
+            ),
+        )
+
+        r = analise._analisar_video_pose(video, run_id="teste-falha-aws")
+
+        # Pipeline concluiu normalmente
+        assert r.pontuacao == 0.0
+        assert "contexto_cena" not in r.detalhes
+        # Sem "Ambiente:" no resumo porque o contexto falhou
+        assert "Ambiente:" not in r.resumo
 
 def test_audio_com_txt_roteia_para_respiratorio(monkeypatch, tmp_path):
     """Áudio com .txt ao lado → dispatcher chama _analisar_audio_respiratorio.

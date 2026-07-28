@@ -29,6 +29,40 @@ export function PainelModalidade({ modalidade, envios, analises, aoAbrirEvidenci
           {ultimaAnalise.pontuacao != null && (
             <p className="painel-confianca">Relevância: {porcentagem(ultimaAnalise.pontuacao)}</p>
           )}
+          {/* Sinais vitais: mostra as métricas mesmo quando o resultado é normal */}
+          {detalhes.frequencia_cardiaca_fetal && (
+            <div className="painel-vitals">
+              <p className="vitals-titulo">Frequência Cardíaca Fetal</p>
+              <p className="vitals-valores">
+                {detalhes.frequencia_cardiaca_fetal.min}–{detalhes.frequencia_cardiaca_fetal.max}{" "}
+                {detalhes.frequencia_cardiaca_fetal.unidade} (média:{" "}
+                {detalhes.frequencia_cardiaca_fetal.media}{" "}
+                {detalhes.frequencia_cardiaca_fetal.unidade})
+              </p>
+              {detalhes.ph_referencia && (
+                <p className="vitals-info">pH referência: {detalhes.ph_referencia}</p>
+              )}
+              <p className="vitals-info">
+                {detalhes.janelas_analisadas} janelas · {detalhes.duracao_s}s analisados
+              </p>
+            </div>
+          )}
+          {detalhes.freq_cardiaca && (
+            <div className="painel-vitals">
+              <p className="vitals-titulo">Sinais Vitais — {detalhes.registro || "Internação"}</p>
+              <p className="vitals-valores">
+                <strong>FC:</strong> {detalhes.freq_cardiaca.min}–{detalhes.freq_cardiaca.max}{" "}
+                {detalhes.freq_cardiaca.unidade} (média: {detalhes.freq_cardiaca.media}{" "}
+                {detalhes.freq_cardiaca.unidade})
+              </p>
+              <p className="vitals-valores">
+                <strong>SpO₂:</strong> {detalhes.saturacao_oxigenio.min}–{detalhes.saturacao_oxigenio.max}{" "}
+                {detalhes.saturacao_oxigenio.unidade} (média: {detalhes.saturacao_oxigenio.media}{" "}
+                {detalhes.saturacao_oxigenio.unidade})
+              </p>
+              <p className="vitals-info">{detalhes.duracao_s}s analisados</p>
+            </div>
+          )}
           {/* Info ANVISA para prescrições */}
           {temAnvisa && (
             <div className="painel-anvisa">

@@ -29,9 +29,12 @@ export const api = {
   removerPaciente: (id) => pedir(`/patients/${id}`, { method: "DELETE" }),
 
   listarEnvios: (id) => pedir(`/patients/${id}/uploads`),
-  enviarArquivo: (id, modalidade, arquivo) => {
+  enviarArquivo: (id, modalidade, arquivos) => {
     const form = new FormData();
-    form.append("arquivo", arquivo);
+    const lista = Array.isArray(arquivos) ? arquivos : [arquivos];
+    for (const f of lista) {
+      form.append("arquivos", f);
+    }
     return pedir(`/patients/${id}/uploads?modalidade=${modalidade}`, {
       method: "POST",
       body: form,

@@ -37,9 +37,9 @@ def test_sequencia_de_riskpoints_com_mudanca_de_nivel_gera_log_de_transicao_corr
     # registra uma Transition sempre que o nível muda -- confirma a integração real
     # entre o classificador com memória e o log de auditoria.
     classifier = HysteresisClassifier(
-        threshold_amarelo=0.3, threshold_vermelho=0.7, hysteresis=0.05
+        threshold_amarelo=0.15, threshold_vermelho=0.35, hysteresis=0.05
     )
-    scores_por_t = [(0.0, 0.1), (60.0, 0.4), (120.0, 0.32), (180.0, 0.8), (240.0, 0.2)]
+    scores_por_t = [(0.0, 0.1), (60.0, 0.38), (120.0, 0.32), (180.0, 0.8), (240.0, 0.2)]
 
     transicoes: list[Transition] = []
     nivel_anterior = classifier.level
@@ -51,11 +51,11 @@ def test_sequencia_de_riskpoints_com_mudanca_de_nivel_gera_log_de_transicao_corr
         nivel_anterior = novo_nivel
 
     # Só 3 dos 5 pontos realmente mudam de nível (t=60 sobe, t=120 fica dentro da
-    # banda e não gera transição, t=180 sobe, t=240 desce).
+    # banda e não gera transição, t=180 sobe, t=240 desce para amarelo).
     assert [(tr.t, tr.previous_level, tr.new_level) for tr in transicoes] == [
         (60.0, "verde", "amarelo"),
         (180.0, "amarelo", "vermelho"),
-        (240.0, "vermelho", "verde"),
+        (240.0, "vermelho", "amarelo"),
     ]
 
 
