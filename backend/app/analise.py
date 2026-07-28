@@ -820,18 +820,20 @@ def _analisar_audio_respiratorio(
 
 def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
     """Áudio de consulta sem anotação: transcrição + features acústicas + fadiga
-    vocal + termos críticos + sentimento.
+    vocal + deteção de padrão respiratório + termos críticos + sentimento.
 
-    Com um único áudio o baseline de fadiga é degenerado (desvio-padrão zero) e
-    o score é sempre ``0.0`` — mesma limitação documentada no design de F2.
+    A fadiga vocal usa thresholds absolutos (jitter > 1.04%, shimmer > 3.81%,
+    HNR < 15 dB) quando o baseline é insuficiente (<2 áudios), resolvendo a
+    limitação anterior de z-score = 0.0 com 1 único áudio.
     """
     import json
 
     from common.evidence import evidence_dir, save_evidence
     from pipelines.audio.acoustic_features import extract as extract_acoustic_features
     from pipelines.audio.critical_terms import find_terms, load_terms
-    from pipelines.audio.fatigue_score import is_fatigued
+    from pipelines.audio.fatigue_score import fatigue_absolute
     from pipelines.audio.fatigue_score import score as fatigue_score
+    from pipelines.audio.respiratory_pattern import detect_respiratory_pattern
     from pipelines.audio.sentiment import classify as classify_sentiment
     from pipelines.audio.transcribe import transcribe
 
@@ -856,8 +858,16 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
     except Exception as exc:
         raise ErroDeAnalise(f"não foi possível extrair features acústicas: {exc}") from exc
 
-    fadiga = fatigue_score(features, baseline=[features])
-    fatigado = is_fatigued(fadiga, threshold=1.0)
+    # Fadiga vocal: thresholds absolutos como fallback quando baseline é
+    # insuficiente (1 único áudio → z-score = 0.0 por construção).
+    fadiga_z = fatigue_score(features, baseline=[features])
+    fadiga_abs = fatigue_absolute(features)
+    fatigado = fadiga_abs["fatigued"]
+
+    # Padrão respiratório: deteção heurística de periodicidade no envelope
+    # de energia (9-30 ciclos/min). Independente do dataset ICBHI.
+    atividade.local("audio", "procurando padrão respiratório no envelope de energia")
+    resp_pattern = detect_respiratory_pattern(str(caminho))
 
     sentimento = classify_sentiment(transcript.text, threshold=0.2)
 
@@ -883,8 +893,11 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
         severity = "MEDIUM"
         event_type = "critical_terms"
     elif fatigado:
-        severity = "LOW"
+        severity = "MEDIUM"
         event_type = "vocal_fatigue"
+    elif resp_pattern["detected"] and resp_pattern.get("confidence", 0) >= 0.5:
+        severity = "LOW"
+        event_type = "respiratory_pattern"
     elif sentimento.label != "neutro":
         severity = "INFO"
         event_type = "sentiment"
@@ -902,11 +915,13 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
         "termos_criticos": [
             {"termo": h.term, "contexto": h.context} for h in hits
         ],
-        "fadiga_vocal_score": round(fadiga, 3),
+        "fadiga_vocal_zscore": round(fadiga_z, 3),
+        "fadiga_vocal_absoluta": fadiga_abs,
         "fadiga_vocal_detectada": fatigado,
         "jitter": features.jitter_local,
         "shimmer": features.shimmer_local,
         "hnr_db": features.hnr_db,
+        "padrao_respiratorio": resp_pattern,
     }
 
     evidencia = save_evidence(
@@ -920,7 +935,7 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
         event_type=event_type,
         severity=severity,
         confidence=0.85 if (hits or fatigado) else 0.5,
-        status="positive" if (hits or fatigado) else "negative",
+        status="positive" if (hits or fatigado or resp_pattern["detected"]) else "negative",
     )
 
     # Monta resumo clínico
@@ -930,7 +945,17 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
         partes.append(f"termo(s) crítico(s) encontrado(s): {', '.join(termos_encontrados)}")
 
     if fatigado:
-        partes.append("suspeita de fadiga vocal")
+        indicadores = ", ".join(fadiga_abs.get("indicators", []))
+        partes.append(f"suspeita de fadiga vocal ({indicadores})")
+
+    if resp_pattern["detected"] and resp_pattern.get("confidence", 0) >= 0.5:
+        if resp_pattern.get("breath_rate_bpm"):
+            partes.append(
+                f"padrão respiratório detetado "
+                f"({resp_pattern['breath_rate_bpm']} ciclos/min)"
+            )
+        else:
+            partes.append("padrão respiratório detetado (banda baixa)")
 
     if sentimento.label != "neutro":
         partes.append(f"sentimento {sentimento.label}")
@@ -943,12 +968,14 @@ def _analisar_audio_consulta(caminho: Path, run_id: str) -> ResultadoAnalise:
             detalhes=metadados,
         )
 
-    # Pontuação heurística: termos críticos + fadiga
+    # Pontuação heurística: termos críticos + fadiga + respiração
     pontuacao = 0.0
     if hits:
         pontuacao = max(pontuacao, 0.5 + min(len(hits) * 0.1, 0.5))
     if fatigado:
         pontuacao = max(pontuacao, 0.7)
+    if resp_pattern["detected"] and resp_pattern.get("confidence", 0) >= 0.5:
+        pontuacao = max(pontuacao, 0.3)
 
     resumo = " | ".join(partes) + "."
 
