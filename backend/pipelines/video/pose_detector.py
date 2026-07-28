@@ -1203,3 +1203,117 @@ def save_postural_evidence(
         confidence=finding.score,
         status="positive",
     )
+
+
+# --------------------------------------------------------------------------- #
+# Detector de fisioterapia — ROM, assimetria, amplitude de movimento
+# --------------------------------------------------------------------------- #
+def detect_physiotherapy_findings(
+    person_frames: list[PoseFrame | None],
+    fps: float = 30.0,
+) -> list[PosturalFinding]:
+    """Analisa padrões de movimento para fisioterapia.
+
+    Mede o range of motion (ROM = ângulo máximo − mínimo) de joelhos e
+    cotovelos ao longo de toda a sequência e deteta:
+
+    - **ASYMMETRIC_MOVEMENT**: diferença de ROM > 20° entre esquerda e direita
+    - **REDUCED_RANGE_OF_MOTION**: ROM < 30° (articulação quase imóvel)
+    - **LIMITED_FLEXION**: ângulo mínimo > 90° (flexão limitada, esperado < 60°)
+
+    Não faz diagnóstico clínico — reporta apenas desvios geométricos
+    observáveis a partir dos landmarks do MediaPipe.
+    """
+    from pipelines.video.pose_features import joint_angle as _joint_angle
+
+    _JOINT_PAIRS = [
+        ("knee_left", (23, 25, 27), "knee_right", (24, 26, 28)),
+        ("elbow_left", (11, 13, 15), "elbow_right", (12, 14, 16)),
+    ]
+
+    findings: list[PosturalFinding] = []
+
+    for left_name, left_triplet, right_name, right_triplet in _JOINT_PAIRS:
+        left_angles: list[float] = []
+        right_angles: list[float] = []
+
+        for f in person_frames:
+            if f is None:
+                continue
+            la = _joint_angle(f, *left_triplet)
+            if la is not None:
+                left_angles.append(la)
+            ra = _joint_angle(f, *right_triplet)
+            if ra is not None:
+                right_angles.append(ra)
+
+        if len(left_angles) < 10 or len(right_angles) < 10:
+            continue
+
+        left_rom = max(left_angles) - min(left_angles)
+        right_rom = max(right_angles) - min(right_angles)
+        left_avg = sum(left_angles) / len(left_angles)
+        right_avg = sum(right_angles) / len(right_angles)
+        asym = abs(left_avg - right_avg)
+
+        # Assimetria significativa (>20° de diferença média)
+        if asym > 20.0:
+            lado_menor = left_name if left_rom < right_rom else right_name
+            score = min(1.0, asym / 60.0)
+            findings.append(PosturalFinding(
+                finding_type="ASYMMETRIC_MOVEMENT",
+                joint_name=f"{left_name}/{right_name}",
+                measured_angle=round(asym, 1),
+                expected_angle=20.0,
+                duration_s=round(len(left_angles) / max(fps, 1.0), 1),
+                frame_index=0,
+                score=round(score, 3),
+                description=(
+                    f"Assimetria de movimento detetada entre {left_name} e {right_name} "
+                    f"(diferença média de {asym:.0f}°, ROM esq={left_rom:.0f}°, "
+                    f"ROM dir={right_rom:.0f}°)."
+                ),
+            ))
+
+        # ROM reduzido (<30° — articulação quase imóvel)
+        for name, rom, angles in [
+            (left_name, left_rom, left_angles),
+            (right_name, right_rom, right_angles),
+        ]:
+            if rom < 30.0 and len(angles) >= 10:
+                score = max(0.0, min(1.0, 1.0 - rom / 30.0))
+                findings.append(PosturalFinding(
+                    finding_type="REDUCED_RANGE_OF_MOTION",
+                    joint_name=name,
+                    measured_angle=round(rom, 1),
+                    expected_angle=30.0,
+                    duration_s=round(len(angles) / max(fps, 1.0), 1),
+                    frame_index=0,
+                    score=round(score, 3),
+                    description=(
+                        f"Amplitude de movimento reduzida em {name} "
+                        f"(ROM={rom:.0f}°, esperado >30° em {len(angles)} frames)."
+                    ),
+                ))
+
+        # Flexão limitada (ângulo mínimo > 90° — não dobra a articulação)
+        for name, angles in [(left_name, left_angles), (right_name, right_angles)]:
+            if len(angles) >= 10:
+                min_angle = min(angles)
+                if min_angle > 90.0:
+                    score = min(1.0, (min_angle - 90.0) / 90.0)
+                    findings.append(PosturalFinding(
+                        finding_type="LIMITED_FLEXION",
+                        joint_name=name,
+                        measured_angle=round(min_angle, 1),
+                        expected_angle=90.0,
+                        duration_s=round(len(angles) / max(fps, 1.0), 1),
+                        frame_index=0,
+                        score=round(score, 3),
+                        description=(
+                            f"Flexão limitada em {name} "
+                            f"(ângulo mínimo={min_angle:.0f}°, esperado <90°)."
+                        ),
+                    ))
+
+    return findings

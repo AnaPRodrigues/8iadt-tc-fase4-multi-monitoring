@@ -150,8 +150,8 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
         persistence_frames=1,
     )
 
-    # -- Análise postural adicional (tilt + ângulos) para a pessoa principal
-    from pipelines.video.pose_detector import detect_postural_deviations, detect_trunk_tilt
+    # -- Análise de fisioterapia adicional
+    from pipelines.video.pose_detector import detect_physiotherapy_findings
     from pipelines.video.pose_features import group_poses_by_track_id
 
     person_timelines = group_poses_by_track_id(all_poses)
@@ -160,13 +160,10 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
             person_timelines.items(),
             key=lambda kv: sum(1 for f in kv[1] if f is not None),
         )
-        main_frames = main_track[1]
-        tilt_findings = detect_trunk_tilt(
-            main_frames, max_angle=25.0,
-            persistence_frames=90, fps=30.0,
+        physio_findings = detect_physiotherapy_findings(
+            main_track[1], fps=30.0,
         )
-        for tf in tilt_findings:
-            consolidated.append(tf)
+        consolidated.extend(physio_findings)
 
     fall_findings = [c for c in consolidated if c.finding_type == "FALL_DETECTED"]
     if not fall_findings:
@@ -358,44 +355,23 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
             persistence_frames=_PERSISTENCE_FRAMES if n_pessoas <= 1 else 3,
         )
 
-        # -- Análise postural (fisioterapia): executada adicionalmente
-        #    para a pessoa principal, independentemente de deteção de queda.
-        #    analyze_all_persons só executa queda + agitação + bed_exit;
-        #    os detetores posturais (tilt, ângulos, desvios) são chamados aqui.
-        from pipelines.video.pose_detector import detect_postural_deviations, detect_trunk_tilt
+        # -- Análise de fisioterapia: ROM, assimetria, amplitude de movimento.
+        #    Executada adicionalmente ao detector de queda, para a pessoa
+        #    principal. Mede ângulos ao longo de toda a sequência (não apenas
+        #    streaks contínuas) e deteta assimetrias esquerda/direita.
+        from pipelines.video.pose_detector import detect_physiotherapy_findings
         from pipelines.video.pose_features import group_poses_by_track_id
 
         person_timelines = group_poses_by_track_id(all_poses)
         if person_timelines:
-            # Pessoa principal: track com mais frames válidos
             main_track = max(
                 person_timelines.items(),
                 key=lambda kv: sum(1 for f in kv[1] if f is not None),
             )
-            main_frames = main_track[1]
-
-            # Tilt do tronco (postura)
-            tilt_findings = detect_trunk_tilt(
-                main_frames, max_angle=25.0,
-                persistence_frames=int(3.0 * video_fps),  # 3 segundos
-                fps=video_fps,
+            physio_findings = detect_physiotherapy_findings(
+                main_track[1], fps=video_fps,
             )
-            for tf in tilt_findings:
-                consolidated.append(tf)
-
-            # Ângulos articulares (joelhos, cotovelos)
-            from pipelines.video.models import JointTarget
-            JOELHO_E = JointTarget("knee_left", 23, 25, 27, min_angle=60.0, target_angle=90.0)
-            JOELHO_D = JointTarget("knee_right", 24, 26, 28, min_angle=60.0, target_angle=90.0)
-            COTOVELO_E = JointTarget("elbow_left", 11, 13, 15, min_angle=45.0, target_angle=90.0)
-            COTOVELO_D = JointTarget("elbow_right", 12, 14, 16, min_angle=45.0, target_angle=90.0)
-            joint_findings = detect_postural_deviations(
-                main_frames,
-                [JOELHO_E, JOELHO_D, COTOVELO_E, COTOVELO_D],
-                persistence_frames=int(2.0 * video_fps),  # 2 segundos
-                fps=video_fps,
-            )
-            consolidated.extend(joint_findings)
+            consolidated.extend(physio_findings)
 
         todos_detalhes: dict = {
             "quadros_analisados": len(frame_paths),
