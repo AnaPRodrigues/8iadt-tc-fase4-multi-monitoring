@@ -1094,6 +1094,8 @@ def save_fall_evidence(
     root: str | Path = "output",
     persistence_frames: int = 0,
     track_id: int | None = None,
+    before_frame: int | None = None,
+    after_frame: int | None = None,
 ) -> Evidence:
     """Gera a evidência de queda (frame anotado + metadados) no contrato único de evidência.
 
@@ -1101,6 +1103,9 @@ def save_fall_evidence(
     (rastreada via IoU entre frames consecutivos). É incluído no sidecar de
     metadados para correlacionar a evidência visual com a identidade da pessoa
     ao longo da sequência.
+
+    ``before_frame`` e ``after_frame`` permitem evidência temporal — o frame
+    anterior à queda (pessoa de pé) e o frame posterior (pessoa no chão).
     """
     from pipelines.video.pose_evidence import draw_annotated_frame
 
@@ -1138,12 +1143,19 @@ def save_fall_evidence(
             "finding_type": "FALL_DETECTED",
             "seq_id": seq_id,
             "event_frame": event_frame_index,
+            "before_frame": before_frame if before_frame is not None else max(0, event_frame_index - 30),
+            "after_frame": after_frame if after_frame is not None else event_frame_index + 60,
             "score": round(float(score), 3),
             "persistence_frames": persistence_frames,
             "track_id": track_id,
             "description": finding.description,
         },
         root=root,
+        severity="CRITICAL",
+        modality="video",
+        event_type="fall",
+        confidence=round(float(score), 3),
+        status="positive",
     )
 
 
@@ -1185,4 +1197,9 @@ def save_postural_evidence(
             "description": finding.description,
         },
         root=root,
+        severity="MEDIUM",
+        modality="video",
+        event_type=finding.finding_type.lower(),
+        confidence=finding.score,
+        status="positive",
     )
