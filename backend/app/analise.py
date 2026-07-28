@@ -152,12 +152,18 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
 
     # -- Análise de fisioterapia adicional
     from pipelines.video.pose_detector import detect_physiotherapy_findings
-    from pipelines.video.pose_features import group_poses_by_track_id
+    from pipelines.video.pose_features import group_poses_by_track_id, is_recumbent
 
     person_timelines = group_poses_by_track_id(all_poses)
     if person_timelines:
+        # Seleciona a pessoa deitada (paciente), não o fisioterapeuta de pé
+        recumbent_tracks = {
+            tid: frames for tid, frames in person_timelines.items()
+            if is_recumbent(frames)
+        }
+        target = recumbent_tracks if recumbent_tracks else person_timelines
         main_track = max(
-            person_timelines.items(),
+            target.items(),
             key=lambda kv: sum(1 for f in kv[1] if f is not None),
         )
         physio_findings = detect_physiotherapy_findings(
@@ -390,12 +396,20 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
 
         # -- Análise de fisioterapia: ROM, assimetria, amplitude de movimento.
         from pipelines.video.pose_detector import detect_physiotherapy_findings
-        from pipelines.video.pose_features import group_poses_by_track_id
+        from pipelines.video.pose_features import group_poses_by_track_id, is_recumbent
 
         person_timelines = group_poses_by_track_id(all_poses)
         if person_timelines:
+            # Seleciona a pessoa deitada (a paciente na maca), não o
+            # fisioterapeuta de pé. Se houver mais de uma pessoa deitada,
+            # escolhe a com mais frames válidos.
+            recumbent_tracks = {
+                tid: frames for tid, frames in person_timelines.items()
+                if is_recumbent(frames)
+            }
+            target = recumbent_tracks if recumbent_tracks else person_timelines
             main_track = max(
-                person_timelines.items(),
+                target.items(),
                 key=lambda kv: sum(1 for f in kv[1] if f is not None),
             )
             physio_findings = detect_physiotherapy_findings(
