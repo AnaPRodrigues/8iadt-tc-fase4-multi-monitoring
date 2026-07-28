@@ -1211,6 +1211,7 @@ def save_postural_evidence(
 def detect_physiotherapy_findings(
     person_frames: list[PoseFrame | None],
     fps: float = 30.0,
+    track_id: int | None = None,
 ) -> list[PosturalFinding]:
     """Analisa padrões de movimento para fisioterapia.
 
@@ -1223,6 +1224,9 @@ def detect_physiotherapy_findings(
 
     Não faz diagnóstico clínico — reporta apenas desvios geométricos
     observáveis a partir dos landmarks do MediaPipe.
+
+    ``track_id`` identifica a pessoa analisada e é propagado para todos
+    os findings, permitindo que a evidência desenhe o esqueleto correto.
     """
     from pipelines.video.pose_features import joint_angle as _joint_angle
 
@@ -1232,6 +1236,8 @@ def detect_physiotherapy_findings(
     ]
 
     findings: list[PosturalFinding] = []
+    # Frame central da sequência para evidência representativa
+    mid_frame = len(person_frames) // 2
 
     for left_name, left_triplet, right_name, right_triplet in _JOINT_PAIRS:
         left_angles: list[float] = []
@@ -1258,7 +1264,6 @@ def detect_physiotherapy_findings(
 
         # Assimetria significativa (>20° de diferença média)
         if asym > 20.0:
-            lado_menor = left_name if left_rom < right_rom else right_name
             score = min(1.0, asym / 60.0)
             findings.append(PosturalFinding(
                 finding_type="ASYMMETRIC_MOVEMENT",
@@ -1266,8 +1271,9 @@ def detect_physiotherapy_findings(
                 measured_angle=round(asym, 1),
                 expected_angle=20.0,
                 duration_s=round(len(left_angles) / max(fps, 1.0), 1),
-                frame_index=0,
+                frame_index=mid_frame,
                 score=round(score, 3),
+                track_id=track_id,
                 description=(
                     f"Assimetria de movimento detetada entre {left_name} e {right_name} "
                     f"(diferença média de {asym:.0f}°, ROM esq={left_rom:.0f}°, "
@@ -1288,8 +1294,9 @@ def detect_physiotherapy_findings(
                     measured_angle=round(rom, 1),
                     expected_angle=30.0,
                     duration_s=round(len(angles) / max(fps, 1.0), 1),
-                    frame_index=0,
+                    frame_index=mid_frame,
                     score=round(score, 3),
+                    track_id=track_id,
                     description=(
                         f"Amplitude de movimento reduzida em {name} "
                         f"(ROM={rom:.0f}°, esperado >30° em {len(angles)} frames)."
@@ -1308,8 +1315,9 @@ def detect_physiotherapy_findings(
                         measured_angle=round(min_angle, 1),
                         expected_angle=90.0,
                         duration_s=round(len(angles) / max(fps, 1.0), 1),
-                        frame_index=0,
+                        frame_index=mid_frame,
                         score=round(score, 3),
+                        track_id=track_id,
                         description=(
                             f"Flexão limitada em {name} "
                             f"(ângulo mínimo={min_angle:.0f}°, esperado <90°)."

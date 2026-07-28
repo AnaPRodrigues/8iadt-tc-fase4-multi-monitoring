@@ -162,12 +162,12 @@ def _analisar_postura(caminho: Path, run_id: str) -> ResultadoAnalise:
                   if f is not None and hip_center(f) is not None]
             return sum(ys) / len(ys) if ys else 0.0
 
-        main_track = max(
+        main_tid, main_frames = max(
             person_timelines.items(),
             key=lambda kv: _avg_hip_y(kv[1]),
         )
         physio_findings = detect_physiotherapy_findings(
-            main_track[1], fps=30.0,
+            main_frames, fps=30.0, track_id=main_tid,
         )
         consolidated.extend(physio_findings)
 
@@ -409,12 +409,12 @@ def _analisar_video_pose(caminho: Path, run_id: str) -> ResultadoAnalise:
                       if f is not None and hip_center(f) is not None]
                 return sum(ys) / len(ys) if ys else 0.0
 
-            main_track = max(
+            main_tid, main_frames = max(
                 person_timelines.items(),
                 key=lambda kv: _avg_hip_y(kv[1]),
             )
             physio_findings = detect_physiotherapy_findings(
-                main_track[1], fps=video_fps,
+                main_frames, fps=video_fps, track_id=main_tid,
             )
             consolidated.extend(physio_findings)
             # Atualiza resumo e pontuação com os achados de fisioterapia
