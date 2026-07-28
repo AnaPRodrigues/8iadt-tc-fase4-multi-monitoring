@@ -1,4 +1,4 @@
-import { O_QUE_MONITORA, SITUACAO_ENVIO, nomeModalidade, porcentagem } from "../formatos.js";
+import { CATEGORIAS_ANVISA, O_QUE_MONITORA, SITUACAO_ENVIO, nomeModalidade, porcentagem } from "../formatos.js";
 
 // Um painel por modalidade: o que monitora, a situação atual e o último achado
 // em linguagem clínica. Sem identificadores técnicos na tela.
@@ -13,6 +13,8 @@ export function PainelModalidade({ modalidade, envios, analises, aoAbrirEvidenci
   }
 
   const temAchado = ultimaAnalise && ultimaAnalise.pontuacao > 0;
+  const detalhes = ultimaAnalise?.detalhes || {};
+  const temAnvisa = detalhes.control_category || detalhes.active_ingredient;
 
   return (
     <div className={`painel-modalidade ${temAchado ? "com-achado" : ""}`}>
@@ -26,6 +28,25 @@ export function PainelModalidade({ modalidade, envios, analises, aoAbrirEvidenci
           <p>{ultimaAnalise.resumo}</p>
           {ultimaAnalise.pontuacao != null && (
             <p className="painel-confianca">Relevância: {porcentagem(ultimaAnalise.pontuacao)}</p>
+          )}
+          {/* Info ANVISA para prescrições */}
+          {temAnvisa && (
+            <div className="painel-anvisa">
+              {detalhes.active_ingredient && (
+                <p className="anvisa-info">Princípio ativo: <strong>{detalhes.active_ingredient}</strong></p>
+              )}
+              {detalhes.control_category && (
+                <p className={`anvisa-info ${detalhes.is_controlled ? "controlado" : ""}`}>
+                  {CATEGORIAS_ANVISA[detalhes.control_category] || detalhes.control_category}
+                </p>
+              )}
+              {detalhes.reference_dose && (
+                <p className="anvisa-info">Dose referência: {detalhes.reference_dose}</p>
+              )}
+              {detalhes.source && (
+                <p className="anvisa-fonte">Fonte: {detalhes.source}</p>
+              )}
+            </div>
           )}
           {ultimaAnalise.evidencia_id && (
             <button className="link-evidencia" onClick={() => aoAbrirEvidencia(ultimaAnalise.evidencia_id)}>

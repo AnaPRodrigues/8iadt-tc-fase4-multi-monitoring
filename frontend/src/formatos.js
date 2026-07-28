@@ -82,3 +82,22 @@ export function tempoDeMonitoramento(dataInicioIso) {
   if (dias === 1) return "há 1 dia";
   return `há ${dias} dias`;
 }
+
+// Categorias de controlo especial ANVISA (Portaria 344/98).
+export const CATEGORIAS_ANVISA = {
+  A1: "A1 — Entorpecentes (Receita A — amarela)",
+  A2: "A2 — Entorpecentes (Receita A — concentração especial)",
+  B1: "B1 — Psicotrópicos (Receita B — azul)",
+  B2: "B2 — Psicotrópicos anorexígenos (Receita B)",
+  C1: "C1 — Controlo Especial (Receita C — branca)",
+  C5: "C5 — Anabolizantes (Receita C)",
+};
+
+// Níveis de severidade para exibição.
+export const SEVERIDADE = {
+  CRITICAL: { rotulo: "Crítico", cor: "#b3261e" },
+  HIGH: { rotulo: "Alto", cor: "#e8612c" },
+  MEDIUM: { rotulo: "Médio", cor: "#9a6a00" },
+  LOW: { rotulo: "Baixo", cor: "#2b6cb0" },
+  INFO: { rotulo: "Informativo", cor: "#666" },
+};

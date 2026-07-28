@@ -59,6 +59,7 @@ def _analisar_documento(
     caminho: Path, prescricao_anterior: PrescriptionRecord | None
 ) -> ResultadoAnalise:
     from pipelines.prescription.logic import process
+    from pipelines.prescription.rules import regulatory_info
 
     resultado = process(
         Path(caminho).read_bytes(),
@@ -78,6 +79,10 @@ def _analisar_documento(
         "paciente_id_documento": r.patient_id,
         "timestamp_documento": r.timestamp,
     }
+
+    # Enriquece com informação regulatória ANVISA (PRESC-01, PRESC-02)
+    info_reg = regulatory_info(r)
+    detalhes.update(info_reg)
 
     if not resultado.anomalies:
         return ResultadoAnalise(
