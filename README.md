@@ -19,7 +19,7 @@ equipe automaticamente quando algo preocupante é detectado.
 | **Vídeo — cirurgia** | Estruturas anatômicas críticas em vídeo cirúrgico (keyframes a cada 2s) | YOLOv8 fine-tuned (Endoscapes) com evidência anotada (bboxes) |
 | **Áudio** | Sons respiratórios (com anotação ICBHI) ou consultas (transcrição, termos críticos, fadiga vocal) — dispatch automático | Random Forest + faster-whisper + Parselmouth (jitter/shimmer/HNR) |
 | **Sinais vitais** | Séries temporais: cardiotocografia fetal (CTU-UHB) e internação adulta com HR/SpO2 (BIDMC) | z-score móvel + Isolation Forest sobre janelas |
-| **Prescrições** | Lê receitas em PDF, verifica dose fora da faixa e variação abrupta; geração avulsa de prescrições sintéticas | Extração de texto (pdfplumber/Textract) + regras clínicas + gerador standalone |
+| **Prescrições** | Lê receitas em PDF, verifica dose, classificação ANVISA (A1/A2/B1/C1), princípio ativo e variação abrupta; geração avulsa de prescrições sintéticas | Extração de texto (pdfplumber/Textract) + regras clínicas + catálogo ANVISA (Portaria 344/98) + gerador standalone |
 | **Fusão e alerta** | Combina as análises num indicador de risco (verde/amarelo/vermelho) com alerta explicável local | Late fusion ponderada com decaimento temporal + histerese |
 | **Painel** | Pacientes, envios, linha do tempo de risco, alertas e drill-down de evidência | React + Vite sobre a API |
 
@@ -299,7 +299,7 @@ O detector de quedas opera em dois estágios com múltiplas vias de deteção e 
 - **Gate `was_initially_recumbent`**: pessoas já deitadas no início do vídeo são excluídas (janela inicial de 30 frames, alargada para 90 se necessário)
 
 **Resultados validados**:
-- **URFD** (10 sequências): 100% recall, 100% precisão (5/5 quedas, 5/5 ADL)
+- **URFD** (10 sequências): 80% recall (4/5 quedas detectadas), 100% precisão (5/5 ADL sem falsos positivos). A sequência `fall-05` (queda lenta com amplitude 0.19) está abaixo do limiar de 0.25 — documentado como limitação conhecida.
 - **Vídeos reais** de vigilância (120 fps, 720p): quedas detectadas, paciente acamado sem falsos positivos
 
 Detalhes de cada análise em [`backend/README.md`](backend/README.md).

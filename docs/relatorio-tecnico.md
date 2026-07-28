@@ -108,9 +108,10 @@ para vídeos reais com deteção intermitente (12–22% de cobertura).
 vídeo (janela de 30 frames, alargada para 90 se necessário). Essencial para
 evitar falsos positivos em pacientes acamados.
 
-**Resultados no URFD** (10 sequências, 640×480, 30 fps): 100% recall (5/5 quedas),
-100% precisão (5/5 ADL). **Resultados em vídeos reais**: quedas detectadas em
-vídeos de vigilância a 120 fps; paciente acamado sem falsos positivos.
+**Resultados no URFD** (10 sequências, 640×480, 30 fps): 80% recall (4/5 quedas
+detectadas; fall-05 — queda lenta com amplitude 0.19 — não atinge o limiar de 0.25),
+100% precisão (5/5 ADL, sem falsos positivos). **Resultados em vídeos reais**: quedas
+detectadas em vídeos de vigilância a 120 fps; paciente acamado sem falsos positivos.
 
 **Treino do YOLOv8:** o detector foi fine-tunado à parte (Google Colab, GPU gratuita) —
 ver seção 5.1 para os resultados. O sistema em produção nunca treina; só carrega o peso
@@ -155,13 +156,17 @@ significado clínico às anomalias estatísticas.
 
 ### 3.4 Prescrições
 
-Leitura de receita em PDF → estruturação em registro → regras clínicas:
+Leitura de receita em PDF → estruturação em registro → regras clínicas + validação regulatória:
 
 - **Extração de texto**: `pdfplumber` (modo local) ou **AWS Textract** `analyze_document`
   (modo aws), intercambiáveis pelo mesmo adapter;
 - **Regras**: dose fora da faixa segura do fármaco; variação abrupta de dose contra a
   prescrição anterior do paciente (o histórico é uma fonte de dados local injetada no
   processamento).
+- **Classificação ANVISA**: catálogo de 30 fármacos com princípio ativo (DCB) e categoria
+  de controlo especial conforme Portaria SVS/MS nº 344/98 — A1/A2 (entorpecentes),
+  B1 (psicotrópicos), C1 (controlo especial) — com fonte documentada no Bulário Eletrónico.
+  Medicamentos fora do catálogo são sinalizados como "não verificado".
 
 Campo ausente ou não numérico é **sinalizado**, nunca inferido por suposição.
 

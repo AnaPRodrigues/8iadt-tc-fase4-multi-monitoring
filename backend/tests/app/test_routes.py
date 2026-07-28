@@ -152,6 +152,7 @@ def _semear_evento(_ambiente, pid, modalidade, feature, evidence_id, instante_s,
         artifact_path=artefato,
         metadata={},
         root=_ambiente,
+        severity="CRITICAL",  # usa o novo contrato de evidência
     )
     uid = _upload(pid, modalidade)
 
