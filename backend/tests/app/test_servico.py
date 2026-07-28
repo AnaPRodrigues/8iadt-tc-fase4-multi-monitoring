@@ -33,6 +33,7 @@ def _grava_evidencia(output_root, feature, evidence_id):
         artifact_path=artefato,
         metadata={},
         root=output_root,
+        severity="CRITICAL",
     )
 
 
