@@ -690,9 +690,21 @@ def ensure_pose_model(cache_dir: Path) -> Path:
 
     Mesmo princípio de cache de ``yolov8n.pt`` do ultralytics: uma segunda chamada
     com o arquivo já presente não dispara nova requisição de rede.
+
+    O download usa um ficheiro temporário (``.tmp``) e só renomeia para o nome
+    final depois de concluído com sucesso. Isto evita que um download interrompido
+    (rede, timeout, kill do processo) deixe um ficheiro parcial que passaria no
+    ``is_file()`` e seria tratado como cache válido.
     """
     cache_dir = Path(cache_dir)
     model_path = cache_dir / _MODEL_FILENAME
+    tmp_path = cache_dir / f"{_MODEL_FILENAME}.tmp"
+
+    # Se existe um .tmp de um download anterior abortado, remove-o.
+    if tmp_path.is_file():
+        log.warning("download parcial anterior detetado — a limpar: %s", tmp_path)
+        tmp_path.unlink()
+
     if model_path.is_file():
         log.info("modelo de pose já em cache: %s", model_path)
         return model_path
@@ -700,12 +712,20 @@ def ensure_pose_model(cache_dir: Path) -> Path:
     cache_dir.mkdir(parents=True, exist_ok=True)
     log.info("baixando modelo de pose de %s", _MODEL_URL)
     try:
-        urllib.request.urlretrieve(_MODEL_URL, model_path)
+        urllib.request.urlretrieve(_MODEL_URL, tmp_path)
     except Exception as exc:
+        # Limpa o parcial em caso de falha durante o download.
+        if tmp_path.is_file():
+            tmp_path.unlink()
         raise RuntimeError(
             f"falha ao baixar o modelo de pose de {_MODEL_URL}: {exc}"
         ) from exc
 
+    # Renomeação atómica: o ficheiro final só aparece quando o download
+    # estiver completo.
+    tmp_path.rename(model_path)
+    log.info("modelo de pose guardado em cache: %s (%d bytes)",
+             model_path, model_path.stat().st_size)
     return model_path
 
 

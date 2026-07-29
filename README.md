@@ -21,7 +21,7 @@ equipe automaticamente quando algo preocupante é detectado.
 > Tech Challenge — Fase 4 (POSTECH 8IADT). O enunciado completo do desafio está em
 > [`docs/8IADT-Fase-4-Tech-challenge.md`](docs/8IADT-Fase-4-Tech-challenge.md).
 
-**🎥 [Vídeo de demonstração](#)** &nbsp;|&nbsp; **📄 [Relatório técnico](docs/relatorio-tecnico.md)**
+**🎥 [Vídeo de demonstração](https://youtu.be/7ifa1PPus0s)** &nbsp;|&nbsp; **📄 [Relatório técnico](docs/relatorio-tecnico.md)**
 
 
 ## Grupo 8
